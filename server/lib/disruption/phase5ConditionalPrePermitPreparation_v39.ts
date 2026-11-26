@@ -473,7 +473,8 @@ export async function issueP5ConditionalLaterSignedReviewPage(
  const evidence=await readP6ConditionalLaterT24EvidencePage(pool,prePool,scope,requestedFlightIds,{
   independentConditionalLaterEvidenceReadApproved:true,existingPaidDispatchApproved:false,expectedReviewedCodeSha:p.approvedCodeSha,
   expectedProtocolSha256:d.protocolSha256,expectedContentUseReviewSha256:d.externalContentUseReviewSha256,
-  expectedFrameSha256:v.frameSha256,expectedConfigSha256:v.configSha256,expectedSelectedTVersion:cfg.milestone+":"+cfg.version+":"+cfg.artifactHash},custody);
+  expectedFrameSha256:v.frameSha256,expectedConfigSha256:v.configSha256,expectedSelectedTVersion:cfg.milestone+":"+cfg.version+":"+cfg.artifactHash,
+  ...(input.env.P6_CONDITIONAL_LATER_METADATA_READ_ENABLED==="1"?{conditionalMetadataReaderLogin:readerLogin}: {})},custody);
  const actual=await readP5SignedConditionalServiceReview(pool,scope),now=time(actual.observedDbClockUtc);
  if(now<time(evidence.observedDbClockUtc)||now<time(d.validFromUtc)||now>=time(d.validUntilUtc))return hold("CONDITIONAL_LATER_DELEGATION_CLOCK");
  const proposals=new Map(actual.memberReview.privateReviewProposals.map(x=>[x.flightInstanceId,x])),

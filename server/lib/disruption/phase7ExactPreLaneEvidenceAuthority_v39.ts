@@ -1,3 +1,7 @@
+import {readP6StableSourceTrust} from "./phase6StoredSourceRuntimeTrust_v39.mjs";
+import {sameP6NeonDatabaseEndpoint} from "./phase6SameNeonEndpoint_v39";
+import {assertP6ConditionalT24MetadataReader} from "./phase6LaterT24EvidenceBatchReadOnly_v39";
+import {readP6DayEpochRestrictedReaderClock} from "./phase6DayEpochSignedIndexOnce_v39.mjs";
 /** Genuine PRE lane authority candidate. Independently rereads the actual
  * bound original with the existing restricted SOURCE role. A separately
  * approved Article 5.8 purpose policy authorizes per-item reference LINK
@@ -13,7 +17,7 @@
  */
 import {createHash,createPublicKey,randomUUID,sign,type KeyObject} from "node:crypto";
 import {Pool} from "pg";
-import {issueP5ConditionalT24SignedReviewPage} from "./phase5ConditionalPrePermitPreparation_v39";
+import {issueP5ConditionalT24SignedReviewPage,issueP5ConditionalLaterSignedReviewPage} from "./phase5ConditionalPrePermitPreparation_v39";
 import type {P5SignedConditionalFeatureReadScope} from "./phase5ConditionalBoundSourceReview_v39";
 import {makeP5Stage28DedicatedRolePool} from "./phase5Stage28DedicatedRolePool_v39";
 import {P5_E_V0079_SOURCE_READONLY_LOGIN_V39} from "./phase5AmendmentEOriginalFidsReadonlyCompiler_v39";
@@ -121,6 +125,28 @@ export function signP7ActualPreLaneReceipt(config:AuthorityConfig,p:Readonly<P5S
   longTermReferenceTrainingUseApproved:false,providerCalls:0,databaseWrites:0,phase6PaidGo:false};
  return Object.freeze(Object.defineProperty(result,"privateWire",{value:Object.freeze(wire),enumerable:false})) as typeof result&{readonly privateWire:Readonly<typeof wire>};
 }
+/** Existing private reader only, with separately staged narrow metadata
+ * grant. No PRE writer credentials, new login or public data egress. */
+export function admitP7ConditionalLaterMetadataEndpoint(env:NodeJS.ProcessEnv,sourceUrl:string){
+ const enabled=env.P6_CONDITIONAL_LATER_METADATA_READ_ENABLED;
+ if(enabled===undefined||enabled===""||enabled==="0"){
+  if(env.P6_PRIVATE_READER_DATABASE_URL)hold("UNAPPROVED_CONDITIONAL_READER_CREDENTIAL");
+  return null;
+ }
+ if(enabled!=="1"||env.P6_PHASE7_PRIVATE_REVIEW_TRANSPORT_APPROVED!=="1"||
+  env.P5_V39_PRE_DATABASE_URL||env.P6_PRIVATE_PUBLISHER_DATABASE_URL||env.P6_PHASE7_PRE_READBACK_DATABASE_URL)
+  return hold("CONDITIONAL_METADATA_READER_SCOPE");
+ const trust=readP6StableSourceTrust(env),login=env.P6_PHASE7_PRIVATE_REVIEW_READER_LOGIN??"";
+ if(login!==trust.expectedReaderSessionLogin)return hold("CONDITIONAL_METADATA_READER_SCOPE");
+ let url:URL;try{url=new URL(env.P6_PRIVATE_READER_DATABASE_URL??"")}catch{return hold("CONDITIONAL_METADATA_READER_ENDPOINT")}
+ if(!sameP6NeonDatabaseEndpoint(url,new URL(sourceUrl))||decodeURIComponent(url.username)!==login||!url.password||
+  url.searchParams.getAll("sslmode").length!==1||!["require","verify-full"].includes(url.searchParams.get("sslmode")??"")||
+  [...url.searchParams.keys()].some(k=>!["sslmode","channel_binding"].includes(k))||
+  (url.searchParams.has("channel_binding")&&(url.searchParams.getAll("channel_binding").length!==1||url.searchParams.get("channel_binding")!=="require")))
+  return hold("CONDITIONAL_METADATA_READER_ENDPOINT");
+ url.searchParams.set("sslmode","verify-full");
+ return {url:url.toString(),login,trust};
+}
 /** Separate protected authority process, existing SOURCE actor and genuine
  * public archive port only. No proof signer or private publisher capability. */
 export function openP7ActualPreLaneEvidenceAuthority(env:NodeJS.ProcessEnv,signer:KeyObject,weatherPort?:{
@@ -133,7 +159,41 @@ export function openP7ActualPreLaneEvidenceAuthority(env:NodeJS.ProcessEnv,signe
  const referencePolicy=parseP7ReferenceLinkPolicy(env,a.policy.profile.termsReviewSha256,a.policy.dispositions);
  const underlying=new Pool({connectionString:a.sourceUrl,max:1,connectionTimeoutMillis:8000,query_timeout:25000,application_name:"p7_actual_pre_lane_authority",options:"-c default_transaction_read_only=on"});
  const pool=makeP5Stage28DedicatedRolePool(underlying,{group:"source",reviewedDedicatedLogin:P5_E_V0079_SOURCE_READONLY_LOGIN_V39,forbiddenApplicationLogin:"phase5_runtime_application_login"});
- return {async issueConditionalT24Review(scope:P5SignedConditionalFeatureReadScope,ids:readonly string[],reviewedCodeSha:string,additionalForbidden:readonly string[]){
+ const meta=admitP7ConditionalLaterMetadataEndpoint(env,a.sourceUrl);
+ const metadata=meta?new Pool({connectionString:meta.url,max:2,connectionTimeoutMillis:8000,query_timeout:25000,
+  application_name:"p7_conditional_t24_metadata_reader",options:"-c default_transaction_read_only=on"}):null;
+ const metaConnect=async()=>{
+  if(!metadata)return hold("CONDITIONAL_METADATA_READER_NOT_COMMISSIONED");
+  const c=await metadata.connect();
+  try{await c.query("SET ROLE phase6_private_frozen_reader_v39");const release=c.release.bind(c);c.release=()=>release(true);return c;}
+  catch(e){c.release(true);throw e;}
+ };
+ const metadataPreflight=async()=>{
+  if(!meta)return;
+  const c=await metaConnect();
+  try{await c.query("BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY");
+   await readP6DayEpochRestrictedReaderClock(c,meta.login);await assertP6ConditionalT24MetadataReader(c,meta.login);
+  }finally{await c.query("ROLLBACK").catch(()=>{});c.release();}
+ };
+ return {async issueConditionalLaterReview(scope:P5SignedConditionalFeatureReadScope,ids:readonly string[],reviewedCodeSha:string,additionalForbidden:readonly string[]){
+  if(!meta||reviewedCodeSha!==meta.trust.reviewedCodeSha)return hold("CONDITIONAL_METADATA_READER_NOT_COMMISSIONED");
+  const raw=env.P6_NONPAID_DAILY_POLICY_BASE64??"",policyBytes=Buffer.from(raw,"base64");
+  if(policyBytes.toString("base64")!==raw||sha(policyBytes)!==env.P6_NONPAID_DAILY_POLICY_SHA256)return hold("CONDITIONAL_LATER_POLICY_BYTES");
+  const v=JSON.parse(policyBytes.toString("utf8"))?.nativeLaterReview,ct=v?.t24Custody,cfg=v?.selectedTConfig,q=scope.source;
+  if(!ct||!cfg||q.manifestSha256!==meta.trust.manifestSha256||q.rightsReviewSha256!==meta.trust.rightsSha256||
+     q.reviewedReleaseSha256!==meta.trust.releaseSha256)return hold("CONDITIONAL_LATER_POLICY_SCOPE");
+  const c=await metaConnect();
+  try{
+   const result=await issueP5ConditionalLaterSignedReviewPage(pool,{connect:metaConnect},scope,ids,
+    {readerClient:c,trust:{...ct,runDayIndex:q.runDayIndex,reviewedCodeSha,manifestSha256:q.manifestSha256,
+     rightsSha256:q.rightsReviewSha256,releaseSha256:q.reviewedReleaseSha256,expectedFrameSha256:v.frameSha256,
+     expectedConfigSha256:v.configSha256,expectedSelectedTVersion:cfg.milestone+":"+cfg.version+":"+cfg.artifactHash},
+     scope:{privateT24CustodyApproved:true,existingPaidDispatchApproved:false,adbAutoCollect:"0",phase6ProcessArmed:"0",expectedSessionLogin:meta.login}},
+    {policyBytes,expectedPolicySha256:env.P6_NONPAID_DAILY_POLICY_SHA256??"",expectedReviewedCodeSha:reviewedCodeSha,
+     expectedReviewerFingerprintSha256:fp,forbiddenSignerFingerprints:[...new Set([...a.forbiddenSignerFingerprints,...additionalForbidden])],signer,env});
+   return result.privateWire;
+  }finally{c.release();}
+ },async issueConditionalT24Review(scope:P5SignedConditionalFeatureReadScope,ids:readonly string[],reviewedCodeSha:string,additionalForbidden:readonly string[]){
   const raw=env.P6_NONPAID_DAILY_POLICY_BASE64??"",policyBytes=Buffer.from(raw,"base64");
   if(policyBytes.toString("base64")!==raw)hold("CONDITIONAL_T24_POLICY_BYTES");
   return issueP5ConditionalT24SignedReviewPage(pool,scope,ids,{policyBytes,expectedPolicySha256:env.P6_NONPAID_DAILY_POLICY_SHA256??"",
@@ -149,5 +209,5 @@ export function openP7ActualPreLaneEvidenceAuthority(env:NodeJS.ProcessEnv,signe
   const actual=await readP7ReviewedTierSelectedFeaturesPage(pool,permits,a.externalContentUseReviewSha256,conditionalScope);
   const config={env,signer,termsReviewSha256:a.policy.profile.termsReviewSha256,dispositions:a.policy.dispositions,referencePolicy};
   return permits.map((p,i)=>signP7ActualPreLaneReceipt(config,p,actual[i],weather[i]));
- },preflight:()=>readP7RestrictedSourceClock(pool),close:()=>underlying.end()};
+ },preflight:async()=>{const at=await readP7RestrictedSourceClock(pool);await metadataPreflight();return at;},close:()=>Promise.allSettled([underlying.end(),...(metadata?[metadata.end()]:[])])};
 }

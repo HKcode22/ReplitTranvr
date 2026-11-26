@@ -108,6 +108,15 @@ describe("actual protected role credential projection",()=>{
  it("does not forward other keys, tokens, or the source password to publisher",()=>{
   const l=projectP7LocalRoleEnvironment(lane,"lane"),p=projectP7LocalRoleEnvironment(proof,"proof"),w=projectP7LocalRoleEnvironment(publisher,"publisher",endpoint.toString());
   expect(l.P6_PHASE7_PRE_LANE_EVIDENCE_AUTHORITY_PRIVATE_KEY_BASE64).toBe("synthetic-lane-key");expect(l.P6_PRIVATE_READER_DATABASE_URL).toBeUndefined();
+  // T068: only explicitly enabled lane receives existing private-reader
+  // credentials; never PRE writer or publisher credentials.
+  const meta={P6_CONDITIONAL_LATER_METADATA_READ_ENABLED:"1",P6_PRIVATE_READER_DATABASE_URL:"synthetic-reader-url",
+   P6_PHASE7_PRIVATE_REVIEW_TRANSPORT_APPROVED:"1",P6_PHASE7_PRIVATE_REVIEW_READER_LOGIN:"phase6_private_reader_login_ci_fixture"};
+  expect(projectP7LocalRoleEnvironment({...lane,...meta},"lane")).toMatchObject(meta);
+  expect(()=>projectP7LocalRoleEnvironment({...lane,...meta,P6_CONDITIONAL_LATER_METADATA_READ_ENABLED:"0"},"lane")).toThrow("CROSS_ROLE_LAUNCH_CREDENTIALS");
+  expect(()=>projectP7LocalRoleEnvironment({...lane,...meta,P5_V39_PRE_DATABASE_URL:"forbidden"},"lane")).toThrow("CROSS_ROLE_LAUNCH_CREDENTIALS");
+  expect(()=>projectP7LocalRoleEnvironment({...lane,...meta,P6_PRIVATE_PUBLISHER_DATABASE_URL:"forbidden"},"lane")).toThrow("CROSS_ROLE_LAUNCH_CREDENTIALS");
+  expect(()=>projectP7LocalRoleEnvironment({...lane,...meta,P6_PRIVATE_READER_DATABASE_URL:""},"lane")).toThrow("ROLE_CONFIGURATION_MISSING");
   expect(p.P6_PHASE7_PRE_PROOF_REVIEWER_PRIVATE_KEY_BASE64).toBe("synthetic-proof-key");expect(p.P6_PRIVATE_PUBLISHER_DATABASE_URL).toBeUndefined();
   expect(new URL(w.V39_P5_SOURCE_DATABASE_URL!).password).toBe("");
   for(const x of [l,p,w]){expect(x.GITHUB_TOKEN).toBeUndefined();expect(x.ACTIONS_RUNTIME_TOKEN).toBeUndefined();}

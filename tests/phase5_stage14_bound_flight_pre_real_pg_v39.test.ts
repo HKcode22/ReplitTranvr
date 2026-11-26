@@ -585,7 +585,7 @@ active("Phase5 Stage14 one physical original flight PRE, disposable real PG16",(
      try{
       await c.query("SET ROLE phase6_private_frozen_reader_v39");
       await c.query("BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY");
-      expect(await assertP6ConditionalT24MetadataReader(c,login)).toMatch(/^\\d{4}-/);
+      expect(await assertP6ConditionalT24MetadataReader(c,login)).toMatch(/^\d{4}-/);
       const ids=[conditional.flightInstanceId,permit.flightInstanceId],args=[ids,5];
       const snap=await c.query(P6_CONDITIONAL_T24_SNAPSHOTS_SQL,args),wit=await c.query(P6_CONDITIONAL_T24_WITNESSES_SQL,args);
       expect(snap.rows).toEqual([{flight_instance_id:conditional.flightInstanceId,snapshot_id:result.committedSnapshotId}]);

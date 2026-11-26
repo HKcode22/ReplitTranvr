@@ -36,7 +36,7 @@ F = failure family or evidenced defect; I = corrective implementation; C = incom
 | F024 | Tested branch | Optional weather archive read for FIDS-only permit. [Commit](https://github.com/HKcode22/ReplitTranvr/commit/3327ff5d84d9d0aa0478a34bb41e44e788cd3a9a) | I022 |
 | F025 | Corrected and exact #976 CI passed | Superseded V0112 predecessor mismatch 45796497453; seven workflows on 6572192 failed same TS18048; two on 41d5d38f failed synthetic Phase7 digest shape. Successor #976 exact 454349c9 passed 46/46, including TypeScript, focused proof/registration, PG16 and full offline safety. Production install separate. Four #977 runs on 427411f4 failed one TS2345 legacy-child union mismatch; 433082ba focused diagnostics and V0094 PG16 passed, full offline pending at 03:50 PST. Recurrence exact 88188823: four workflows 45895855329/45895855211/45895855254/45895855318 failed the same TS18048 optional response wire type narrowing; no production fault. | I023, I026, I069 |
 | F026 | Historical loss | Day1 zero bindings; Day2 52 bindings zero PRE; pause missed T90 and elapsed Day3 T24. [Owner census](checkpoints/2026-11-26_0152_PST_PHASE5B_OWNER_CENSUS_AND_QUEUE_REPAIR.md) Nov26 10:58 PST latest actual rolling wake SOURCE/POST paid jobs skipped; do not infer additional missed query count without current owner census. 19:47:58Z owner census: Day3 T24 64 elapsed, T6/T90 128 prospective, 52 historical bindings, 92 reservations, zero PRE tasks, zero unresolved stops; owner enabled SOURCE only. 19:58:19Z I059 actual owner audit confirms 512 prepared, 292 elapsed unreserved, 128 future, 52 timely binding, no PRE; Day4 no prepared rows yet (first signed plan request Nov27 11:45Z, draw already selected). | I008, I012, I013, I014, I016, I043, I045, I057, I059, I060, I062 |
-| F027 | Partial; staged conditional later registry reader | Native-only private registry/producer/feature proof despite separate conditional writer. #976 implements independent source proof/permit preparation and conditional queue packets; #977 connects protected current later registry reader. No actual conditional producer signature or observed PRE. | I005, I014, I016, I025, I029, I031, I033, I034, I038, I039, I040, I041, I044, I046, I047, I048, I050, I051, I052, I053, I054, I055, I056, I058, I061, I064, I066, I067, I068, I070, I071 |
+| F027 | Partial; staged conditional later registry reader | Native-only private registry/producer/feature proof despite separate conditional writer. #976 implements independent source proof/permit preparation and conditional queue packets; #977 connects protected current later registry reader. No actual conditional producer signature or observed PRE. | I005, I014, I016, I025, I029, I031, I033, I034, I038, I039, I040, I041, I044, I046, I047, I048, I050, I051, I052, I053, I054, I055, I056, I058, I061, I064, I066, I067, I068, I070, I071, I072 |
 | F028 | Superseded CI failure | Stacked PR excluded full offline CI; trigger fixed. [Checkpoint](checkpoints/2026-11-25_1730_PST_PHASE5B_DRAIN_AND_STACKED_CI_COVERAGE.md) | I023 |
 | F029 | Open | Actual physical gate-out source not certified; schedule revision is not substitute. [Adopted runtime scope](../phase5/evidence/2026-11-22_PHASE6_RUNTIME_BINDING_OWNER_DELEGATED_SCOPE_REVIEW.md) | I005 |
 | F030 | Focused tested, full pending | Conditional raw/normalized matcher parity corrected in c66f6307; [focused run](https://github.com/HKcode22/ReplitTranvr/actions/runs/45799119831) passed. Not a demonstrated live cause. | I024 |
@@ -154,6 +154,8 @@ F = failure family or evidenced defect; I = corrective implementation; C = incom
 
 | I071 | Staged; exact CI and owner install required | V0113 narrow conditional T24 metadata projections on existing private read-only role; independent exact role/ACL runtime check and bounded conditional-only SELECT path. No new login, writer grants, raw features or retention changes. | F027 |
 
+| I072 | Staged; exact CI required | Wire protected lane to existing private reader via explicit disabled-default configuration, same endpoint and stable reader login, real metadata/custody preflight, authenticated later instruction and actual issuer; preserve writer/key separation. | F027 |
+
 ## Completion components (not gates)
 
 | ID | Status | Component | Failure IDs | Implementation IDs |
@@ -265,6 +267,8 @@ T IDs are permanent scenarios, not claims of passing CI. Each references existin
 | T066 | New regression; exact CI pending | Actual restricted source fixture -> authenticated permit and shared independent proof -> conditional registry issuer -> existing external verifier; reject copied page, expired/late scope or absent conditional policy. | F027 | I070 | C001, C002, C005 | tests/phase5_conditional_bound_source_review_v39.test.ts |
 
 | T067 | New real disposable PG16 scenario; exact CI pending | Actual Stage14 conditional PRE and Stage17 witness commits then existing restricted private reader reads only exact conditional metadata, excludes native/absent, rejects base table access and mutation. | F027 | I071 | C001, C002, C005 | tests/phase5_stage14_bound_flight_pre_real_pg_v39.test.ts |
+
+| T068 | New regression; exact CI pending | Protected lane projection gives private reader only with explicit enable, refuses unapproved URL, missing configuration or PRE/publisher credentials; existing lane/proof/publisher roles preserved. | F027 | I072 | C001, C002, C005 | tests/phase7_local_private_pre_handoff_v39.test.ts |
 
 ## Scientific and retention authorities
 
@@ -402,3 +406,8 @@ Use existing proof-resolved page, opaque module binding and conditional packet a
 ## Nov26 continuation — I071/T067 narrow conditional metadata read
 
 I070 at check 22/23 green, full 45896209697 pending. Existing lane cannot hold PRE writer URL; V0113 candidate creates two restricted metadata views on existing private frozen reader role only (no new login or writer grants). Existing native PRE reader unchanged. Conditional exact read mode verifies private reader login, READ ONLY PG16 primary, narrow view SELECT, no base SELECT or mutation. Existing Stage14/witness disposable PG16 fixture exercises genuine commits and narrow read/deny behavior. No production migration, credentials, runtime activation, provider call or policy change. Owner review and actual permissions readback still required.
+
+
+## Nov26 continuation — I072/T068 actual conditional lane handler
+
+V0113 staged metadata read is wired into existing protected lane with existing private reader secret conditional on disabled-default owner variable. Authenticate stable login, same TLS endpoint, explicit READ ONLY metadata/custody preflight and exact signed later SOURCE instruction. No PRE writer URL, publisher key or provider credential in lane. Native/conditional T24 path unchanged while disabled. T067 fixture regex corrected before exact successor CI. Production still requires owner-reviewed V0113 install and protected policy/route commissioning; no production change, no additional paid call. Existing Phase7 pre-fragment readback role grants only pre_fragment_v39 SELECT, not witness/snapshot evidence; no reuse of its unrelated grant.

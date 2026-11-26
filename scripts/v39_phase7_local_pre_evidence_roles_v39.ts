@@ -7,7 +7,7 @@
 import {createPrivateKey,createHash} from "node:crypto";
 import {AsyncLocalStorage} from "node:async_hooks";
 import {readP6StableSourceTrust} from "../server/lib/disruption/phase6StoredSourceRuntimeTrust_v39.mjs";
-import {verifyP6ConditionalSourceInstructionProof,verifyP6ConditionalT24ReviewInstructionProof} from "../server/lib/disruption/phase6StoredSourceNativeCandidateAudit_v39.mjs";
+import {verifyP6ConditionalSourceInstructionProof,verifyP6ConditionalT24ReviewInstructionProof,verifyP6ConditionalLaterReviewInstructionProof} from "../server/lib/disruption/phase6StoredSourceNativeCandidateAudit_v39.mjs";
 import {p6ReviewedPolicyMatchesRuntime} from "../server/lib/disruption/phase6ReviewedRuntimeCode_v39.mjs";
 import type {P7ConditionalProofScopePort} from "../server/lib/disruption/phase7IndependentPreSourceReader_v39";
 import {execFileSync} from "node:child_process";
@@ -54,11 +54,13 @@ function source(raw:string|undefined,password:boolean){
 }
 export function projectP7LocalRoleEnvironment(e:NodeJS.ProcessEnv,role:P7LocalPreRole,endpointOnly?:string){
  readP7LocalPreScope(e);
+ const metadata=role==="lane"&&e.P6_CONDITIONAL_LATER_METADATA_READ_ENABLED==="1";
  if(!roles.includes(role)||!e.RUNNER_TRACKING_ID||
   [e.P5_V39_PRE_DATABASE_URL,e.P5_V39_PREPARE_DATABASE_URL,e.P5_V39_T24_WITNESS_DATABASE_URL,e.P5_V39_OTHER_REST_RESERVE_DATABASE_URL,e.P5_V39_OTHER_REST_REVIEW_DATABASE_URL,e.P6_PHASE7_POST_BUNDLE_WRITER_DATABASE_URL,e.P6_PRIVATE_DAY_REVIEWER_KEY_BASE64,e.P6_PRIVATE_LATER_REVIEWER_KEY_BASE64,e.P6_PHASE7_POST_OUTCOME_PRIVATE_KEY_BASE64].some(Boolean)||
-  (role!=="lane"&&!!e[laneKey])||(role!=="proof"&&!!e[proofKey])||(role!=="publisher"&&!!e.P6_PRIVATE_PUBLISHER_DATABASE_URL)||(role==="lane"&&!!e.P6_PRIVATE_READER_DATABASE_URL))hold("CROSS_ROLE_LAUNCH_CREDENTIALS");
+  (role!=="lane"&&!!e[laneKey])||(role!=="proof"&&!!e[proofKey])||(role!=="publisher"&&!!e.P6_PRIVATE_PUBLISHER_DATABASE_URL)||(role==="lane"&&!!e.P6_PRIVATE_READER_DATABASE_URL&&!metadata))hold("CROSS_ROLE_LAUNCH_CREDENTIALS");
  const out:NodeJS.ProcessEnv={};
- for(const name of [...common,...roleOnly[role],...(role==="publisher"?[]:instructionPins)])if(e[name]!==undefined)out[name]=e[name];
+ const laneMetadata=metadata?["P6_CONDITIONAL_LATER_METADATA_READ_ENABLED","P6_PRIVATE_READER_DATABASE_URL","P6_PHASE7_PRIVATE_REVIEW_TRANSPORT_APPROVED","P6_PHASE7_PRIVATE_REVIEW_READER_LOGIN"]:[];
+ for(const name of [...common,...roleOnly[role],...laneMetadata,...(role==="publisher"?[]:instructionPins)])if(e[name]!==undefined)out[name]=e[name];
  if(role==="publisher"){
   // The publisher never receives a live SOURCE password, even in its
   // launch step. Endpoint-only pointer was made by the lane step after
@@ -66,7 +68,7 @@ export function projectP7LocalRoleEnvironment(e:NodeJS.ProcessEnv,role:P7LocalPr
   if(e.V39_P5_SOURCE_DATABASE_URL)hold("PUBLISHER_SOURCE_CREDENTIAL");
   const u=source(endpointOnly,false);out.V39_P5_SOURCE_DATABASE_URL=u.toString();
  }else source(out.V39_P5_SOURCE_DATABASE_URL,true);
- for(const name of roleOnly[role])if(!out[name])hold("ROLE_CONFIGURATION_MISSING");
+ for(const name of [...roleOnly[role],...laneMetadata])if(!out[name])hold("ROLE_CONFIGURATION_MISSING");
  return out;
 }
 function endpointFile(dir:string){return join(dir,"source-endpoint.txt")}
@@ -135,7 +137,13 @@ async function serve(role:P7LocalPreRole){
   if(role==="lane"){
    const a=openP7ActualPreLaneEvidenceAuthority(e,key(e[laneKey]),undefined,conditionalScope);clean=a.close;readClock=a.preflight;await a.preflight();
    handler=async q=>{
-    if(q.op==="issue_conditional_later_review")hold("CONDITIONAL_LATER_RESTRICTED_READ_ROLE_NOT_COMMISSIONED");
+    if(q.op==="issue_conditional_later_review"){
+     if(e.P6_CONDITIONAL_LATER_METADATA_READ_ENABLED!=="1")hold("CONDITIONAL_LATER_RESTRICTED_READ_ROLE_NOT_COMMISSIONED");
+     const x=readP7ConditionalInstructionRolePolicy(e),request=q.conditionalLaterReview!;
+     const scope=verifyP6ConditionalLaterReviewInstructionProof(q.conditionalSourceProof,{...x,anchor:request.anchor,expectedHorizon:request.horizon,observedDbClockUtc:await readClock()});
+     const conditionalLaterReviewWire=await a.issueConditionalLaterReview(scope,request.flightInstanceIds,x.trust.reviewedCodeSha,[x.trust.dayReviewerFingerprintSha256,x.trust.queryReviewerFingerprintSha256]);
+     return {wires:[],committedCount:0,conditionalLaterReviewWire};
+    }
     if(q.op==="issue_conditional_t24_review"){
      const x=readP7ConditionalInstructionRolePolicy(e),request=q.conditionalT24Review!;
      const scope=verifyP6ConditionalT24ReviewInstructionProof(q.conditionalSourceProof,{...x,anchor:request.anchor,observedDbClockUtc:await readClock()});
