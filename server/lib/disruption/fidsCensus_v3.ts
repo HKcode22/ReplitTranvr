@@ -12,6 +12,7 @@ import type { Pool, PoolClient } from "pg";
 import { v39Pool as pool } from "./db_v39";
 import { fetchFidsAirport } from "./aerodataboxLimiter_v3";
 import { addCanonicalFidsEnvelopeHashV39 } from "./fidsEnvelopeCanonical_v39";
+import {inspectP5ConditionalRoute,p5ConditionalPositiveServiceCounts,p5ConditionalProviderIdAbsent,p5ConditionalServiceRouteKey,p5ConditionalStage14Id} from "./phase5ConditionalServiceIdentity_v39";
 import {
   canonicalFlightInstanceId,
   phase5ProspectiveCanonicalFlightIdV39,
@@ -508,6 +509,7 @@ function normalizeFidsRecord(input: {
        params.direction==="Departure");
     const foreignOrigin=movement==="departure"&&!!explicitDepIcao&&
       explicitDepIcao!==normalizeIcao(params.airportIcao);
+    const conditionalRoute=params.phase5ConditionalService?inspectP5ConditionalRoute(f,params.airportIcao):null;
     if(g5a&&isOperator&&sourceId&&requestedOrigin&&!foreignOrigin){
       const stable=createHash("sha256").update(JSON.stringify({
         protocol:"G5A_FIRST_NATIVE_SCHEDULE_REVISION",
@@ -534,20 +536,14 @@ function normalizeFidsRecord(input: {
       canonical="leg:g5a:"+stable;
       analyticIdentityId=canonical;
       identityStatus="g5a_conditional_operator_composite_no_native_id";
-    }else if(!g5a&&params.phase5ConditionalService&&isOperator&&!sourceId&&
-      requestedOrigin&&!foreignOrigin&&movement==="departure"&&depIcao!==arrIcao&&
-      (f?.departure?.airport?.icao===undefined||f?.departure?.airport?.icao===null||f?.departure?.airport?.icao===""||explicitDepIcao!==null)&&
+    }else if(!g5a&&params.phase5ConditionalService&&isOperator&&p5ConditionalProviderIdAbsent(f)&&
+      conditionalRoute?.status==="ok"&&requestedOrigin&&!foreignOrigin&&movement==="departure"&&
       f?.isCargo!==true&&f?.isPrivate!==true&&f?.isGeneralAviation!==true&&f?.isCharter!==true&&
       classifyScope(f??{})==="unknown"){
       // Same G5A conditional key and marker already supported by Stage14.
       // Anchor to the exact signed parent-day start, not the entire month
       // or mutable scheduled departure. Keep native identity lane unchanged.
-      canonical="leg:g5a:"+sha256(JSON.stringify({
-        protocol:"G5A_CONDITIONAL_IDLESS_OPERATOR_V2",
-        frozenStudyStartUtc:params.phase5ConditionalService.cohortStartUtc,
-        carrier:parsed.carrier,flightNumber:parsed.number,
-        origin:depIcao,destination:arrIcao
-      }));
+      canonical=p5ConditionalStage14Id(conditionalRoute.route,params.phase5ConditionalService.cohortStartUtc);
       analyticIdentityId=canonical;
       identityStatus="g5a_conditional_operator_composite_no_native_id";
     }else if(!g5a&&isOperator&&!departureAirportFromContext&&
@@ -748,22 +744,16 @@ export async function fetchFidsPopulation(
   for(const r of preDedup){
     const k=compositeKey(r);counts.set(k,(counts.get(k)??0)+1);
   }
-  // For the prospective Phase5 conditional tier, an out-of-window alias
-  // in the SAME actual response may still make the in-window service
-  // ambiguous. Count raw route/number appearances before filtering.
-  if(params.phase5ConditionalService){
-    const rawCounts=new Map<string,number>();
-    for(const f of fids.departures){
-      const n=parseFlightNumber(f?.number),o=normalizeIcao(f?.departure?.airport?.icao)??normalizeIcao(params.airportIcao),d=normalizeIcao(f?.arrival?.airport?.icao);
-      if(!n||!o||!d)continue;
-      const k=["requested_airport_primary",n.carrier+n.number,o,d].join("|");
-      rawCounts.set(k,(rawCounts.get(k)??0)+1);
-    }
-    for(const [k,n] of rawCounts)counts.set(k,Math.max(n,counts.get(k)??0));
-  }
+  // Exactly the same positive-operator ambiguity rule as the independent
+  // conditional reader, including out-of-window / missing-schedule rows.
+  // A positively identified marketing record is not another operator.
+  // Do not change the historical G5A composite count semantics.
+  const rawConditionalCounts=params.phase5ConditionalService?p5ConditionalPositiveServiceCounts(fids.departures,params.airportIcao):null;
   const normalized=preDedup.map((r,index):NormalizedFidsRecord=>{
-    if(r.row.codeshareResolutionStatus!=="g5a_conditional_operator_composite_no_native_id"||
-       (counts.get(compositeKey(r))??0)===1)return r;
+    if(r.row.codeshareResolutionStatus!=="g5a_conditional_operator_composite_no_native_id")return r;
+    const n=parseFlightNumber(r.row.flightNumber),origin=r.row.depAirportIcao,destination=r.row.arrAirportIcao;
+    const count=rawConditionalCounts?(n&&origin&&destination?rawConditionalCounts.get(p5ConditionalServiceRouteKey({carrier:n.carrier,number:n.number,origin,destination}))??0:0):(counts.get(compositeKey(r))??0);
+    if(count===1)return r;
     return {resolvedCanonical:null,row:{
       ...r.row,canonicalFlightInstanceId:null,
       codeshareResolutionStatus:"g5a_composite_duplicate_ambiguous",

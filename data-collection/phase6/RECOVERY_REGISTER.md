@@ -66,7 +66,7 @@ F = failure family or evidenced defect; I = corrective implementation; C = incom
 | I021 | Tested branch | Audit before publisher lock | F023 |
 | I022 | Tested branch | Skip weather read for absent weather; present proof retained | F024 |
 | I023 | Tested branch | Exact-head CI coverage, compile/SQL fixes | F025, F028 |
-| I024 | Planned | Align conditional matcher and feature extraction | F030 |
+| I024 | Implemented, CI pending | Shared conditional route/key/positive-operator ambiguity between normalizer and raw review; real normalizer and reader regressions | F030 |
 
 ## Completion components (not gates)
 

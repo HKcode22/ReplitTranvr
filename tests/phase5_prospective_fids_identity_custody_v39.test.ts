@@ -132,3 +132,19 @@ describe("future scoped Phase5 FIDS identity representation and custody",()=>{
   }
  });
 });
+
+// F005/F030, I024: the real normalizer must agree with the independent
+// conditional raw reader on actual-contract shapes, not synthetic native IDs.
+it("keeps a unique conditional positive operator despite marketing context and censors repeated positive operators before filtering",async()=>{
+ const marked={...BASE,phase5ConditionalService:{protocolSha256:"b".repeat(64),cohortStartUtc:"2026-12-01T00:00:00.000Z"}};
+ const operator={...movement(first),id:null,isPrivate:undefined,isCharter:undefined,number:"zx 5293",departure:{airport:{icao:" zzaa "},scheduledTime:{utc:first.scheduledGateOutUtc}},arrival:{airport:{icao:" zzbb "}}};
+ const marketing={...operator,codeshareStatus:"IsCodeshared"};
+ const good=await observe([operator,marketing] as any,marked);
+ expect(good.rows[0].canonicalFlightInstanceId).toMatch(/^leg:g5a:[0-9a-f]{64}$/);
+ expect(good.rows[0].scopeClassification).toBe("unknown");
+ expect(good.rows[1].canonicalFlightInstanceId).toBeNull();
+ const outside={...operator,departure:{...operator.departure,scheduledTime:{utc:"2026-12-01T04:01:00.000Z"}}};
+ expect((await observe([operator,outside] as any,marked)).rows[0].canonicalFlightInstanceId).toBeNull();
+ const malformed={...operator,id:123,departure:{scheduledTime:{utc:first.scheduledGateOutUtc}}};
+ expect((await observe([malformed] as any,marked)).rows[0].codeshareResolutionStatus).not.toBe("g5a_conditional_operator_composite_no_native_id");
+});

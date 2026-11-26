@@ -76,3 +76,16 @@ describe("prospective conditional service recovery, separate from physical nativ
   expect(()=>prepare(original([flight()]),{...scope,ownerProspectiveSeparateTierApproved:false as any})).toThrow(/SCOPE/);
  });
 });
+
+it("matches conditional normalization of case/whitespace, marketing context and rejects malformed nonempty IDs",()=>{
+ const mark=(rows:any[])=>{
+  const x=original(rows) as any,{canonicalEnvelopeSha256,canonicalEnvelopeHashSchema,...bare}=x;
+  return addCanonicalFidsEnvelopeHashV39({...bare,fidsRequestContract:{...bare.fidsRequestContract,phase5ConditionalService:{protocolSha256:scope.protocolSha256,cohortStartUtc:scope.frozenStudyStartUtc}}});
+ };
+ const row={...flight(),number:"sq 0078",departure:{airport:{icao:" wsss "},scheduledTime:{utc:stamp("12:00")}},arrival:{airport:{icao:" yssy "}}};
+ const x=prepare(mark([row,{...row,codeshareStatus:"IsCodeshared"}]),scope);
+ expect(x.privateCandidates[0]).toMatchObject({stage14ConditionalFlightInstanceId:expect.stringMatching(/^leg:g5a:/),originEvidence:"EXPLICIT_REPORTED_ORIGIN",operatorFlightNumber:"SQ78"});
+ expect(prepare(mark([row,{...row,departure:{airport:{icao:"WSSS"},scheduledTime:{utc:stamp("16:00")}}}]),scope).privateCandidates).toHaveLength(0);
+ expect(prepare(mark([{...row,id:123}]),scope).privateCandidates[0].stage14ConditionalFlightInstanceId).toBeNull();
+ expect(prepare(mark([{...row,departure:{airport:{icao:" "},scheduledTime:{utc:stamp("12:00")}}}]),scope).counts.contraryOrigin).toBe(1);
+});
