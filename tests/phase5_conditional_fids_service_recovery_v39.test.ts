@@ -7,7 +7,7 @@ const scope={protocolSha256:"a".repeat(64),ownerProspectiveSeparateTierApproved:
 const flight=()=>({number:"SQ 0078",codeshareStatus:"IsOperator",isCargo:false,departure:{scheduledTime:{utc:stamp("12:00")}},arrival:{airport:{icao:"YSSY"}}});
 function original(departures:any[]){
  const bytes=Buffer.from(JSON.stringify({departures,arrivals:[]}));
- return addCanonicalFidsEnvelopeHashV39({fidsRequestContract:{schema:"v39.fids-request-frame.application-intent.v1",direction:"Departure",airportIcao:"WSSS",withLeg:true,withCargo:false,withPrivate:false,withCodeshared:false},payloadRepresentation:"RECONSTRUCTED_RESPONSE_JSON_NOT_VERBATIM_HTTP_BYTES",originalHttpWireBytesPreserved:false,originalDecodedEntityBodyPreserved:true,originalDecodedEntityBodyEvidence:{schema:"v39.fids-fetch-decoded-source-body.v1",representation:"FETCH_DECODED_RESPONSE_BODY_BYTES_NOT_HTTP_WIRE",bodySha256:sha(bytes),bodyLengthBytes:bytes.length,bodyBase64:bytes.toString("base64")},departures,arrivals:[],fetchedAtUtc:stamp("05:01")});
+ return addCanonicalFidsEnvelopeHashV39({fidsRequestContract:{schema:"v39.fids-request-frame.application-intent.v1",direction:"Departure",airportIcao:"WSSS",endpointKind:"airport_local_fids",withLeg:true,withCargo:false,withPrivate:false,withCodeshared:true,withCancelled:true,withLocation:false},payloadRepresentation:"RECONSTRUCTED_RESPONSE_JSON_NOT_VERBATIM_HTTP_BYTES",originalHttpWireBytesPreserved:false,originalDecodedEntityBodyPreserved:true,originalDecodedEntityBodyEvidence:{schema:"v39.fids-fetch-decoded-source-body.v1",representation:"FETCH_DECODED_RESPONSE_BODY_BYTES_NOT_HTTP_WIRE",bodySha256:sha(bytes),bodyLengthBytes:bytes.length,bodyBase64:bytes.toString("base64")},departures,arrivals:[],fetchedAtUtc:stamp("05:01")});
 }
 describe("prospective conditional service recovery, separate from physical native PRE",()=>{
  it("recovers real-contract-shaped id-less operator without fabricating origin, scope or actual event",()=>{
@@ -17,6 +17,18 @@ describe("prospective conditional service recovery, separate from physical nativ
   expect(r.trainingOrPrePublicationAuthorized).toBe(false);
   expect(r.providerNativeOperatingLegCertified).toBe(false);
   expect(JSON.stringify(r)).not.toMatch(/SQ 0078|YSSY|privateCandidates|leg:p5conditional/);
+ });
+ it("retains only positive operators in the real Phase5 codeshare-inclusive request frame",()=>{
+  const r=prepare(original([flight(),{...flight(),codeshareStatus:"IsCodeshared"},{...flight(),codeshareStatus:2}]),scope);
+  expect(r.counts.conditionalCandidates).toBe(1);
+  expect(r.counts.notPositiveOperator).toBe(2);
+  expect(r.trainingOrPrePublicationAuthorized).toBe(false);
+ });
+ it("does not substitute a different request policy",()=>{
+  const x=original([flight()]) as any;
+  const {canonicalEnvelopeSha256,canonicalEnvelopeHashSchema,...bare}=x;
+  const wrong=addCanonicalFidsEnvelopeHashV39({...bare,fidsRequestContract:{...bare.fidsRequestContract,withCodeshared:false}});
+  expect(()=>prepare(wrong,scope)).toThrow(/EXACT_FILTERED_REQUEST/);
  });
  it("rejects marketing, unknown, known cargo and contrary origin",()=>{
   const r=prepare(original([{...flight(),codeshareStatus:"IsCodeshared"},{...flight(),codeshareStatus:"Unknown"},{...flight(),isCargo:true},{...flight(),departure:{...flight().departure,airport:{icao:"OMAA"}}}]),scope);
