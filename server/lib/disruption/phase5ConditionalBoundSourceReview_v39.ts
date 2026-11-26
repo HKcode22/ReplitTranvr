@@ -64,7 +64,15 @@ export async function readP5BoundConditionalServiceReview(pool:P5EReadOnlyPgPool
   if(g.length!==1||g[0].login!==P5_E_V0079_SOURCE_READONLY_LOGIN_V39||g[0].actor!==P5_E_V0079_SOURCE_READONLY_LOGIN_V39||g[0].ro!=="on"||g[0].primary!==true)hold("ROLE");
   const q=s.source,params=[q.manifestSha256,q.queryDigestSha256];
   const rows=(await c.query(P5_STAGE14_BOUND_SOURCE_SQL,params)).rows;
-  if(rows.length!==1||rows[0].population_query_id!==s.expectedPopulationQueryId||ms(rows[0].source_expires_at_utc)<=ms((await c.query("SELECT clock_timestamp() AS at")).rows[0]?.at)+30000)hold("ORIGINAL_SCOPE_OR_EXPIRY");
+  const o=rows[0];
+  if(rows.length!==1||!o||s.ownerProspectiveSeparateTierApproved!==true||!SHA.test(s.protocolSha256??"")||
+    !q.plannedRequestUtc||ms(s.policyEffectiveUtc)>ms(q.plannedRequestUtc)||o.manifest_sha256!==q.manifestSha256||
+    Number(o.run_day_index)!==q.runDayIndex||o.slot_id!==q.slot||o.horizon!==q.horizon||o.airport_icao!==q.airportIcao||
+    o.state!=="ACTIVE"||o.github_run_id!==q.expectedSourceGithubRunId||o.attempt_run_id!==q.expectedSourceGithubRunId||
+    o.rights_review_sha256!==q.rightsReviewSha256||o.bound_rights!==q.rightsReviewSha256||o.reviewed_release_sha256!==q.reviewedReleaseSha256||
+    o.provider_contract_sha256!==q.providerContractSha256||o.early_draw_sha256!==q.earlyDrawSha256||o.original_current!==true||
+    o.population_query_id!==s.expectedPopulationQueryId||o.original_response_hash!==s.expectedResponseSha256||o.fids_response_hash!==s.expectedResponseSha256||
+    ms(o.source_expires_at_utc)<=ms((await c.query("SELECT clock_timestamp() AS at")).rows[0]?.at)+30000)hold("ORIGINAL_SCOPE_OR_EXPIRY");
   // Existing reader SQL plus a fresh retention fence before retrieving raw.
   const sql=P5_E_BATCH_ORIGINAL_SQL.replace("AND r.raw_payload IS NOT NULL","AND b.source_expires_at_utc>clock_timestamp()+interval '30 seconds' AND r.raw_payload IS NOT NULL");
   if(sql===P5_E_BATCH_ORIGINAL_SQL)hold("QUERY_CONTRACT");
