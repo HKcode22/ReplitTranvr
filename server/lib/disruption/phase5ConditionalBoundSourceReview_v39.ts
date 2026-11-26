@@ -50,7 +50,7 @@ export function prepareP5BoundConditionalServiceReview(s:ReviewScope,rows:readon
   protocolSha256:s.protocolSha256,ownerProspectiveSeparateTierApproved:true,
   manifestSha256:q.manifestSha256,runDayIndex:q.runDayIndex,sourceResponseSha256:s.expectedResponseSha256,sourceQueryId:s.expectedPopulationQueryId,
   airportIcao:q.airportIcao,frozenStudyStartUtc:s.frozenStudyStartUtc,policyEffectiveUtc:s.policyEffectiveUtc,
-  plannedSourceUtc:q.plannedRequestUtc,sourceAvailableUtc:stamp(o.bound_at_utc),sourceExpiresUtc:stamp(o.source_expires_at_utc),dbObservedUtc:stamp(clock),
+  plannedSourceUtc:stamp(q.plannedRequestUtc),sourceAvailableUtc:stamp(o.bound_at_utc),sourceExpiresUtc:stamp(o.source_expires_at_utc),dbObservedUtc:stamp(clock),
   serviceWindowStartUtc:stamp(o.service_window_start_utc),serviceWindowEndUtc:stamp(o.service_window_end_utc),horizon:q.horizon,
   maximumStalenessSeconds:q.maxPopulationStalenessSeconds,minimumReviewLeadSeconds:s.minimumReviewLeadSeconds
  });
