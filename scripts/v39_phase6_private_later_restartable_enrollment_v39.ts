@@ -52,7 +52,8 @@ export function admitP6PrivateLaterEnrollment(env:NodeJS.ProcessEnv){
   hold("WRONG_SEPARATE_TLS_READER");
  return {scoped,trust,runDayIndices,calendar,readerUrl:env.P6_PRIVATE_READER_DATABASE_URL!,
   policy:{independentLaterQueueTransportProjectionApproved:true,existingPaidDispatchApproved:false,
-   independentlyApprovedStandaloneProtocolSha256:scoped.gate.independentlyApprovedStandaloneProtocolSha256}};
+   independentlyApprovedStandaloneProtocolSha256:scoped.gate.independentlyApprovedStandaloneProtocolSha256,
+   ...(scoped.gate.conditionalPreScope?{conditionalPreScope:scoped.gate.conditionalPreScope}:{})}};
 }
 export function selectP6PrivateEnrollmentPackets(
  report:Awaited<ReturnType<typeof readP6CurrentLaterQueueRosters>>,

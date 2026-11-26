@@ -27,7 +27,8 @@ function trustPolicyCheck(trust,policy){
     !CODE.test(trust.reviewedCodeSha??"")||
     ![trust.manifestSha256,trust.rightsSha256,trust.calendarSha256,trust.releaseSha256].every(x=>SHA.test(x??""))||
     (policy.independentlyApprovedStandaloneProtocolSha256!==undefined&&
-     !SHA.test(policy.independentlyApprovedStandaloneProtocolSha256)))
+     !SHA.test(policy.independentlyApprovedStandaloneProtocolSha256))||
+    (policy.conditionalPreScope!==undefined&&(!SHA.test(policy.conditionalPreScope?.protocolSha256??"")||!SHA.test(policy.conditionalPreScope?.externalContentUseReviewSha256??""))))
   hold("NO_EXACT_INDEPENDENT_PROJECTION_SCOPE");
 }
 function selectorCheck(s,trust,policy){
@@ -100,6 +101,7 @@ export function projectP6VerifiedLaterQueueRoster({index,hydrated,selector,trust
  const packets=verifyP5CdFrozenRoster(rosterBytes,roster,entries,{
   approvedCodeSha:trust.reviewedCodeSha,manifestSha256:trust.manifestSha256,
   rightsSha256:trust.rightsSha256,rosterSha256,
+  releaseMode:"PHASE6_APPROVED",conditionalPreScope:policy.conditionalPreScope,
   independentlyApprovedStandaloneProtocolSha256:policy.independentlyApprovedStandaloneProtocolSha256
  });
  let nearCutoffCount=0,expiredCutoffCount=0,standaloneCount=0;
@@ -140,7 +142,9 @@ export async function readP6PrivateLaterQueueRoster({client,trust,selector,polic
   expectedManifestSha256:trust.manifestSha256,expectedApprovedMainSha:trust.reviewedCodeSha,
   expectedRunDayIndex:selector.runDayIndex,expectedReleaseSha256:trust.releaseSha256,
   expectedRightsSha256:trust.rightsSha256,expectedPrivateSessionLogin:trust.expectedReaderSessionLogin,
-  privateReadOnlyApproved:true,paidProviderCallsAllowed:false});
+  privateReadOnlyApproved:true,paidProviderCallsAllowed:false,
+  ...(policy.conditionalPreScope?{conditionalPreScope:policy.conditionalPreScope}:{}),
+  independentlyApprovedStandaloneProtocolSha256:policy.independentlyApprovedStandaloneProtocolSha256});
  if(utc(hydrated.observedDbClockUtc)>=utc(review.wire.review.validUntilUtc)||
     utc(hydrated.observedDbClockUtc)>=utc(review.wire.review.retentionNotAfterUtc))
   hold("DAY_SIGNATURE_EXPIRED_DURING_HYDRATION");

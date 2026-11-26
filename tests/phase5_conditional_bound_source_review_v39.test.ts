@@ -1,3 +1,5 @@
+import {verifyP5SignedLaterPreDayRegistry,type P5SignedLaterPreDayRegistry,type P5SignedLaterPreDayRegistryPins} from "../server/lib/disruption/phase5SignedLaterPreDayRegistry_v39";
+import type {P5SignedSourceBatchRegistry} from "../server/lib/disruption/phase5SignedPerDaySourceBatchReadonly_v39";
 import {createHash} from "node:crypto";
 import {describe,it,expect} from "vitest";
 import {addCanonicalFidsEnvelopeHashV39} from "../server/lib/disruption/fidsEnvelopeCanonical_v39";
@@ -216,6 +218,17 @@ describe("source-bound conditional service preparation",()=>{
   const path="data-collection/phase5/frozen/conditional_ci_packet.json",roster:P5CdFrozenRoster={schema:"v39.phase5.cd-existing-signed-pre-packet-roster.v1",reviewedCodeSha:release.approvedCodeSha,manifestSha256:release.manifestSha256,rightsSha256:release.rightsSha256,entries:[{filePath:path,packetSha256:packet.packetSha256}]};
   const rosterBytes=Buffer.from(JSON.stringify(roster)),gate={...release,rosterSha256:hd(rosterBytes)},files=[{filePath:path,packetSha256:packet.packetSha256,bytes:packet.packetBytes}];
   expect(verifyP5CdFrozenRoster(rosterBytes,roster,files,gate).get(packet.packetSha256)?.permit).toEqual(built.privatePermit);
+  // T039: actual same fixture independent proof and packet through existing
+  // signed later-day registry. No extra writer or approval inferred.
+  const src:P5SignedSourceBatchRegistry={schema:"v39.phase5.signed-per-day-source-batch-readonly.v1",manifestSha256:gate.manifestSha256,runDayIndex:p.runDayIndex,entries:[{filePath:"data-collection/phase5/frozen/source_ci_query_packet.json",expectedPacketSha256:h("2"),expectedQueryDigestSha256:p.queryDigestSha256}]};
+  const srcBytes=Buffer.from(JSON.stringify(src)),reg:P5SignedLaterPreDayRegistry={schema:"v39.phase5.signed-later-pre-day-registry.v1",manifestSha256:gate.manifestSha256,reviewedCodeSha:gate.approvedCodeSha,runDayIndex:p.runDayIndex,shardIndex:1,sourceDayRegistrySha256:hd(srcBytes),sourceDayRegistryFilePath:"data-collection/phase5/frozen/source_ci_registry.json",entries:[{filePath:path,expectedPacketSha256:packet.packetSha256,expectedQueryDigestSha256:p.queryDigestSha256,expectedFlightInstanceId:p.flightInstanceId,expectedHorizon:"T-6h",expectedSelectedTNativeUtc:p.selectedTNativeUtc,expectedSourcePopulationQueryId:p.expectedSourcePopulationQueryId}]};
+  const regBytes=Buffer.from(JSON.stringify(reg)),rp:P5SignedLaterPreDayRegistryPins={registryFilePath:"data-collection/phase5/frozen/later_ci_registry.json",expectedRegistrySha256:hd(regBytes),expectedSourceDayRegistrySha256:hd(srcBytes),expectedManifestSha256:gate.manifestSha256,expectedApprovedMainSha:gate.approvedCodeSha,expectedRunDayIndex:p.runDayIndex,expectedReleaseSha256:p.expectedReviewedReleaseSha256,expectedRightsSha256:gate.rightsSha256,conditionalPreScope:gate.conditionalPreScope,independentlyApprovedStandaloneProtocolSha256:gate.independentlyApprovedStandaloneProtocolSha256};
+  const readReg=(pins=rp,r=reg,s=src)=>verifyP5SignedLaterPreDayRegistry(regBytes,r,srcBytes,s,pins,()=>packet.packetBytes);
+  expect(readReg().entries[0].packet.prePermit).toEqual(built.privatePermit);
+  expect(()=>readReg({...rp,conditionalPreScope:undefined})).toThrow("SEPARATE_PROSPECTIVE_SCOPE");
+  expect(()=>readReg({...rp,conditionalPreScope:{...rp.conditionalPreScope!,protocolSha256:h("0")}})).toThrow("SEPARATE_PROSPECTIVE_SCOPE");
+  expect(()=>readReg(rp,{...reg,shardIndex:2})).toThrow("PARSED_REGISTRY_BYTES_DRIFT");
+  expect(()=>readReg(rp,reg,{...src,entries:[{...src.entries[0],expectedPacketSha256:h("0")}]})).toThrow("PARSED_REGISTRY_BYTES_DRIFT");
   expect(()=>verifyP5CdFrozenRoster(rosterBytes,roster,files,{...gate,conditionalPreScope:undefined})).toThrow("SEPARATE_PROSPECTIVE_SCOPE");
   expect(()=>verifyP5CdFrozenRoster(rosterBytes,roster,files,{...gate,releaseMode:"PHASE5_CANARY"})).toThrow("SEPARATE_PROSPECTIVE_SCOPE");
   expect(()=>verifyP5ConditionalQueuePacket({...packet.packet,phase7FieldProof:wire,independentLaterHorizonAndT24ReviewAttested:true},gate,"LATER_ONLY")).toThrow("PACKET_SCHEMA_OR_HORIZON");

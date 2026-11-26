@@ -207,9 +207,12 @@ export function admitP6OneVerifiedPrivateLaterPreToExistingStage14({
   V39_P5_QUERY_DIGEST:entry.queryDigestSha256,
   V39_P5_LATER_PRE_T24_RECEIPT_SHA256:entry.t24ReceiptSha256??""
  };
+ const legacyPacket=entry.packet;
+ if(legacyPacket.schema!=="v39.phase5.github-witnessed-later-pre-reviewed.v1"&&legacyPacket.schema!=="v39.phase5.github-standalone-later-pre-asof-reviewed.v2")
+  return fail("CONDITIONAL_PACKET_REQUIRES_CURRENT_CD_QUEUE_PATH");
  const approved=(()=>{
   try{return admitP5SignedWitnessedLaterPre(
-   delegated,entry.bytes,entry.packet,entry.filePath);}
+   delegated,entry.bytes,legacyPacket,entry.filePath);}
   catch{return fail("EXISTING_STAGE14_NATIVE_T_WITNESS_OR_PRE_ROLE_REFUSED");}
  })();
  if(approved.prePermit.horizon!==pins.expectedHorizon||

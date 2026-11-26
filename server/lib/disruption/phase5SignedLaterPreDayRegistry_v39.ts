@@ -11,6 +11,8 @@
  * require another separately signed prospective approval, not an auto grant.
  */
 import {createHash} from "node:crypto";
+import {isP5ConditionalQueuePacketSchema,verifyP5ConditionalQueuePacket,P5_CONDITIONAL_WITNESSED_LATER_PACKET,P5_CONDITIONAL_STANDALONE_PACKET,type P5ConditionalQueueScope} from "./phase5ConditionalPreQueuePacket_v39";
+import type {P5Stage14SingleFlightPrePermit} from "./phase5V0079SingleBoundFlightPreWriter_v39";
 import type {P5SignedSourceBatchRegistry}
  from "./phase5SignedPerDaySourceBatchReadonly_v39";
 import type {P5SignedWitnessedLaterPrePacket}
@@ -54,7 +56,11 @@ export interface P5SignedLaterPreDayRegistryPins{
  expectedRunDayIndex:number;
  expectedReleaseSha256:string;
  expectedRightsSha256:string;
+ /** Only the protected current private C+D consumer supplies this scope. */
+ conditionalPreScope?:P5ConditionalQueueScope;
+ independentlyApprovedStandaloneProtocolSha256?:string;
 }
+export type P5ConditionalLaterPacket={schema:typeof P5_CONDITIONAL_WITNESSED_LATER_PACKET|typeof P5_CONDITIONAL_STANDALONE_PACKET;reviewedCodeSha:string;reviewArtifactSha256:string;independentlyReviewedConditionalScheduleServiceAndSourceAttested:true;reviewedConditionalProtocolSha256:string;prePermit:P5Stage14SingleFlightPrePermit;phase7FieldProof:unknown};
 export interface P5VerifiedLaterPreRegistryEntry{
  filePath:string;
  packetSha256:string;
@@ -64,7 +70,7 @@ export interface P5VerifiedLaterPreRegistryEntry{
  selectedTNativeUtc:string;
  t24ReceiptSha256?:string;
  bytes:Buffer;
- packet:P5SignedWitnessedLaterPrePacket;
+ packet:P5SignedWitnessedLaterPrePacket|P5ConditionalLaterPacket;
 }
 export interface P5VerifiedLaterPreDayRegistry{
  schema:"v39.phase5.verified-later-pre-day-registry.v1";
@@ -102,6 +108,13 @@ export function verifyP5SignedLaterPreDayRegistry(
     sourceBytes.length>100000||
     hash(sourceBytes)!==pins.expectedSourceDayRegistrySha256)
   hold("UNSIGNED_REGISTRY_OR_SOURCE_REGISTRY_BYTES");
+ // Never validate caller-supplied parsed objects in place of authenticated bytes.
+ try{
+  const r=JSON.parse(registryBytes.toString("utf8")),s=JSON.parse(sourceBytes.toString("utf8"));
+  if(JSON.stringify(r)!==JSON.stringify(registry)||JSON.stringify(s)!==JSON.stringify(source))
+   hold("PARSED_REGISTRY_BYTES_DRIFT");
+  registry=r;source=s;
+ }catch{return hold("PARSED_REGISTRY_BYTES_DRIFT");}
  if(!registry||
     registry.schema!=="v39.phase5.signed-later-pre-day-registry.v1"||
     registry.manifestSha256!==pins.expectedManifestSha256||
@@ -157,8 +170,8 @@ export function verifyP5SignedLaterPreDayRegistry(
   if(!Buffer.isBuffer(bytes)||bytes.length<100||bytes.length>200000||
      hash(bytes)!==e.expectedPacketSha256)
    hold("FROZEN_FLIGHT_PACKET_BYTES_NOT_AUTHENTIC");
-  let packet:P5SignedWitnessedLaterPrePacket;
-  try{packet=JSON.parse(bytes.toString("utf8")) as P5SignedWitnessedLaterPrePacket;}
+  let packet:P5SignedWitnessedLaterPrePacket|P5ConditionalLaterPacket;
+  try{packet=JSON.parse(bytes.toString("utf8"));}
   catch{return hold("SIGNED_FLIGHT_PACKET_NOT_JSON");}
   const p=packet?.prePermit;
   if(!p||packet.reviewedCodeSha!==pins.expectedApprovedMainSha||
@@ -170,13 +183,20 @@ export function verifyP5SignedLaterPreDayRegistry(
      p.flightInstanceId!==e.expectedFlightInstanceId||
      p.horizon!==e.expectedHorizon||
      p.selectedTNativeUtc!==e.expectedSelectedTNativeUtc||
-     p.expectedSourcePopulationQueryId!==e.expectedSourcePopulationQueryId||
-     (p.identityEvidenceTier??"PROVIDER_NATIVE_OPERATING_LEG")!==
-       "PROVIDER_NATIVE_OPERATING_LEG"||
-     p.externalNativeTPhysicalLegAndSourceUseReviewed!==true)
+     p.expectedSourcePopulationQueryId!==e.expectedSourcePopulationQueryId)
    hold("CROSS_DAY_CHANGED_NATIVE_FLIGHT_OR_SOURCE_RIGHTS");
   let receipt:string|undefined;
-  if(packet.schema==="v39.phase5.github-witnessed-later-pre-reviewed.v1"){
+  if(isP5ConditionalQueuePacketSchema(packet.schema)){
+   verifyP5ConditionalQueuePacket(packet,{releaseMode:"PHASE6_APPROVED",
+    approvedCodeSha:pins.expectedApprovedMainSha,manifestSha256:pins.expectedManifestSha256,
+    rightsSha256:pins.expectedRightsSha256,conditionalPreScope:pins.conditionalPreScope,
+    independentlyApprovedStandaloneProtocolSha256:pins.independentlyApprovedStandaloneProtocolSha256},"LATER_ONLY");
+   receipt=p.reviewedT24WitnessReceipt?.receiptSha256;
+   if(receipt!==e.expectedT24ReceiptSha256)hold("T24_WITNESS_RECEIPT_NOT_BOUND_TO_SIGNED_REGISTRY");
+  }else if((p.identityEvidenceTier??"PROVIDER_NATIVE_OPERATING_LEG")!=="PROVIDER_NATIVE_OPERATING_LEG"||
+    p.externalNativeTPhysicalLegAndSourceUseReviewed!==true||p.flightInstanceId.startsWith("leg:g5a:"))
+   hold("CROSS_DAY_CHANGED_NATIVE_FLIGHT_OR_SOURCE_RIGHTS");
+  else if(packet.schema==="v39.phase5.github-witnessed-later-pre-reviewed.v1"){
    receipt=p.reviewedT24WitnessReceipt?.receiptSha256;
    if(packet.independentLaterHorizonAndT24ReviewAttested!==true||
       !SHA.test(receipt??"")||
