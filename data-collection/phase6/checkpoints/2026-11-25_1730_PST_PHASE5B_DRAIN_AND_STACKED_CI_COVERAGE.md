@@ -1,0 +1,14 @@
+# Phase5B recovery — Nov25 17:27 PST cutoff, post-cutoff drain confirmation
+
+## Evidence and supersession
+- Issue #413 17:12 checkpoint: current main 95e9130f, relay 87949484; owner pause of new stored SOURCE/private POST routing in effect. PR975 ca743c8f exact ten first-attempt workflow conclusions green; preserve exact head and existing owner cutover. Do not restart an active owner command. No production deployment inferred.
+- PR976 e24b569b exact runs 45734868864 (65 Vitest + 5 Node tests and full TypeScript) and 45734868849 (8 real disposable PG16 tests, distinct Stage14/17 commits) succeeded at 17:19 PST; provider calls and production DB writes zero. This supersedes pending witness CI in 1712 checkpoint. V0111 staged, not installed.
+- After requested 17:27 cutoff, actual four draining old-main T6 child logs at 17:30 PST: 45725597593 / 45725593448 / 45725591209 timely, later-review candidateCount and committedShardCount zero; 45725595482 HTTP_OK then FIDS_BODY_UNAVAILABLE, failed. No replay. Live run listing shows zero in-progress main runs at inspection; not proof of every workflow status or private ledger settlement.
+- Retention run 45733220200 at 17:05 PST: 46 live originals, zero due/unbound/unlinked/STOP per prior direct census; newer 45734974271 dual retention workflow successful, current precise counts need its logs. First Day2 T90 planned 18:15 PST; new SOURCE and POST routing paused, do not infer execution or automatically resume.
+- Nov5 G5A / Nov9 Stage14 / Nov16 crosswalk / Nov22 adoption already reconciled in 1659 and 1712. Do not repeat prior field discoveries or reopen adopted decisions. Separate conditional schedule-service endpoint is not Amendment E physical gate-out.
+
+## Actual CI coverage correction, stacked branch only
+Existing V3.9 Offline Safety pull_request filter targets main only, so #976 (base #975 branch) had two targeted workflows but not the full regression suite. Extend existing full suite to the exact stacked base (still nonpaid, disposable PG16, no new workflow or secrets); retain main and push behavior. Include paid child workflow wiring and G5A regression fixture in existing focused path filters, and V0079/V0081 predecessor migrations in real PG witness path filters. No scientific or admission policy changes. Exact new head CI required; prior head green does not certify new head. Retarget after #975 verified deployment, not before.
+
+## Outstanding work
+Existing #975 owner merge/pin/full dual retention baseline remains the current operational cutover. Do not merge #976 or resume paid routing based on focused tests alone. Continue actual conditional packet issuance, PRE enrollment/durable feature path, POST review/publication using existing mechanisms, and verify prospective scope/retention and production readbacks. No new gate, no historical PRE, no paid replay, no replacement study or provider. No production mutation in this checkpoint.

@@ -24,6 +24,8 @@ on:
       - 'server/lib/disruption/fidsCensus_v3.ts'
       - 'server/lib/disruption/phase5GitHubOneQueryReleaseAdmission_v39.ts'
       - 'tests/phase5_scoped_fids_source_bridge_v39.test.ts'
+      - 'tests/phase4_gate5_g5a_native_fids_identity_v39.test.ts'
+      - '.github/workflows/phase5-one-signed-day-source-child-dispatch.yml'
       - '.github/workflows/phase5b-source-diagnostics-offline.yml'
 permissions:
   contents: read

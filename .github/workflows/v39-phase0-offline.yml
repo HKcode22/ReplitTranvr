@@ -8,6 +8,8 @@ on:
   pull_request:
     branches:
       - main
+      # Exact stacked recovery base: test before retargeting to production.
+      - 'phase5b/20261125-adaptive-slack-and-http-no-content'
 
 permissions:
   contents: read
