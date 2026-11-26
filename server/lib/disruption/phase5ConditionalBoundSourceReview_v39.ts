@@ -6,7 +6,7 @@
 import {prepareP5ConditionalFidsServiceRecoveryV39} from "./phase5ConditionalFidsServiceRecovery_v39";
 import {P5_STAGE14_BOUND_SOURCE_SQL} from "./phase5V0079SingleBoundFlightPreWriter_v39";
 import {P5_E_BATCH_ORIGINAL_SQL,P5_E_V0079_SOURCE_READONLY_LOGIN_V39,type P5EReadOnlyPgPool} from "./phase5AmendmentEOriginalFidsReadonlyCompiler_v39";
-import type {P5ActualSourceCandidateScope} from "./phase5ActualSourceNativeFlightCandidateAudit_v39";
+import {P5_ACTUAL_SOURCE_ALL_MEMBERS_READONLY_SQL,type P5ActualSourceCandidateScope} from "./phase5ActualSourceNativeFlightCandidateAudit_v39";
 type ReviewScope={
  source:P5ActualSourceCandidateScope;protocolSha256:string;ownerProspectiveSeparateTierApproved:true;
  frozenStudyStartUtc:string;policyEffectiveUtc:string;minimumReviewLeadSeconds:number;
@@ -55,6 +55,46 @@ export function prepareP5BoundConditionalServiceReview(s:ReviewScope,rows:readon
   maximumStalenessSeconds:q.maxPopulationStalenessSeconds,minimumReviewLeadSeconds:s.minimumReviewLeadSeconds
  });
 }
+/** Existing Stage14 writer accepts exactly these G5A fields. This
+ * does not fabricate a signed permit or an issued PRE. */
+export function matchP5ConditionalStage14Members(
+ s:ReviewScope,report:ReturnType<typeof prepareP5BoundConditionalServiceReview>,
+ members:readonly Record<string,unknown>[],expectedCount:number,dbClock:string){
+ if(!Number.isSafeInteger(expectedCount)||expectedCount<0||expectedCount>2500||members.length!==expectedCount)hold("MEMBER_COUNT");
+ const by=new Map<string,Record<string,unknown>[]>();
+ for(const m of members){
+  if(m.population_query_id!==s.expectedPopulationQueryId||m.response_hash!==s.expectedResponseSha256||m.provider_content_expired_at_utc!==null||
+   typeof m.population_member_id!=="string"||!m.population_member_id)hold("MEMBER_CUSTODY");
+  const key=String(m.analytic_identity_id??"");
+  by.set(key,[...(by.get(key)??[]),m]);
+ }
+ const matched=[];
+ let missingOrAmbiguous=0;
+ for(const candidate of report.privateCandidates){
+  const id=candidate.stage14ConditionalFlightInstanceId;
+  if(id===null){missingOrAmbiguous++;continue;}
+  const rows=by.get(id)??[];
+  if(rows.length!==1){missingOrAmbiguous++;continue;}
+  const m=rows[0];
+  if(m.canonical_flight_instance_id!==id||m.source_airport_icao!==s.source.airportIcao||
+    m.dep_airport_icao!==s.source.airportIcao||m.arr_airport_icao!==candidate.destinationIcao||
+    m.flight_number!==candidate.operatorFlightNumber||m.scope_classification!=="unknown"||
+    m.codeshare_resolution_status!=="g5a_conditional_operator_composite_no_native_id"||
+    m.source_type!=="fids"||m.population_role!=="requested_airport_primary"||m.query_direction!=="Departure"||
+    ms(m.dep_scheduled_utc)!==ms(candidate.selectedReportedDepartureUtc)||
+    ms(m.available_at)>ms(dbClock)||ms(m.available_at)>ms(candidate.ownCutoffUtc)){
+   missingOrAmbiguous++;continue;
+  }
+  matched.push(Object.freeze({flightInstanceId:id,populationMemberId:String(m.population_member_id),
+   expectedSourcePopulationQueryId:s.expectedPopulationQueryId,expectedSourceResponseSha256:s.expectedResponseSha256,
+   identityEvidenceTier:"CONDITIONAL_QUERY_FILTERED_SERVICE" as const,reviewedProtocolAmendmentSha256:s.protocolSha256,
+   reviewedStableServiceKeySha256:id.slice("leg:g5a:".length),expectedOperatorFlightNumber:candidate.operatorFlightNumber,
+   expectedDestinationIcao:candidate.destinationIcao,selectedTNativeUtc:candidate.selectedReportedDepartureUtc,
+   predictionCutoffUtc:candidate.ownCutoffUtc}));
+ }
+ const summary={stage14MatchedMembershipCount:matched.length,missingOrAmbiguous,actualPreIssued:false,providerCalls:0,databaseWrites:0};
+ return Object.freeze(Object.defineProperty(summary,"privateReviewProposals",{value:Object.freeze(matched),enumerable:false})) as typeof summary&{readonly privateReviewProposals:readonly (typeof matched)[number][]};
+}
 export async function readP5BoundConditionalServiceReview(pool:P5EReadOnlyPgPool,s:ReviewScope){
  const c=await pool.connect();let began=false;
  try{
@@ -79,8 +119,14 @@ export async function readP5BoundConditionalServiceReview(pool:P5EReadOnlyPgPool
   const originals=(await c.query(sql,[...params,s.expectedPopulationQueryId])).rows;
   const z=(await c.query("SELECT clock_timestamp() AS at")).rows;
   if(z.length!==1)hold("CLOCK");
-  const report=prepareP5BoundConditionalServiceReview(s,rows,originals,stamp(z[0].at));
+  prepareP5BoundConditionalServiceReview(s,rows,originals,stamp(z[0].at));
+  const members=(await c.query(P5_ACTUAL_SOURCE_ALL_MEMBERS_READONLY_SQL,[s.expectedPopulationQueryId])).rows;
+  const fresh=(await c.query("SELECT clock_timestamp() AS at")).rows;
+  if(fresh.length!==1||ms(fresh[0].at)>=ms(o.source_expires_at_utc))hold("FRESH_MEMBER_CLOCK");
+  // Reprepare at actual fresh clock: member reading cannot steal PRE lead.
+  const finalReport=prepareP5BoundConditionalServiceReview(s,rows,originals,stamp(fresh[0].at));
+  const memberReview=matchP5ConditionalStage14Members(s,finalReport,members,Number(o.normalized_members_count),stamp(fresh[0].at));
   await c.query("COMMIT");began=false;
-  return report;
+  return Object.freeze({report:finalReport,memberReview});
  }finally{if(began)await c.query("ROLLBACK").catch(()=>{});c.release();}
 }
