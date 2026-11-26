@@ -1,3 +1,4 @@
+import {readP6ConditionalLaterT24EvidencePage} from "./phase6LaterT24EvidenceBatchReadOnly_v39";
 /** Separate conditional Stage14 PRE permit construction. Reuses the
  * authenticated exact SOURCE scope and a fresh restricted original read.
  * An independently protected artifact SHA is mandatory; this function never
@@ -391,4 +392,112 @@ export async function issueP5ConditionalT24SignedReviewPage(pool:P5EReadOnlyPgPo
   queryDigestSha256:q.queryDigestSha256,populationQueryId:scope.expectedPopulationQueryId,responseSha256:scope.expectedResponseSha256,runDayIndex:q.runDayIndex,
   horizon:q.horizon,sourceGithubRunId:q.expectedSourceGithubRunId,reviews};
  return {page,signatureBase64:sign(null,p5ConditionalReviewPagePreimage(page),input.signer).toString("base64")} satisfies P5ConditionalReviewPageWire;
+}
+
+/** Separately delegated conditional later review. No native approval or
+ * T24-only delegation can silently authorize a standalone later packet.
+ * The actual custody/PRE reader is invoked here, never supplied as a
+ * caller-asserted absence or witness. A fresh SOURCE reread follows it. */
+export async function issueP5ConditionalLaterSignedReviewPage(
+ pool:P5EReadOnlyPgPool,prePool:Parameters<typeof readP6ConditionalLaterT24EvidencePage>[1],
+ scope:P5SignedConditionalFeatureReadScope,requestedFlightIds:readonly string[],
+ custody:Parameters<typeof readP6ConditionalLaterT24EvidencePage>[5],
+ input:Parameters<typeof issueP5ConditionalT24SignedReviewPage>[3]){
+ const q=scope?.source;
+ if(!q||!["T-6h","T-90m"].includes(q.horizon)||!input||!Buffer.isBuffer(input.policyBytes)||
+   input.policyBytes.length<100||input.policyBytes.length>35000||!H.test(input.expectedPolicySha256??"")||
+   hash(input.policyBytes)!==input.expectedPolicySha256||!C.test(input.expectedReviewedCodeSha??"")||
+   !H.test(input.expectedReviewerFingerprintSha256??"")||
+   input.env.P6_PHASE7_PRE_LANE_EVIDENCE_AUTHORITY_APPROVED!=="1"||
+   input.env.P6_PHASE7_PRE_LANE_EVIDENCE_AUTHORITY_FINGERPRINT_SHA256!==input.expectedReviewerFingerprintSha256||
+   input.env.P6_NONPAID_DAILY_POLICY_SHA256!==input.expectedPolicySha256||
+   input.env.V39_P5_MANIFEST_SHA256!==q.manifestSha256||input.env.V39_P5_RIGHTS_SHA256!==q.rightsReviewSha256||
+   input.env.AERODATABOX_API_KEY||input.env.RAPIDAPI_KEY||input.env.AERODATABOX_WEBHOOK_SECRET||
+   input.env.P6_PHASE7_PRE_PROOF_REVIEWER_PRIVATE_KEY_BASE64||input.env.P6_PRIVATE_LATER_REVIEWER_KEY_BASE64||
+   input.env.P6_PRIVATE_DAY_REVIEWER_KEY_BASE64||input.env.P6_PRIVATE_PUBLISHER_DATABASE_URL||
+   !Array.isArray(input.forbiddenSignerFingerprints)||input.forbiddenSignerFingerprints.some(k=>!H.test(k)||k===input.expectedReviewerFingerprintSha256)||
+   input.expectedReviewerFingerprintSha256===input.env.P6_PHASE7_PRE_PROOF_REVIEWER_FINGERPRINT_SHA256||
+   !Array.isArray(requestedFlightIds)||requestedFlightIds.length<1||requestedFlightIds.length>96||
+   requestedFlightIds.some(id=>!/^leg:g5a:[a-f0-9]{64}$/.test(id))||new Set(requestedFlightIds).size!==requestedFlightIds.length)
+  return hold("INDEPENDENT_LATER_ISSUER_SCOPE");
+ try{if(input.signer?.type!=="private"||input.signer.asymmetricKeyType!=="ed25519"||
+   hash(createPublicKey(input.signer).export({format:"der",type:"spki"}))!==input.expectedReviewerFingerprintSha256)
+  return hold("INDEPENDENT_LATER_ISSUER_KEY");}catch{return hold("INDEPENDENT_LATER_ISSUER_KEY");}
+ let p:any;try{p=JSON.parse(input.policyBytes.toString("utf8"));}catch{return hold("EXACT_CONDITIONAL_LATER_DELEGATION_REQUIRED");}
+ const v=p?.nativeLaterReview,d=p?.conditionalLaterPermitReview,f=p?.conditionalPreFeatureReview,cfg=v?.selectedTConfig,day=v?.dayAppendPolicy,cs=day?.conditionalLaterPreScope;
+ const standalone=d?.standaloneNoT24ProtocolSha256;
+ const keys=["schema","approved","protocolSha256","externalContentUseReviewSha256","reviewerFingerprintSha256","reportedScheduleSemanticsSha256","validFromUtc","validUntilUtc","standaloneNoT24ProtocolSha256"];
+ if(p?.schema!=="v39.phase6.delegated-daily-source-review-policy.v1"||p.delegatedDailyPacketProductionApproved!==true||
+   p.approvedCodeSha!==input.expectedReviewedCodeSha||p.manifestSha256!==q.manifestSha256||p.rightsSha256!==q.rightsReviewSha256||
+   p.releaseSha256!==q.reviewedReleaseSha256||p.providerContractSha256!==q.providerContractSha256||
+   !d||Object.keys(d).sort().join("|")!==keys.sort().join("|")||d.schema!=="v39.phase5.conditional-later-permit-review-delegation.v1"||d.approved!==true||
+   d.protocolSha256!==scope.protocolSha256||d.externalContentUseReviewSha256!==scope.externalContentUseReviewSha256||
+   d.reviewerFingerprintSha256!==input.expectedReviewerFingerprintSha256||
+   f?.schema!=="v39.phase5.conditional-pre-feature-review-policy.v1"||f.approved!==true||f.rightsSha256!==p.rightsSha256||
+   f.protocolSha256!==d.protocolSha256||f.externalContentUseReviewSha256!==d.externalContentUseReviewSha256||
+   v?.approved!==true||v.frameSha256!==p.frameSha256||v.configSha256!==p.configSha256||
+   ![v.frameSha256,v.configSha256,v.builderSha256,v.runAndRetentionEvidenceSha256,v.laterReviewerFingerprintSha256,cfg?.artifactHash,d.reportedScheduleSemanticsSha256].every(x=>H.test(x??""))||
+   v.laterReviewerFingerprintSha256===d.reviewerFingerprintSha256||cfg?.verifiedProviderNativeSchedule!==true||
+   cfg.milestone!=="departure.scheduledTime.utc"||cfg.semanticsEvidenceSha256!==d.reportedScheduleSemanticsSha256||
+   typeof cfg.version!=="string"||!cfg.version.trim()||
+   day?.schema!=="v39.phase6.delegated-later-day-append-review-policy.v1"||day.delegatedAutomatedLaterDayAppendApproved!==true||
+   day.approvedCodeSha!==p.approvedCodeSha||day.manifestSha256!==p.manifestSha256||day.rightsSha256!==p.rightsSha256||
+   day.releaseSha256!==p.releaseSha256||day.laterReviewerFingerprintSha256!==v.laterReviewerFingerprintSha256||
+   ![day.dayReviewerFingerprintSha256,day.queryReviewerFingerprintSha256].every(x=>H.test(x??""))||
+   new Set([day.dayReviewerFingerprintSha256,day.queryReviewerFingerprintSha256,v.laterReviewerFingerprintSha256,d.reviewerFingerprintSha256]).size!==4||
+   !cs||cs.protocolSha256!==d.protocolSha256||cs.externalContentUseReviewSha256!==d.externalContentUseReviewSha256||
+   (standalone===null?Object.hasOwn(cs,"independentlyApprovedStandaloneProtocolSha256"):
+    !H.test(standalone??"")||cs.independentlyApprovedStandaloneProtocolSha256!==standalone)||
+   Object.keys(cs).length!==(standalone===null?2:3)||
+   time(d.validFromUtc)>=time(d.validUntilUtc)||time(d.validFromUtc)<Math.max(time(v.validFromUtc),time(day.validFromUtc))||
+   time(d.validUntilUtc)>Math.min(time(v.validUntilUtc),time(day.validUntilUtc))||
+   time(d.validFromUtc)>time(q.plannedRequestUtc)||time(v.builderFrozenAtUtc)>time(q.plannedRequestUtc))
+  return hold("EXACT_CONDITIONAL_LATER_DELEGATION_REQUIRED");
+ const evidence=await readP6ConditionalLaterT24EvidencePage(pool,prePool,scope,requestedFlightIds,{
+  independentConditionalLaterEvidenceReadApproved:true,existingPaidDispatchApproved:false,expectedReviewedCodeSha:p.approvedCodeSha,
+  expectedProtocolSha256:d.protocolSha256,expectedContentUseReviewSha256:d.externalContentUseReviewSha256,
+  expectedFrameSha256:v.frameSha256,expectedConfigSha256:v.configSha256,expectedSelectedTVersion:cfg.milestone+":"+cfg.version+":"+cfg.artifactHash},custody);
+ const actual=await readP5SignedConditionalServiceReview(pool,scope),now=time(actual.observedDbClockUtc);
+ if(now<time(evidence.observedDbClockUtc)||now<time(d.validFromUtc)||now>=time(d.validUntilUtc))return hold("CONDITIONAL_LATER_DELEGATION_CLOCK");
+ const proposals=new Map(actual.memberReview.privateReviewProposals.map(x=>[x.flightInstanceId,x])),
+  drafts=new Map(actual.privateFeatureDrafts.map(x=>[x.flightInstanceId,x])),
+  receipts=new Map(evidence.privateCustodyReceipts.map(x=>[x.receipt.flightInstanceId,x]));
+ if(proposals.size!==actual.memberReview.privateReviewProposals.length||drafts.size!==actual.privateFeatureDrafts.length||
+    receipts.size!==evidence.privateCustodyReceipts.length)return hold("AMBIGUOUS_PAGE_SOURCE");
+ const reviews:P5ConditionalReviewPage["reviews"]=[];
+ for(const decision of evidence.privateDecisions){
+  const flightInstanceId=decision.flightInstanceId,member=proposals.get(flightInstanceId),draft=drafts.get(flightInstanceId);
+  if(!member||!draft||time(member.predictionCutoffUtc)>=Math.min(time(d.validUntilUtc),time(actual.privateSourceExpiresAtUtc)))continue;
+  let tier:Partial<Review>,extra:Pick<Pins,"expectedT24ReceiptSha256"|"separatelyApprovedStandaloneProtocolSha256">;
+  if(decision.status==="T24_PERSISTED_AND_SEPARATE_RECEIPT_MATCH_REVIEW_REQUIRED"){
+   const w=receipts.get(flightInstanceId);
+   if(!w||w.expectedReceiptSha256!==decision.receiptSha256)return hold("LATER_WITNESS_BINDING");
+   tier={reviewedT24WitnessReceipt:w.receipt};extra={expectedT24ReceiptSha256:w.expectedReceiptSha256};
+  }else if(decision.status==="T24_ABSENT_AFTER_CUTOFF_SEPARATE_MISSINGNESS_REVIEW_REQUIRED"&&H.test(standalone??"")&&now>=time(member.selectedTNativeUtc)-86400000){
+   tier={reviewedStandaloneLaterNoT24:{schema:"v39.phase5.standalone-later-asof-no-t24.v1",reviewedProtocolSha256:standalone,
+    reviewedOriginalResponseSha256:scope.expectedResponseSha256,reviewedNativeTSemanticsSha256:cfg.semanticsEvidenceSha256,
+    missingT24Class:"HONEST_T24_UNOBSERVED_NOT_BACKFILLED",independentLaterAsOfAndMissingnessReviewAttested:true}};
+   extra={separatelyApprovedStandaloneProtocolSha256:standalone};
+  }else continue;
+  const digest=digestP5ConditionalPermitEvidence(member,draft,actual.privateSourceBoundAtUtc);
+  const review:Review={schema:"v39.phase5.external-conditional-pre-permit-review.v1",reviewedCodeSha:p.approvedCodeSha,
+   reviewedProtocolSha256:scope.protocolSha256,reviewedMemberEvidenceSha256:digest,reviewedAtUtc:actual.observedDbClockUtc,
+   reviewedFrameSha256:v.frameSha256,reviewedConfigSha256:v.configSha256,
+   reviewedConditionalServiceEvidenceSha256:hash(JSON.stringify({schema:"v39.phase5.delegated-conditional-later-evidence.v1",policySha256:input.expectedPolicySha256,memberEvidenceSha256:digest,decision:decision.status,receiptSha256:decision.receiptSha256})),
+   reviewedReportedScheduleEvidenceSha256:d.reportedScheduleSemanticsSha256,reviewedRunAndRetentionEvidenceSha256:v.runAndRetentionEvidenceSha256,
+   frozenBuilderSha256:v.builderSha256,builderFrozenAtUtc:v.builderFrozenAtUtc,selectedTConfig:cfg,reviewedConditionalScheduleSourceAndUse:true,nativeOperatingLegCertified:false,...tier};
+  const b=Buffer.from(JSON.stringify(review)),sha=hash(b);
+  constructFromBound(scope,actual,member,draft,review,{expectedReviewArtifactSha256:sha,expectedReviewedCodeSha:p.approvedCodeSha,
+   expectedConditionalProtocolSha256:scope.protocolSha256,expectedExternalContentUseReviewSha256:scope.externalContentUseReviewSha256,...extra});
+  reviews.push({flightInstanceId,reviewArtifactBase64:b.toString("base64"),reviewArtifactSha256:sha,...extra});
+ }
+ const summary={status:"CONDITIONAL_LATER_INDEPENDENT_REVIEW_NO_PUBLICATION",reviewedCount:reviews.length,
+  heldCount:requestedFlightIds.length-reviews.length,providerCalls:0,databaseWrites:0,phase6PaidGo:false};
+ if(!reviews.length)return Object.freeze(Object.defineProperty(summary,"privateWire",{value:null,enumerable:false})) as typeof summary&{readonly privateWire:P5ConditionalReviewPageWire|null};
+ const page:P5ConditionalReviewPage={schema:"v39.phase5.conditional-pre-external-review-page.v1",reviewedCodeSha:p.approvedCodeSha,
+  manifestSha256:q.manifestSha256,rightsSha256:q.rightsReviewSha256,protocolSha256:scope.protocolSha256,externalContentUseReviewSha256:scope.externalContentUseReviewSha256,
+  queryDigestSha256:q.queryDigestSha256,populationQueryId:scope.expectedPopulationQueryId,responseSha256:scope.expectedResponseSha256,runDayIndex:q.runDayIndex,
+  horizon:q.horizon,sourceGithubRunId:q.expectedSourceGithubRunId,reviews};
+ const wire={page,signatureBase64:sign(null,p5ConditionalReviewPagePreimage(page),input.signer).toString("base64")};
+ return Object.freeze(Object.defineProperty(summary,"privateWire",{value:wire,enumerable:false})) as typeof summary&{readonly privateWire:P5ConditionalReviewPageWire|null};
 }

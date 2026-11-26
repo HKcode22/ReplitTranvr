@@ -9,7 +9,7 @@ import {createHash} from "node:crypto";
 import {describe,it,expect} from "vitest";
 import {addCanonicalFidsEnvelopeHashV39} from "../server/lib/disruption/fidsEnvelopeCanonical_v39";
 import {readP7ExactConditionalSelectedFeaturesPage,readP7ReviewedTierSelectedFeaturesPage,requireP7ActualSourceReadback} from "../server/lib/disruption/phase7IndependentPreSourceReader_v39";
-import {digestP5ConditionalPermitEvidence,prepareP5ConditionalPrePermitForIndependentSigning,prepareP5ConditionalPrePermitPageForIndependentSigning,buildP5ConditionalPrePacketPreview,buildP5ConditionalPreProofPage,completeP5ConditionalPreProofPage,attachP5ConditionalPreFieldProof,prepareP5ConditionalPrePermitPageFromSignedReviews,p5ConditionalReviewPagePreimage,issueP5ConditionalT24SignedReviewPage,type P5ConditionalReviewPage} from "../server/lib/disruption/phase5ConditionalPrePermitPreparation_v39";
+import {digestP5ConditionalPermitEvidence,prepareP5ConditionalPrePermitForIndependentSigning,prepareP5ConditionalPrePermitPageForIndependentSigning,buildP5ConditionalPrePacketPreview,buildP5ConditionalPreProofPage,completeP5ConditionalPreProofPage,attachP5ConditionalPreFieldProof,prepareP5ConditionalPrePermitPageFromSignedReviews,p5ConditionalReviewPagePreimage,issueP5ConditionalT24SignedReviewPage,issueP5ConditionalLaterSignedReviewPage,type P5ConditionalReviewPage} from "../server/lib/disruption/phase5ConditionalPrePermitPreparation_v39";
 import {generateKeyPairSync,sign} from "node:crypto";
 import {hashPhase7DurableCandidate} from "../server/lib/disruption/phase7DurableDerivedBundleCandidate_v39";
 import {digestP5LaterShardPrivatePacketFileManifest,signedP5ExternalLaterReviewBytes,verifyP5ExternalEd25519ReviewOfLaterShard,type P5Ed25519ExternalLaterShardReview,type P5Ed25519ReviewWireEnvelope} from "../server/lib/disruption/phase5ExternalEd25519LaterShardReviewerVerify_v39";
@@ -205,6 +205,45 @@ describe("source-bound conditional service preparation",()=>{
   const partial=await readP6ConditionalLaterT24EvidencePage(actual.pool,preRead(true),proofScope,[id],laterScope,custody);
   expect(partial.privateDecisions[0].status).toBe("T24_PARTIAL_OR_AMBIGUOUS_NO_REPLAY");
   expect(partial.standaloneLaterAuthorized).toBe(false);
+
+  // T061: actual restricted source/custody/PRE reads drive independent
+  // later review. Explicit separate delegation; absent is not partial.
+  const laterKeys=generateKeyPairSync("ed25519"),laterHash=(x:string|Buffer)=>createHash("sha256").update(x).digest("hex");
+  const laterFp=laterHash(laterKeys.publicKey.export({format:"der",type:"spki"})),laterCode="a".repeat(40);
+  const conditionalScope={protocolSha256:scope.protocolSha256,externalContentUseReviewSha256:h("8")};
+  const laterPolicy={schema:"v39.phase6.delegated-daily-source-review-policy.v1",delegatedDailyPacketProductionApproved:true,approvedCodeSha:laterCode,
+   manifestSha256:scope.source.manifestSha256,rightsSha256:scope.source.rightsReviewSha256,releaseSha256:scope.source.reviewedReleaseSha256,
+   providerContractSha256:scope.source.providerContractSha256,frameSha256:h("4"),configSha256:h("5"),
+   conditionalPreFeatureReview:{schema:"v39.phase5.conditional-pre-feature-review-policy.v1",approved:true,rightsSha256:scope.source.rightsReviewSha256,...conditionalScope},
+   conditionalLaterPermitReview:{schema:"v39.phase5.conditional-later-permit-review-delegation.v1",approved:true,...conditionalScope,reviewerFingerprintSha256:laterFp,
+    reportedScheduleSemanticsSha256:h("7"),validFromUtc:t("04:00"),validUntilUtc:t("23:00"),standaloneNoT24ProtocolSha256:h("b")},
+   nativeLaterReview:{approved:true,frameSha256:h("4"),configSha256:h("5"),builderSha256:h("9"),builderFrozenAtUtc:t("04:00"),
+    runAndRetentionEvidenceSha256:h("8"),laterReviewerFingerprintSha256:h("c"),validFromUtc:t("00:00"),validUntilUtc:t("23:00"),
+    selectedTConfig:{milestone:"departure.scheduledTime.utc",version:"v1",artifactHash:h("e"),verifiedProviderNativeSchedule:true,semanticsEvidenceSha256:h("7")},
+    dayAppendPolicy:{schema:"v39.phase6.delegated-later-day-append-review-policy.v1",delegatedAutomatedLaterDayAppendApproved:true,approvedCodeSha:laterCode,
+     manifestSha256:scope.source.manifestSha256,rightsSha256:scope.source.rightsReviewSha256,releaseSha256:scope.source.reviewedReleaseSha256,
+     laterReviewerFingerprintSha256:h("c"),dayReviewerFingerprintSha256:h("d"),queryReviewerFingerprintSha256:h("f"),validFromUtc:t("00:00"),validUntilUtc:t("23:00"),
+     conditionalLaterPreScope:{...conditionalScope,independentlyApprovedStandaloneProtocolSha256:h("b")}}}};
+  const issueLater=(policy:unknown,partial=false)=>{
+   const bytes=Buffer.from(JSON.stringify(policy)),sha=laterHash(bytes);
+   return issueP5ConditionalLaterSignedReviewPage(actual.pool,preRead(partial),proofScope,[id],custody,{policyBytes:bytes,expectedPolicySha256:sha,
+    expectedReviewedCodeSha:laterCode,expectedReviewerFingerprintSha256:laterFp,forbiddenSignerFingerprints:[h("c"),h("d"),h("f")],signer:laterKeys.privateKey,
+    env:{P6_PHASE7_PRE_LANE_EVIDENCE_AUTHORITY_APPROVED:"1",P6_PHASE7_PRE_LANE_EVIDENCE_AUTHORITY_FINGERPRINT_SHA256:laterFp,P6_NONPAID_DAILY_POLICY_SHA256:sha,
+     V39_P5_MANIFEST_SHA256:scope.source.manifestSha256,V39_P5_RIGHTS_SHA256:scope.source.rightsReviewSha256}});
+  };
+  const issued=await issueLater(laterPolicy);
+  expect(issued).toMatchObject({reviewedCount:1,heldCount:0,providerCalls:0,databaseWrites:0});
+  expect(JSON.stringify(issued)).not.toContain(id);
+  const verified=await prepareP5ConditionalPrePermitPageFromSignedReviews(actual.pool,proofScope,[id],issued.privateWire!,{
+   expectedReviewerFingerprintSha256:laterFp,reviewerPublicKeyPem:laterKeys.publicKey.export({format:"pem",type:"spki"}).toString(),
+   expectedReviewedCodeSha:laterCode,forbiddenSignerFingerprints:[h("c")],independentlyApprovedStandaloneProtocolSha256:h("b")});
+  expect(verified.privatePrepared[0].privatePermit.reviewedStandaloneLaterNoT24?.missingT24Class).toBe("HONEST_T24_UNOBSERVED_NOT_BACKFILLED");
+  expect((await issueLater(laterPolicy,true)).privateWire).toBeNull();
+  const witnessedOnly={...laterPolicy,conditionalLaterPermitReview:{...laterPolicy.conditionalLaterPermitReview,standaloneNoT24ProtocolSha256:null},
+   nativeLaterReview:{...laterPolicy.nativeLaterReview,dayAppendPolicy:{...laterPolicy.nativeLaterReview.dayAppendPolicy,conditionalLaterPreScope:conditionalScope}}};
+  expect((await issueLater(witnessedOnly)).privateWire).toBeNull();
+  await expect(issueLater({...laterPolicy,conditionalLaterPermitReview:undefined})).rejects.toThrow(/EXACT_CONDITIONAL_LATER_DELEGATION_REQUIRED/);
+  await expect(issueLater({...laterPolicy,conditionalLaterPermitReview:{...laterPolicy.conditionalLaterPermitReview,standaloneNoT24ProtocolSha256:h("a")}})).rejects.toThrow(/EXACT_CONDITIONAL_LATER_DELEGATION_REQUIRED/);
   // These are synthetic restricted-role/SQL fixtures, not live evidence.
 
   // T029: actual restricted source reread + separate reviewed bytes construct
