@@ -133,6 +133,9 @@ export interface P5Stage14SingleFlightPrePermit{
  expectedOperatorFlightNumber?:string;
  expectedDestinationIcao?:string;
  externalConditionalScheduleSourceAndUseReviewed?:true;
+ /** Required for the prospective Phase5B conditional SOURCE path. Older
+  * offline G5A fixtures without this marker are not live Phase6 permits. */
+ requireProspectiveConditionalSourceMarker?:true;
  /** Frozen source receipt inputs, never a second API reader. */
  reviewedSupplementalFeatureBundle?:P5EReviewedSupplementalBundle;
 }
@@ -315,6 +318,7 @@ export const P5_STAGE14_BOUND_SOURCE_SQL=[
  "r.available_at AS source_available,r.fids_retrieval_utc,",
  "r.raw_persisted_at_utc,r.response_hash AS fids_response_hash,",
  "r.source_airport_icao AS fids_airport_icao,",
+ "r.raw_payload#>>'{fidsRequestContract,phase5ConditionalService,protocolSha256}' AS conditional_source_protocol_sha256,",
  "(r.raw_payload IS NOT NULL AND r.raw_expired_at_utc IS NULL)",
  " AS original_current",
  "FROM clean.phase5_fids_allowed_query_v39 q",
@@ -388,7 +392,8 @@ function assertPermit(p:P5Stage14SingleFlightPrePermit,
      p.reviewedProtocolAmendmentSha256!==undefined||
      p.reviewedStableServiceKeySha256!==undefined||
      p.expectedOperatorFlightNumber!==undefined||
-     p.expectedDestinationIcao!==undefined)
+     p.expectedDestinationIcao!==undefined||
+     p.requireProspectiveConditionalSourceMarker!==undefined)
    hold("INDEPENDENT_PERMIT_IDENTITY_SCOPE_OR_SOURCE_RIGHTS_MISSING");
  }else if(tier==="CONDITIONAL_QUERY_FILTERED_SERVICE"){
   if(p.externalNativeTPhysicalLegAndSourceUseReviewed===true||
@@ -452,6 +457,10 @@ function exactSource(v:Record<string,unknown>,p:P5Stage14SingleFlightPrePermit,
  if(Object.entries(eq).some(([k,x])=>v[k]!==x)||
    v.original_current!==true||Number(v.normalized_members_count)<1)
    hold("MISSING_OR_CHANGED_AUTHENTIC_BOUND_ORIGINAL");
+ if(p.identityEvidenceTier==="CONDITIONAL_QUERY_FILTERED_SERVICE"&&
+   (p.requireProspectiveConditionalSourceMarker===true||process.env.V39_PHASE6_PROCESS_ARMED==="1")&&
+   v.conditional_source_protocol_sha256!==p.reviewedProtocolAmendmentSha256)
+   hold("CONDITIONAL_SOURCE_PROTOCOL_MARKER_NOT_BOUND");
  const start=dbTime(v.service_window_start_utc,"FRAME_START").getTime(),
   end=dbTime(v.service_window_end_utc,"FRAME_END").getTime();
  if(native.getTime()<start||native.getTime()>=end)
