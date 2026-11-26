@@ -1,5 +1,5 @@
 -- STAGED only: extend existing V0091 registration for explicitly marked
--- prospective G5A members, without adding a queue, role or grant. V0100
+-- prospective G5A members, without adding a queue, role or lasting grant. V0100
 -- delegates new registrations to this exact function. The existing signed
 -- application admission must separately bind the reviewed conditional
 -- protocol; the SQL does not create or approve a packet or physical label.
@@ -7,6 +7,35 @@
 BEGIN;
 SET LOCAL lock_timeout='3s';
 SET LOCAL statement_timeout='30s';
+-- The V0091 function is deliberately owned by an existing NOLOGIN
+-- role; a non-superuser schema owner cannot replace it directly.
+-- Reuse V0100's transaction-scoped commissioning pattern. Nothing
+-- survives a rollback and no SET/CREATE capability survives COMMIT.
+DO $p5_v0112_owner_preflight$
+DECLARE actor name:=current_user;
+DECLARE owner_role constant text:='phase5_cd_source_registration_owner_v39';
+BEGIN
+ IF current_user<>session_user
+ OR current_database()<>'neondb' OR current_setting('server_version_num')::int/10000<>16 OR pg_is_in_recovery()
+ OR pg_get_userbyid((SELECT nspowner FROM pg_namespace WHERE nspname='clean'))<>actor
+ OR NOT EXISTS(SELECT 1 FROM pg_roles WHERE rolname=owner_role
+   AND NOT rolcanlogin AND NOT rolsuper AND NOT rolinherit AND NOT rolcreaterole
+   AND NOT rolcreatedb AND NOT rolreplication AND NOT rolbypassrls)
+ OR has_schema_privilege(owner_role,'clean','CREATE')
+ OR (NOT (SELECT rolsuper FROM pg_roles WHERE rolname=actor) AND pg_has_role(actor,owner_role,'SET'))
+ THEN RAISE EXCEPTION 'P5B_V0112_OWNER_PREDECESSOR_ACL_HOLD'; END IF;
+END $p5_v0112_owner_preflight$;
+GRANT CREATE ON SCHEMA clean TO phase5_cd_source_registration_owner_v39;
+DO $p5_v0112_temporary$
+DECLARE actor name:=current_user;
+BEGIN
+ IF NOT (SELECT rolsuper FROM pg_roles WHERE rolname=actor) THEN
+  EXECUTE format('GRANT phase5_cd_source_registration_owner_v39 TO %I WITH ADMIN FALSE, INHERIT FALSE, SET TRUE',actor);
+  IF NOT pg_has_role(actor,'phase5_cd_source_registration_owner_v39','SET')
+  THEN RAISE EXCEPTION 'P5B_V0112_TEMPORARY_SET_MISSING'; END IF;
+ END IF;
+END $p5_v0112_temporary$;
+SET LOCAL ROLE phase5_cd_source_registration_owner_v39;
 DO $p5_conditional_registration$
 DECLARE
  sig constant text:='clean.phase5_cd_register_source_flight_v39(text,text,text,text,timestamptz,text,text,text,text,integer)';
@@ -65,4 +94,25 @@ BEGIN
  AND p.proowner=original_owner AND p.proacl IS NOT DISTINCT FROM original_acl AND p.prosecdef)
  THEN RAISE EXCEPTION 'P5B_V0091_FUNCTION_OWNER_OR_ACL_CHANGED'; END IF;
 END $p5_conditional_registration$;
+RESET ROLE;
+REVOKE CREATE ON SCHEMA clean FROM phase5_cd_source_registration_owner_v39;
+DO $p5_v0112_owner_postflight$
+DECLARE actor name:=current_user;
+DECLARE owner_role constant text:='phase5_cd_source_registration_owner_v39';
+DECLARE sig constant text:='clean.phase5_cd_register_source_flight_v39(text,text,text,text,timestamptz,text,text,text,text,integer)';
+BEGIN
+ IF NOT (SELECT rolsuper FROM pg_roles WHERE rolname=actor) THEN
+  EXECUTE format('REVOKE phase5_cd_source_registration_owner_v39 FROM %I GRANTED BY %I',actor,actor);
+  IF pg_has_role(actor,owner_role,'SET') THEN RAISE EXCEPTION 'P5B_V0112_TEMPORARY_SET_NOT_REVOKED'; END IF;
+ END IF;
+ IF current_user<>session_user OR has_schema_privilege(owner_role,'clean','CREATE')
+ OR NOT has_function_privilege('phase5_fids_prepare_prod_20261107',sig,'EXECUTE')
+ OR has_function_privilege('phase5_fids_pre_writer_prod_20261107',sig,'EXECUTE')
+ OR has_function_privilege('phase5_fids_source_prod_20261107',sig,'EXECUTE')
+ OR has_table_privilege('phase5_fids_prepare_prod_20261107','clean.phase5_cd_pre_task_v39','INSERT,UPDATE')
+ OR EXISTS(SELECT 1 FROM pg_proc f CROSS JOIN LATERAL
+  aclexplode(COALESCE(f.proacl,acldefault('f',f.proowner))) acl
+  WHERE f.oid=to_regprocedure(sig) AND acl.grantee=0 AND acl.privilege_type='EXECUTE')
+ THEN RAISE EXCEPTION 'P5B_V0112_FINAL_ROLE_OR_ACL_HOLD'; END IF;
+END $p5_v0112_owner_postflight$;
 COMMIT;

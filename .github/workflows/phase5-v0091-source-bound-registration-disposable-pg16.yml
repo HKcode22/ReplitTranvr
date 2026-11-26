@@ -146,9 +146,24 @@ jobs:
           JS
           test "$(psql "$OWNER_URL" -XAt -c "SELECT pg_has_role('phase5_cd_ci_owner','phase5_cd_source_registration_owner_v39','SET')")" = f
           echo P5_V0091_REAL_NON_SUPERUSER_OWNER_INSTALLER_ONCE_AND_REPEAT_HOLD_PASS
-          # Isolated superuser applies the staged exact function successor;
-          # no production install or grant. Existing owner/ACL preserved.
-          psql 'postgresql://postgres:postgres@localhost:5432/neondb?sslmode=disable' -X -v ON_ERROR_STOP=1 -f 'migrations/staged/V0112__phase5b_prospective_conditional_queue_registration_v39.sql'
+          # T073: exercise the actual NONSUPERUSER schema owner. Earlier
+          # superuser-only fixture hid production SQLSTATE 42501.
+          SQL='migrations/staged/V0112__phase5b_prospective_conditional_queue_registration_v39.sql'
+          test "$(psql "$OWNER_URL" -XAt -v ON_ERROR_STOP=1 -c "SELECT NOT rolsuper AND rolcreaterole FROM pg_roles WHERE rolname=current_user")" = t
+          test "$(psql "$OWNER_URL" -XAt -v ON_ERROR_STOP=1 -c "SELECT pg_has_role(current_user,'phase5_cd_source_registration_owner_v39','SET') OR has_schema_privilege('phase5_cd_source_registration_owner_v39','clean','CREATE')")" = f
+          # Force a rollback after the complete migration body: neither
+          # function change nor temporary role grant may survive.
+          { printf 'BEGIN;\n'; sed -e '/^BEGIN;$/d' -e '/^COMMIT;$/d' "$SQL"; printf '\nROLLBACK;\n'; } > "$TMP/v0112-rollback.sql"
+          psql "$OWNER_URL" -X -v ON_ERROR_STOP=1 -f "$TMP/v0112-rollback.sql"
+          test "$(psql "$OWNER_URL" -XAt -v ON_ERROR_STOP=1 -c "SELECT position('g5a_conditional_operator_composite_no_native_id' in pg_get_functiondef('clean.phase5_cd_register_source_flight_v39(text,text,text,text,timestamptz,text,text,text,text,integer)'::regprocedure))=0 AND NOT pg_has_role(current_user,'phase5_cd_source_registration_owner_v39','SET') AND NOT has_schema_privilege('phase5_cd_source_registration_owner_v39','clean','CREATE')")" = t
+          psql "$OWNER_URL" -X -v ON_ERROR_STOP=1 -f "$SQL"
+          test "$(psql "$OWNER_URL" -XAt -v ON_ERROR_STOP=1 -c "SELECT position('g5a_conditional_operator_composite_no_native_id' in pg_get_functiondef('clean.phase5_cd_register_source_flight_v39(text,text,text,text,timestamptz,text,text,text,text,integer)'::regprocedure))>0 AND NOT pg_has_role(current_user,'phase5_cd_source_registration_owner_v39','SET') AND NOT has_schema_privilege('phase5_cd_source_registration_owner_v39','clean','CREATE')")" = t
+          if psql "$OWNER_URL" -X -v ON_ERROR_STOP=1 -f "$SQL" > "$TMP/v0112-repeat.txt" 2>&1; then
+            echo FAIL_V0112_REPEAT_ALLOWED; exit 2
+          fi
+          grep -Fq P5B_V0091_EXACT_PREDECESSOR_REQUIRED "$TMP/v0112-repeat.txt"
+          test "$(psql "$OWNER_URL" -XAt -v ON_ERROR_STOP=1 -c "SELECT NOT pg_has_role(current_user,'phase5_cd_source_registration_owner_v39','SET') AND NOT has_schema_privilege('phase5_cd_source_registration_owner_v39','clean','CREATE')")" = t
+          echo T073_V0112_REAL_NON_SUPERUSER_COMMIT_ROLLBACK_REPEAT_NO_LASTING_GRANT_PASS
       - name: Reuse full existing FIDS original + physical flight Stage14 fixture and V0091 scoped PREPARE enrollment
         shell: bash
         run: |
