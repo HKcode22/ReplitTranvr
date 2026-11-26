@@ -38,6 +38,13 @@ describe("prospective conditional service recovery, separate from physical nativ
   const r=prepare(original([flight(),{...flight(),departure:{scheduledTime:{utc:stamp("11:10")}}}]),scope);
   expect(r.counts.ambiguousComposite).toBe(2);expect(r.privateCandidates).toHaveLength(0);
  });
+ it("does not select a positive operator when a second same-service appearance is outside the window or has no schedule",()=>{
+  for(const departure of [{scheduledTime:{utc:stamp("16:00")}},{scheduledTime:{}}]){
+   const r=prepare(original([flight(),{...flight(),departure}]),scope);
+   expect(r.counts.ambiguousComposite).toBe(1);
+   expect(r.privateCandidates).toHaveLength(0);
+  }
+ });
  it("separates identical daily services by signed cohort day, not by revised schedule",()=>{
   const first=prepare(original([flight()]),scope).privateCandidates[0];
   const revised=prepare(original([{...flight(),departure:{scheduledTime:{utc:stamp("12:15")}}}]),{...scope,maximumStalenessSeconds:7200}).privateCandidates[0];

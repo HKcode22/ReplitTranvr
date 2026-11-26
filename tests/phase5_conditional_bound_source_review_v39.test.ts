@@ -51,6 +51,34 @@ describe("source-bound conditional service preparation",()=>{
   expect(()=>prepare(scope,[{...o,bound_at_utc:t("05:10")}],[r],t("05:04"))).toThrow(/SOURCE_CLOCK/);
   expect(()=>prepare({...scope,policyEffectiveUtc:t("05:01")},[o],[r],t("05:04"))).toThrow(/RETROSPECTIVE/);
  });
+ it("accepts the real Stage28 SOURCE group and rejects the login-only or wrong database session before raw read",async()=>{
+  const {scope,o,r}=fixture();
+  const good={login:"phase5_p5_source_login_20261108",actor:"phase5_fids_source_prod_20261107",db:"neondb",version:160010,ro:"on",primary:true};
+  const make=(role:Record<string,unknown>)=>{
+   const queries:string[]=[];
+   const pool={connect:async()=>({release(){},query:async(sql:string)=>{
+    queries.push(sql);
+    if(sql.startsWith("SELECT session_user"))return {rows:[role]};
+    if(sql.includes("FROM clean.phase5_fids_allowed_query_v39"))return {rows:[{...o,normalized_members_count:0}]};
+    if(sql.includes("SELECT r.raw_payload"))return {rows:[r]};
+    if(sql.includes("FROM clean.flight_population"))return {rows:[]};
+    if(sql.startsWith("SELECT clock_timestamp()"))return {rows:[{at:t("05:04")}]};
+    return {rows:[]};
+   }})};
+   return {pool,queries};
+  };
+  const ok=make(good);
+  const result=await read(ok.pool,scope);
+  expect(result.report.counts.conditionalCandidates).toBe(1);
+  expect(result.memberReview.stage14MatchedMembershipCount).toBe(0);
+  expect(ok.queries.at(-1)).toBe("COMMIT");
+  for(const bad of [{actor:good.login},{actor:"phase5_fids_pre_writer_prod_20261107"},{db:"wrong"},{version:150000},{version:170000},{version:NaN},{primary:false},{ro:"off"}]){
+   const rejected=make({...good,...bad});
+   await expect(read(rejected.pool,scope)).rejects.toThrow(/ROLE/);
+   expect(rejected.queries.some(x=>x.includes("raw_payload"))).toBe(false);
+   expect(rejected.queries.at(-1)).toBe("ROLLBACK");
+  }
+ });
  it("fails before any original body read if source role is wrong",async()=>{
   const {scope}=fixture(),queries:string[]=[];
   const pool={connect:async()=>({release(){},query:async(sql:string)=>{queries.push(sql);return {rows:sql.startsWith("SELECT session_user")?[{login:"wrong",actor:"wrong",ro:"on",primary:true}]:[]};}})};

@@ -4,6 +4,7 @@
  * this reader does not authenticate a signature merely from a digest.
  */
 import {prepareP5ConditionalFidsServiceRecoveryV39} from "./phase5ConditionalFidsServiceRecovery_v39";
+import {P5_STAGE28_GROUPS} from "./phase5Stage28DedicatedRolePool_v39";
 import {P5_STAGE14_BOUND_SOURCE_SQL} from "./phase5V0079SingleBoundFlightPreWriter_v39";
 import {P5_E_BATCH_ORIGINAL_SQL,P5_E_V0079_SOURCE_READONLY_LOGIN_V39,type P5EReadOnlyPgPool} from "./phase5AmendmentEOriginalFidsReadonlyCompiler_v39";
 import {P5_ACTUAL_SOURCE_ALL_MEMBERS_READONLY_SQL,type P5ActualSourceCandidateScope} from "./phase5ActualSourceNativeFlightCandidateAudit_v39";
@@ -101,8 +102,13 @@ export async function readP5BoundConditionalServiceReview(pool:P5EReadOnlyPgPool
  try{
   await c.query("BEGIN TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY");began=true;
   await c.query("SET LOCAL statement_timeout='15s'");
-  const g=(await c.query("SELECT session_user::text AS login,current_user::text AS actor,current_setting('transaction_read_only') AS ro,NOT pg_is_in_recovery() AS primary")).rows;
-  if(g.length!==1||g[0].login!==P5_E_V0079_SOURCE_READONLY_LOGIN_V39||g[0].actor!==P5_E_V0079_SOURCE_READONLY_LOGIN_V39||g[0].ro!=="on"||g[0].primary!==true)hold("ROLE");
+  await c.query("SET LOCAL lock_timeout='2000ms'");
+  const g=(await c.query("SELECT session_user::text AS login,current_user::text AS actor,current_database() AS db,current_setting('server_version_num')::integer AS version,current_setting('transaction_read_only') AS ro,NOT pg_is_in_recovery() AS primary")).rows;
+  // The commissioned Stage28 pool authenticates the dedicated login, then
+  // SET ROLEs to the existing restricted SOURCE group, not to the login.
+  if(g.length!==1||g[0].login!==P5_E_V0079_SOURCE_READONLY_LOGIN_V39||g[0].actor!==P5_STAGE28_GROUPS.source||
+    g[0].db!=="neondb"||Number(g[0].version)<160000||Number(g[0].version)>=170000||!Number.isFinite(Number(g[0].version))||
+    g[0].ro!=="on"||g[0].primary!==true)hold("ROLE");
   const q=s.source,params=[q.manifestSha256,q.queryDigestSha256];
   const rows=(await c.query(P5_STAGE14_BOUND_SOURCE_SQL,params)).rows;
   const o=rows[0];
