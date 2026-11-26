@@ -4,9 +4,10 @@ import {createHash} from "node:crypto";
 import {describe,it,expect} from "vitest";
 import {addCanonicalFidsEnvelopeHashV39} from "../server/lib/disruption/fidsEnvelopeCanonical_v39";
 import {readP7ExactConditionalSelectedFeaturesPage,readP7ReviewedTierSelectedFeaturesPage,requireP7ActualSourceReadback} from "../server/lib/disruption/phase7IndependentPreSourceReader_v39";
-import {digestP5ConditionalPermitEvidence,prepareP5ConditionalPrePermitForIndependentSigning,prepareP5ConditionalPrePermitPageForIndependentSigning,buildP5ConditionalPrePacketPreview,buildP5ConditionalPreProofPage,attachP5ConditionalPreFieldProof} from "../server/lib/disruption/phase5ConditionalPrePermitPreparation_v39";
+import {digestP5ConditionalPermitEvidence,prepareP5ConditionalPrePermitForIndependentSigning,prepareP5ConditionalPrePermitPageForIndependentSigning,buildP5ConditionalPrePacketPreview,buildP5ConditionalPreProofPage,completeP5ConditionalPreProofPage,attachP5ConditionalPreFieldProof} from "../server/lib/disruption/phase5ConditionalPrePermitPreparation_v39";
 import {generateKeyPairSync,sign} from "node:crypto";
 import {hashPhase7DurableCandidate} from "../server/lib/disruption/phase7DurableDerivedBundleCandidate_v39";
+import {proposeP5ConditionalLaterPacketsAsUnsignedDayShard} from "../server/lib/disruption/phase5ReviewedLaterPacketToUnsignedDayRegistryProposal_v39";
 import {verifyP5ConditionalQueuePacket} from "../server/lib/disruption/phase5ConditionalPreQueuePacket_v39";
 import {verifyP5CdFrozenRoster,type P5CdFrozenRoster} from "../server/lib/disruption/phase5CdGithubBoundedPreTick_v39";
 import {readP5CdConditionalPreScope} from "../server/lib/disruption/phase5CdGithubPreReleaseGate_v39";
@@ -220,7 +221,14 @@ describe("source-bound conditional service preparation",()=>{
   expect(()=>buildP5ConditionalPreProofPage([built,built])).toThrow("EXACT_PROOF_PAGE_SCOPE");
   expect(()=>buildP5ConditionalPreProofPage(Array(97).fill(built))).toThrow("EXACT_PROOF_PAGE_SCOPE");
   expect(()=>buildP5ConditionalPreProofPage([{...built}])).toThrow("ACTUAL_PREPARED_PERMIT_REQUIRED");
-  const packet=attachP5ConditionalPreFieldProof(proofPage.privateCompletedPackets[0].completed,env,policySha,[],wire);
+  const proofKey=hashPhase7DurableCandidate(preview.packet.prePermit),proofs=new Map([[proofKey,wire]]);
+  const attachedPage=completeP5ConditionalPreProofPage(proofPage,env,policySha,[],proofs);
+  expect(attachedPage).toMatchObject({packetCount:1,signatureIssued:false,databaseWrites:0});
+  expect(JSON.stringify(attachedPage)).not.toMatch(/SQ78|privateAttachedPackets|payloadBase64/);
+  expect(()=>completeP5ConditionalPreProofPage(proofPage,env,policySha,[],new Map())).toThrow("EXACT_CONDITIONAL_PROOF_SET");
+  expect(()=>completeP5ConditionalPreProofPage(proofPage,env,policySha,[],new Map([...proofs,["extra",wire]]))).toThrow("EXACT_CONDITIONAL_PROOF_SET");
+  expect(()=>completeP5ConditionalPreProofPage({...proofPage},env,policySha,[],proofs)).toThrow("ACTUAL_CONDITIONAL_PROOF_PAGE_REQUIRED");
+  const packet=attachedPage.privateAttachedPackets[0];
   expect(packet.packetSha256).toBe(hd(packet.packetBytes));
   expect(JSON.stringify(packet)).not.toMatch(/SQ78|payloadBase64|privatePermit/);
   const release={schema:"v39.phase5.cd-gh-pre-explicit-release.v1" as const,releaseMode:"PHASE6_APPROVED" as const,approvedCodeSha:review.reviewedCodeSha,
@@ -234,6 +242,20 @@ describe("source-bound conditional service preparation",()=>{
   const src:P5SignedSourceBatchRegistry={schema:"v39.phase5.signed-per-day-source-batch-readonly.v1",manifestSha256:gate.manifestSha256,runDayIndex:p.runDayIndex,entries:[{filePath:"data-collection/phase5/frozen/source_ci_query_packet.json",expectedPacketSha256:h("2"),expectedQueryDigestSha256:p.queryDigestSha256}]};
   const srcBytes=Buffer.from(JSON.stringify(src)),reg:P5SignedLaterPreDayRegistry={schema:"v39.phase5.signed-later-pre-day-registry.v1",manifestSha256:gate.manifestSha256,reviewedCodeSha:gate.approvedCodeSha,runDayIndex:p.runDayIndex,shardIndex:1,sourceDayRegistrySha256:hd(srcBytes),sourceDayRegistryFilePath:"data-collection/phase5/frozen/source_ci_registry.json",entries:[{filePath:path,expectedPacketSha256:packet.packetSha256,expectedQueryDigestSha256:p.queryDigestSha256,expectedFlightInstanceId:p.flightInstanceId,expectedHorizon:"T-6h",expectedSelectedTNativeUtc:p.selectedTNativeUtc,expectedSourcePopulationQueryId:p.expectedSourcePopulationQueryId}]};
   const regBytes=Buffer.from(JSON.stringify(reg)),rp:P5SignedLaterPreDayRegistryPins={registryFilePath:"data-collection/phase5/frozen/later_ci_registry.json",expectedRegistrySha256:hd(regBytes),expectedSourceDayRegistrySha256:hd(srcBytes),expectedManifestSha256:gate.manifestSha256,expectedApprovedMainSha:gate.approvedCodeSha,expectedRunDayIndex:p.runDayIndex,expectedReleaseSha256:p.expectedReviewedReleaseSha256,expectedRightsSha256:gate.rightsSha256,conditionalPreScope:gate.conditionalPreScope,independentlyApprovedStandaloneProtocolSha256:gate.independentlyApprovedStandaloneProtocolSha256};
+  // T042: real proof-attached page -> unsigned conditional registry producer
+  // -> exact existing consumer, with no native attestation or signed publish.
+  const proposalScope={expectedExternallyApprovedSourceRegistrySha256:hd(srcBytes),sourceRegistryFilePath:reg.sourceDayRegistryFilePath,
+   proposedLaterRegistryFilePath:rp.registryFilePath,reviewedMainCodeSha:gate.approvedCodeSha,expectedManifestSha256:gate.manifestSha256,
+   expectedReviewedReleaseSha256:p.expectedReviewedReleaseSha256,expectedReviewedSourceRightsSha256:gate.rightsSha256,
+   runDayIndex:p.runDayIndex,shardIndex:1,conditionalPreScope:gate.conditionalPreScope,independentlyApprovedStandaloneProtocolSha256:h("b")};
+  const proposalFile={proposedFilePath:path,expectedExternallyPinnedReviewArtifactSha256:packet.packet.reviewArtifactSha256,completed:packet};
+  const plan=proposeP5ConditionalLaterPacketsAsUnsignedDayShard(srcBytes,src,proposalScope,[proposalFile]);
+  expect(plan).toMatchObject({independentlySignedRegistry:false,flightFilesPublished:0,registeredV0091Tasks:0,providerCalls:0,databaseWrites:0});
+  expect(verifyP5SignedLaterPreDayRegistry(plan.registryProposalBytes,plan.registryProposal,srcBytes,src,{...rp,expectedRegistrySha256:plan.proposedRegistrySha256},()=>packet.packetBytes).entries[0].packet.prePermit).toEqual(built.privatePermit);
+  expect(()=>proposeP5ConditionalLaterPacketsAsUnsignedDayShard(srcBytes,src,proposalScope,[proposalFile,{...proposalFile,proposedFilePath:"data-collection/phase5/frozen/conditional_duplicate.json"}])).toThrow();
+  expect(()=>proposeP5ConditionalLaterPacketsAsUnsignedDayShard(srcBytes,src,{...proposalScope,conditionalPreScope:{...proposalScope.conditionalPreScope,protocolSha256:h("0")}},[proposalFile])).toThrow();
+  expect(()=>proposeP5ConditionalLaterPacketsAsUnsignedDayShard(srcBytes,src,proposalScope,[{...proposalFile,completed:{...packet}}])).toThrow("ACTUAL_PROOF_ATTACHED_PACKET_REQUIRED");
+  expect(()=>proposeP5ConditionalLaterPacketsAsUnsignedDayShard(srcBytes,{...src,runDayIndex:3},proposalScope,[proposalFile])).toThrow("SOURCE_REGISTRY_SCOPE_OR_EXACT_BYTES_CHANGED");
   const readReg=(pins=rp,r=reg,s=src)=>verifyP5SignedLaterPreDayRegistry(regBytes,r,srcBytes,s,pins,()=>packet.packetBytes);
   expect(readReg().entries[0].packet.prePermit).toEqual(built.privatePermit);
   expect(()=>readReg({...rp,conditionalPreScope:undefined})).toThrow("SEPARATE_PROSPECTIVE_SCOPE");

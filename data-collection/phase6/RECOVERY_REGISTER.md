@@ -36,7 +36,7 @@ F = failure family or evidenced defect; I = corrective implementation; C = incom
 | F024 | Tested branch | Optional weather archive read for FIDS-only permit. [Commit](https://github.com/HKcode22/ReplitTranvr/commit/3327ff5d84d9d0aa0478a34bb41e44e788cd3a9a) | I022 |
 | F025 | Corrected and exact #976 CI passed | Superseded V0112 predecessor mismatch 45796497453; seven workflows on 6572192 failed same TS18048; two on 41d5d38f failed synthetic Phase7 digest shape. Successor #976 exact 454349c9 passed 46/46, including TypeScript, focused proof/registration, PG16 and full offline safety. Production install separate. Four #977 runs on 427411f4 failed one TS2345 legacy-child union mismatch; 433082ba focused diagnostics and V0094 PG16 passed, full offline pending at 03:50 PST. | I023, I026 |
 | F026 | Historical loss | Day1 zero bindings; Day2 52 bindings zero PRE; pause missed T90 and elapsed Day3 T24. [Owner census](checkpoints/2026-11-26_0152_PST_PHASE5B_OWNER_CENSUS_AND_QUEUE_REPAIR.md) | I008, I012, I013, I014, I016, I043, I045 |
-| F027 | Partial; staged conditional later registry reader | Native-only private registry/producer/feature proof despite separate conditional writer. #976 implements independent source proof/permit preparation and conditional queue packets; #977 connects protected current later registry reader. No actual conditional producer signature or observed PRE. | I005, I014, I016, I025, I029, I031, I033, I034, I038, I039, I040, I041, I044, I046 |
+| F027 | Partial; staged conditional later registry reader | Native-only private registry/producer/feature proof despite separate conditional writer. #976 implements independent source proof/permit preparation and conditional queue packets; #977 connects protected current later registry reader. No actual conditional producer signature or observed PRE. | I005, I014, I016, I025, I029, I031, I033, I034, I038, I039, I040, I041, I044, I046, I047 |
 | F028 | Superseded CI failure | Stacked PR excluded full offline CI; trigger fixed. [Checkpoint](checkpoints/2026-11-25_1730_PST_PHASE5B_DRAIN_AND_STACKED_CI_COVERAGE.md) | I023 |
 | F029 | Open | Actual physical gate-out source not certified; schedule revision is not substitute. [Adopted runtime scope](../phase5/evidence/2026-11-22_PHASE6_RUNTIME_BINDING_OWNER_DELEGATED_SCOPE_REVIEW.md) | I005 |
 | F030 | Focused tested, full pending | Conditional raw/normalized matcher parity corrected in c66f6307; [focused run](https://github.com/HKcode22/ReplitTranvr/actions/runs/45799119831) passed. Not a demonstrated live cause. | I024 |
@@ -113,12 +113,13 @@ F = failure family or evidenced defect; I = corrective implementation; C = incom
 
 | I042 | Exact #976 CI passed; target merged | Current SOURCE snapshot uses bounded read-only retry on explicit stale revision, always anchored to immutable child. Actual production conditional use still unproven. | F038 |
 
-| I043 | Target merged/repinned; relay held safely | Owner exact #976 and relay #30 CI 46/46 and 4/4. Target main f4fe806d, retention 45812762727 both jobs success; ACTIVE_RELAY_NO_CANCEL before relay merge. Idempotent owner procedure can resume on quiet interval; no paid resume. | F026 |
+| I043 | Both target and relay deployed paused | Owner exact #976 and relay #30 CI 46/46 and 4/4. Target main f4fe806d, retention 45812762727 both jobs success; ACTIVE_RELAY_NO_CANCEL before relay merge. Idempotent owner procedure can resume on quiet interval; no paid resume. | F026 |
 
 | I044 | Implemented #977; exact CI pending | Conditional later registry and private C+D hydration/projection accept only explicit protected prospective scope and mandatory proof metadata; compare parsed registry/source objects against authenticated bytes; legacy direct writer remains native-only. | F027, F039 |
 
 | I045 | Staged #977; CI required | Bounded read-only quiet wait for already merged target relay cutover; explicit malformed/API failure handling, preserve all existing pause/retention/active checks and no cancel/replay. | F026, F040 |
 | I046 | Staged; exact CI required | Bounded conditional prepared-permit page adapter for existing independent proof port; explicit count-only conditional draft status distinct from native audit; no actual producer signature or publication. | F027 |
+| I047 | Staged; exact CI required | Complete exact conditional proof page and assemble unsigned later registry from genuine proof-attached packets under explicit scope; native signature path unchanged. | F027 |
 
 ## Completion components (not gates)
 
@@ -130,11 +131,11 @@ F = failure family or evidenced defect; I = corrective implementation; C = incom
 | C004 | Open | Same-leg physical gate-out observability, honest censoring | F029 | I005 |
 | C005 | Open | V0111/V0112 production install and genuine task path | F018 | I015, I016 |
 | C006 | Open | Prospective SOURCE effectiveness and status/body custody | F016, F017 | I012, I013 |
-| C007 | Partial | Target paused cutover verified; relay cutover pending, production scientific path and safe paid resume open. | F026 | I008, I011, I023 |
+| C007 | Partial | Target and relay paused cutover verified, production scientific path and safe paid resume open. | F026 | I008, I011, I023 |
 | C008 | Open | Missingness, representativeness, no leakage and 31-day split audit | F005, F026, F029 | I018, I020 |
 | C009 | Open | Remove redundant runtime dependencies and isolate failures without weakening custody | F007, F021, F023, F024 | I006, I019, I021, I022 |
 
-| C010 | Partial; deployed and primary pulse verified | Relay #30 merged to 91888916, target f4fe806d; independent primary relay 45816236626 and target retention child 45816293783 passed. New rolling pulse actual work and scientific execution remain separate. | F034, F035, F036, F037 | I032, I035, I036 |
+| C010 | Partial; deployed and primary pulse verified | Relay #30 merged to 91888916, target f4fe806d; independent primary relay 45816236626 and target retention child 45816293783 passed. New relay rolling wake 45816860550 passed and six target child workflows completed; scientific execution remains separate. | F034, F035, F036, F037 | I032, I035, I036 |
 
 ## Regression tests
 
@@ -196,6 +197,7 @@ T IDs are permanent scenarios, not claims of passing CI. Each references existin
 
 | T040 | Exact prior #977 14/14 passed; owner cutover succeeded | Quiet wait retries only known active-run state, stops on unknown/malformed status and bounded persistent activity; checks target plus relay and never cancels or dispatches. | F026, F040 | I045 | C007, C010 | tests/phase5b_cutover_quiet_v39.test.mjs; .github/workflows/phase5b-source-diagnostics-offline.yml |
 | T041 | New regression; exact CI pending | Actual prepared permit page is private, bounded and same SOURCE; duplicate/empty/oversized/forged pages rejected; conditional draft diagnostics separate from native no-op. | F027 | I046 | C001, C002 | tests/phase5_conditional_bound_source_review_v39.test.ts; tests/phase6_stored_source_postcommit_native_audit_v39.test.mjs |
+| T042 | New regression; exact CI pending | Real prepared conditional page, exact proof set, unsigned registry and existing consumer; reject forged packet, wrong policy, duplicate, and source drift; independent registry signature still required. | F027 | I047 | C001, C002 | tests/phase5_conditional_bound_source_review_v39.test.ts |
 
 ## Scientific and retention authorities
 
@@ -231,3 +233,7 @@ See [CI failure reconciliation and partial cutover](checkpoints/2026-11-26_0342_
 ## Nov26 04:06 PST onward — coordinated cutover complete
 
 Owner output confirms relay #30 merged and pinned to 9188891698958e03d6fc4bf964266f560c36a6d0 with target f4fe806dbda9695f181aee3b16d7285c42e44f93. Live GitHub confirmed #977 prior exact 3b0f529a 14/14, relay tests 45815886344, external primary 45816236626 and independent full target retention child 45816293783 success. No paid resume or migration. Do not repeat previous cutover command. I046/T041 is a staged partial F027 bridge, not a production signer. See [dated continuation](checkpoints/2026-11-26_0406_PST_PHASE5B_PAUSED_CUTOVER_AND_PROOF_PAGE.md).
+
+## Nov26 continuation — I047/T042
+
+Prior f7735c72 exact CI 14/15 successful at census, full safety still in progress, no newer failed target workflow returned after 12:08Z. Independent rolling wake 45816860550 succeeded; six target nonpaid/STOP-default children completed on f4fe806d. New producer-side unsigned proposal is not an independent signed registry, production release, or new approval. See [checkpoint](checkpoints/2026-11-26_PHASE5B_CONDITIONAL_UNSIGNED_REGISTRY_PRODUCER.md).

@@ -6,6 +6,7 @@
  * the evidence is explicitly conditional service / reported schedule only. */
 import {createHash} from "node:crypto";
 import {attachPhase7SignedProofBeforeRoster} from "./phase7SignedPreFieldProof_v39";
+import {hashPhase7DurableCandidate} from "./phase7DurableDerivedBundleCandidate_v39";
 import type {Phase7CanonicalFieldDisposition} from "./phase7CanonicalFieldParity_v39";
 import {P5_CONDITIONAL_T24_PACKET,P5_CONDITIONAL_WITNESSED_LATER_PACKET,P5_CONDITIONAL_STANDALONE_PACKET} from "./phase5ConditionalPreQueuePacket_v39";
 import {readP5SignedConditionalServiceReview,type P5SignedConditionalFeatureReadScope} from "./phase5ConditionalBoundSourceReview_v39";
@@ -47,6 +48,8 @@ type Pins={expectedReviewArtifactSha256:string;expectedReviewedCodeSha:string;ex
 type ReviewInput={flightInstanceId:string;reviewBytes:Buffer;pins:Pins};
 const preparedBindings=new WeakMap<object,{code:string;artifact:string;permitHash:string;witnessHash:string}>();
 const previews=new WeakSet<object>();
+const proofPages=new WeakSet<object>();
+const proofAttachedPackets=new WeakSet<object>();
 function parseIndependentReview(scope:P5SignedConditionalFeatureReadScope,flightInstanceId:string,reviewBytes:Buffer,pins:Pins){
  if(!pins||![pins.expectedReviewArtifactSha256,pins.expectedConditionalProtocolSha256,pins.expectedExternalContentUseReviewSha256].every(x=>H.test(x??""))||
   !C.test(pins.expectedReviewedCodeSha??"")||!Buffer.isBuffer(reviewBytes)||reviewBytes.length<100||reviewBytes.length>200000||
@@ -190,8 +193,9 @@ export function buildP5ConditionalPreProofPage(prepared:readonly ReturnType<type
  const completed=Object.freeze(packets.map(p=>Object.freeze({completed:p})));
  const result={phase7ProofPreviewOnly:true as const,signatureIssued:false as const,providerCalls:0 as const,databaseWrites:0 as const,
   phase6PaidGo:false as const,packetCount:packets.length};
- return Object.freeze(Object.defineProperty(result,"privateCompletedPackets",{value:completed,enumerable:false})) as typeof result&{
+ const page=Object.freeze(Object.defineProperty(result,"privateCompletedPackets",{value:completed,enumerable:false})) as typeof result&{
   readonly privateCompletedPackets:typeof completed};
+ proofPages.add(page);return page;
 }
 
 /** Existing independent field-proof verification is reused before the
@@ -200,6 +204,28 @@ export function attachP5ConditionalPreFieldProof(preview:ReturnType<typeof build
  env:NodeJS.ProcessEnv,policySha256:string,dispositions:readonly Phase7CanonicalFieldDisposition[],wire:unknown){
  if(!previews.has(preview))return hold("ACTUAL_CONDITIONAL_PACKET_PREVIEW");
  const out=attachPhase7SignedProofBeforeRoster(preview,env,policySha256,dispositions,wire);
- return Object.freeze(Object.defineProperties({...out,status:"CONDITIONAL_PRE_PACKET_AWAIT_INDEPENDENT_REGISTRY_SIGNATURE"},
+ const attached=Object.freeze(Object.defineProperties({...out,status:"CONDITIONAL_PRE_PACKET_AWAIT_INDEPENDENT_REGISTRY_SIGNATURE"},
   {packet:{value:out.packet,enumerable:false},packetBytes:{value:out.packetBytes,enumerable:false}}));
+ proofAttachedPackets.add(attached);return attached;
+}
+
+/** Complete the exact bounded page after the independent proof port returns.
+ * Reject missing, extra or substituted proof keys. No registry signature or
+ * publication occurs; all private completed packets remain nonenumerable. */
+export function completeP5ConditionalPreProofPage(page:ReturnType<typeof buildP5ConditionalPreProofPage>,
+ env:NodeJS.ProcessEnv,policySha256:string,dispositions:readonly Phase7CanonicalFieldDisposition[],wires:ReadonlyMap<string,unknown>){
+ if(!proofPages.has(page)||!(wires instanceof Map))return hold("ACTUAL_CONDITIONAL_PROOF_PAGE_REQUIRED");
+ const list=page.privateCompletedPackets.map(x=>x.completed),keys=list.map(x=>hashPhase7DurableCandidate(x.packet.prePermit));
+ if(wires.size!==keys.length||new Set(keys).size!==keys.length||keys.some(k=>!wires.has(k)))return hold("EXACT_CONDITIONAL_PROOF_SET");
+ const attached=Object.freeze(list.map((p,i)=>attachP5ConditionalPreFieldProof(p,env,policySha256,dispositions,wires.get(keys[i]))));
+ const summary={status:"CONDITIONAL_PROOF_PAGE_AWAIT_INDEPENDENT_REGISTRY_SIGNATURE",packetCount:attached.length,
+  signatureIssued:false,providerCalls:0,databaseWrites:0,phase6PaidGo:false};
+ return Object.freeze(Object.defineProperty(summary,"privateAttachedPackets",{value:attached,enumerable:false})) as typeof summary&{
+  readonly privateAttachedPackets:typeof attached};
+}
+export type P5ProofAttachedConditionalPacket=ReturnType<typeof attachP5ConditionalPreFieldProof>;
+export function assertP5ProofAttachedConditionalPacket(x:P5ProofAttachedConditionalPacket){
+ if(!proofAttachedPackets.has(x)||!Buffer.isBuffer(x.packetBytes)||hash(x.packetBytes)!==x.packetSha256||
+    !Buffer.from(JSON.stringify(x.packet),"utf8").equals(x.packetBytes))
+  return hold("ACTUAL_PROOF_ATTACHED_PACKET_REQUIRED");
 }
