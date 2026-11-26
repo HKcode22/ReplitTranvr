@@ -126,14 +126,14 @@ function validateResponse(raw:unknown,q:P7LocalPreRequest):OK{
    x.committedCount!==0||!Array.isArray(x.wires)||x.wires.length)hold("CONDITIONAL_REVIEW_RESPONSE_SCOPE");
  }else if(q.op==="issue_conditional_later_review"){
   const v=q.conditionalLaterReview,w=x.conditionalLaterReviewWire;
-  if(!v||x.committedCount!==0||!Array.isArray(x.wires)||x.wires.length||w===undefined)hold("CONDITIONAL_LATER_RESPONSE_SCOPE");
+  if(!v||x.committedCount!==0||!Array.isArray(x.wires)||x.wires.length||w===undefined)return hold("CONDITIONAL_LATER_RESPONSE_SCOPE");
   if(w!==null&&(!exact(w,["page","signatureBase64"])||!(/^[A-Za-z0-9+/]{86}==$/).test(w.signatureBase64)||
-   !w.page||w.page.schema!=="v39.phase5.conditional-pre-external-review-page.v1"||w.page.horizon!==v!.horizon||
-   w.page.sourceGithubRunId!==v!.anchor.sourceGithubRunId||w.page.populationQueryId!==v!.anchor.populationQueryId||w.page.responseSha256!==v!.anchor.responseSha256||
+   !w.page||w.page.schema!=="v39.phase5.conditional-pre-external-review-page.v1"||w.page.horizon!==v.horizon||
+   w.page.sourceGithubRunId!==v.anchor.sourceGithubRunId||w.page.populationQueryId!==v.anchor.populationQueryId||w.page.responseSha256!==v.anchor.responseSha256||
    w.page.queryDigestSha256!==q.scope.queryDigestSha256||w.page.runDayIndex!==q.scope.runDayIndex||w.page.manifestSha256!==q.scope.manifestSha256||w.page.rightsSha256!==q.scope.rightsSha256||
-   !Array.isArray(w.page.reviews)||w.page.reviews.length<1||w.page.reviews.length>v!.flightInstanceIds.length||
+   !Array.isArray(w.page.reviews)||w.page.reviews.length<1||w.page.reviews.length>v.flightInstanceIds.length||
    new Set(w.page.reviews.map(r=>r.flightInstanceId)).size!==w.page.reviews.length||
-   w.page.reviews.some(r=>!v!.flightInstanceIds.includes(r.flightInstanceId))))hold("CONDITIONAL_LATER_RESPONSE_SCOPE");
+   w.page.reviews.some(r=>!v.flightInstanceIds.includes(r.flightInstanceId))))hold("CONDITIONAL_LATER_RESPONSE_SCOPE");
  }else if(q.op.startsWith("issue")){
   checkWires(x.wires,permitKeys(q.permits,q.scope));if(x.committedCount!==0)hold("ISSUER_WROTE");
  }else if(q.op.startsWith("publish")){
