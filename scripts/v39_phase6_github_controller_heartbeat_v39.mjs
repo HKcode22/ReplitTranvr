@@ -52,6 +52,16 @@ export function formatP6ControllerHeartbeatHuman(heartbeat){
   lines.push("","**Independent wake worker execution (not collection proof):**");
   for(const [lane,x] of independent)lines.push("- "+lane+": "+x.state+(x.runId?" — [run "+x.runId+"](https://github.com/HKcode22/ReplitTranvr/actions/runs/"+x.runId+")":""));
  }
+ if(heartbeat.activeNotifications?.handoverPending?.length){
+  lines.push("","**Bounded deployment handover — current-main early-draw execution NOT verified:**");
+  for(const i of heartbeat.activeNotifications.handoverPending)lines.push("- "+i.lane+": prior execution "+i.priorRunId+"; recheck by "+i.recheckByUtc);
+ }
+ const paid=heartbeat.activeNotifications?.paidRouteConfiguration;
+ if(paid){
+  lines.push("","**Paid route configuration (not acquisition evidence):** "+paid.status,
+   "Protected arm expected: "+(paid.armExpectationKnown?String(paid.collectionExpected):"unknown"));
+  for(const r of paid.routes)lines.push("- "+r.job+": "+r.configuration);
+ }
  if(heartbeat.activeNotifications?.intentionalPauses?.length){
   lines.push("","**Explicitly paused paid routes — collection not running:**");
   for(const i of heartbeat.activeNotifications.intentionalPauses)lines.push("- "+i.job+": "+i.reason);
@@ -97,7 +107,7 @@ async function main(){
    primaryFidsExpiryNeedsAttention:report.primaryFidsExpiryNeedsAttention,
    activeNotifications:report.activeNotifications,
    directRecovery:report.directRecovery,
-   independentDispatchObservations:Object.fromEntries(Object.entries(report.independentDispatchObservations??{}).map(([lane,x])=>[lane,{state:x.state,runId:x.runId,parentConclusion:x.parentConclusion}])),
+   independentDispatchObservations:Object.fromEntries(Object.entries(report.independentDispatchObservations??{}).map(([lane,x])=>[lane,{state:x.state,runId:x.runId,parentConclusion:x.parentConclusion,recheckByUtc:x.recheckByUtc,currentExecutableVerified:x.currentExecutableVerified}])),
    controllerProblemCount:report.controllerProblemCount,
    controllerHistoricalGapCount:report.controllerHistoricalGapCount,
    releaseLanesNotProvedByHeartbeat:report.honestMissingAutonomousEndToEndLanes,

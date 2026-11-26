@@ -47,3 +47,22 @@ test("T024 fixed outer SOURCE stages preserve SQL category without leaking any e
  assert.equal(sourceChildFailureDiagnostic("ORIGINAL_SUBPROCESS",{message:"private raw exception"}).category,"UNCLASSIFIED");
  assert.throws(()=>sourceChildFailureDiagnostic("private secret",{}),/UNKNOWN_SOURCE_CHILD_DIAGNOSTIC_STAGE/);
 });
+
+import {projectP6SignedCalendarCoverage} from "../scripts/v39_phase5b_signed_calendar_coverage_owner.mjs";
+test("T054 frozen 31-day split distinguishes unprepared denominator, source missingness and cross-partition collision",()=>{
+ const calendar=Array.from({length:31},(_,i)=>({run_day_index:i+1,evaluation_partition:i<20?"train":i<25?"validation":"test",start_utc:new Date(Date.UTC(2035,10,25+i)).toISOString()}));
+ const r={run_day_index:1,horizon:"T-6h",prepared:64,reservations:4,bindings:2,timely_bindings:1,elapsed_unreserved:40,open_unreserved:2,future_unreserved:17,stopped_unreserved:1,
+  pre_rows:2,cutoff_safe_pre_rows:1,next_planned_utc:"2035-11-25T05:00:00.000Z",next_hard_latest_utc:"2035-11-25T05:10:00.000Z"};
+ const dup={cross_day_ids:2,cross_partition_ids:1,duplicate_day_horizon_ids:0},at="2035-11-25T05:05:00.000Z";
+ const out=projectP6SignedCalendarCoverage(calendar,[r],dup,at);
+ assert.equal(out.cells.length,93);assert.deepEqual(out.bySplit.map(x=>x.calendarDays),[20,5,6]);
+ assert.equal(out.cells[0].prepared,null);assert.equal(out.cells[1].bindings,2);assert.equal(out.leakageDiagnostics.requiresIndependentReview,true);
+ assert.equal(out.trainingEligibilityCertified,false);
+ assert.equal(out.leakageDiagnostics.status,"IDENTITY_COLLISION_REVIEW_REQUIRED");
+ const none=projectP6SignedCalendarCoverage(calendar,[],{cross_day_ids:0,cross_partition_ids:0,duplicate_day_horizon_ids:0},at);
+ assert.equal(none.leakageDiagnostics.status,"NO_LINKED_PRE_ROWS_LEAKAGE_NOT_ASSESSABLE");
+ assert.equal(none.leakageDiagnostics.fullLeakageAuditComplete,false);
+ assert.throws(()=>projectP6SignedCalendarCoverage(calendar,[{...r,elapsed_unreserved:41}],dup,at),/COUNT_OR_CLOCK_CONTRADICTION/);
+ assert.throws(()=>projectP6SignedCalendarCoverage(calendar,[r,r],dup,at),/COUNT_OR_CLOCK_CONTRADICTION/);
+ assert.throws(()=>projectP6SignedCalendarCoverage(calendar.map(d=>d.run_day_index===21?{...d,evaluation_partition:"train"}:d),[r],dup,at),/FROZEN_CALENDAR_OR_SPLIT_DRIFT/);
+});
