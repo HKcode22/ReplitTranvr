@@ -1,3 +1,4 @@
+import {readFileSync as readWorkflowFile} from "node:fs";
 import {test} from "node:test";
 import assert from "node:assert/strict";
 import {createHash,generateKeyPairSync} from "node:crypto";
@@ -193,4 +194,26 @@ test("T051 pre-SOURCE conditional T24 readiness requires an explicit distinct pu
  assert.throws(()=>admitP6ConditionalT24Reviewer({...e,P6_PHASE7_PRE_LANE_EVIDENCE_AUTHORITY_PUBLIC_KEY_BASE64:""},p,t),/NOT_READY/);
  assert.throws(()=>admitP6ConditionalT24Reviewer({...e,P6_PHASE7_PRE_PROOF_REVIEWER_FINGERPRINT_SHA256:fp},p,t),/NOT_READY/);
  assert.throws(()=>admitP6ConditionalT24Reviewer(e,{...p,conditionalT24PermitReview:undefined},t),/NOT_READY/);
+});
+
+test("T059 actual protected SOURCE workflow projects conditional public verifier into both nonpaid runtime steps only",()=>{
+ const workflow=readWorkflowFile(new URL("../.github/workflows/phase5-one-signed-day-source-child-dispatch.yml",import.meta.url),"utf8");
+ const step=name=>{
+  const start=workflow.indexOf("      - name: "+name+"\n");
+  assert.ok(start>=0,"missing workflow step "+name);
+  const end=workflow.indexOf("\n      - name:",start+1);
+  return workflow.slice(start,end<0?undefined:end);
+ };
+ const keys=["P6_PHASE7_PRE_LANE_EVIDENCE_AUTHORITY_FINGERPRINT_SHA256","P6_PHASE7_PRE_LANE_EVIDENCE_AUTHORITY_PUBLIC_KEY_BASE64"];
+ for(const name of ["Validate native PRE publication readiness BEFORE SOURCE (NONPAID)","Review and publish later PRE using existing private registry (NONPAID, separately approved)"]){
+  const s=step(name);
+  for(const k of keys)assert.ok(s.includes("          "+k+": ${{ secrets."+k+" }}"),name+" missing "+k);
+  assert.match(s,/AERODATABOX_API_KEY: ''/);
+  assert.match(s,/V39_PHASE6_PROCESS_ARMED: '0'/);
+  assert.doesNotMatch(s,/P6_PHASE7_PRE_(?:LANE_EVIDENCE_AUTHORITY|PROOF_REVIEWER)_PRIVATE_KEY_BASE64:/);
+ }
+ const paid=step("Authenticate real private PG16 signed index and query, then ORIGINAL one-physical-GET child");
+ for(const k of keys)assert.ok(!paid.includes(k+":"));
+ assert.doesNotMatch(paid,/P6_PHASE7_PRE_(?:LANE_EVIDENCE_AUTHORITY|PROOF_REVIEWER)_PRIVATE_KEY_BASE64:|P6_PRIVATE_PUBLISHER_DATABASE_URL:/);
+ assert.match(paid,/success\(\) && inputs\.confirm == 'ONE_SIGNED_SOURCE_CHILD_MAX_ONE_PAID_GET'/);
 });
