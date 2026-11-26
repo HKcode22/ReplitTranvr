@@ -196,6 +196,34 @@ describe("Phase5 single-GET scoped FIDS source bridge, no network, no DB",()=>{
     .rejects.toThrow("DB_CLOCK_OUTSIDE_PROSPECTIVE_WINDOW");
   expect(late.calls.reserve).toBe(0);expect(late.calls.fetch).toBe(0);
  });
+ it("reuses the existing conditional G5A marker for positively identified id-less operators only under a signed prospective cohort",async()=>{
+  const f=fixture(),o=ports();
+  const scope={protocolSha256:"a".repeat(64),cohortStartUtc:f.day.scheduledStartUtc.toISOString(),effectiveUtc:"2026-11-08T12:00:00.000Z",reviewedConditionalServiceScope:true as const};
+  f.conditionalService=scope;
+  const leg={number:"SQ 78",codeshareStatus:"IsOperator",isCargo:false,departure:{scheduledTime:{utc:"2026-11-09T14:30:00.000Z"}},arrival:{airport:{icao:"YSSY"}}};
+  o.p.fetchImpl=async()=>{o.calls.fetch++;return new Response(JSON.stringify({departures:[leg,{...leg,number:"SQ 79",codeshareStatus:"IsCodeshared"},{...leg,number:"SQ 80",isCharter:true}],arrivals:[]}),{status:200,headers:{"content-type":"application/json"}});};
+  const save=o.p.commitOriginalAndPopulation;
+  o.p.commitOriginalAndPopulation=async x=>{
+   const [a,b,c]=x.normalizedRows;
+   expect(a.scopeClassification).toBe("unknown");
+   expect(a.canonicalFlightInstanceId).toMatch(/^leg:g5a:[a-f0-9]{64}$/);
+   expect(a.codeshareResolutionStatus).toBe("g5a_conditional_operator_composite_no_native_id");
+   expect(b.canonicalFlightInstanceId).toBeNull();
+   expect(c.canonicalFlightInstanceId).toBeNull();
+   expect(x.sourceQuery.rawPayload).toHaveProperty("fidsRequestContract.phase5ConditionalService.protocolSha256",scope.protocolSha256);
+   return save(x);
+  };
+  expect((await runP5ScopedFidsSource(f,o.p)).providerOriginalBound).toBe(true);
+  expect(o.calls).toMatchObject({reserve:1,fetch:1,persist:1});
+ });
+ it("refuses retrospective or wrong cohort conditional scope before paid reservation",async()=>{
+  for(const patch of [{effectiveUtc:"2026-11-08T13:41:00.000Z"},{cohortStartUtc:"2026-11-09T15:00:00.000Z"}]){
+   const f=fixture(),o=ports();
+   f.conditionalService={protocolSha256:"a".repeat(64),cohortStartUtc:f.day.scheduledStartUtc.toISOString(),effectiveUtc:"2026-11-08T12:00:00.000Z",reviewedConditionalServiceScope:true,...patch};
+   await expect(runP5ScopedFidsSource(f,o.p)).rejects.toThrow(/UNREVIEWED_CONDITIONAL_SERVICE_SCOPE/);
+   expect(o.calls).toMatchObject({reserve:0,fetch:0,persist:0});
+  }
+ });
  it("proves explicit scoped budget reservation BEFORE one provider attempt",async()=>{
   const f=fixture(),o=ports();
   const result=await runP5ScopedFidsSource(f,o.p);
