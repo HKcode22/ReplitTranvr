@@ -27,7 +27,7 @@ export function admitP7ActorOnlyPost(e:NodeJS.ProcessEnv,role:Role){
  e.GITHUB_REF!=="refs/heads/main"||e.GITHUB_WORKFLOW_REF!=="HKcode22/ReplitTranvr/.github/workflows/phase5-one-signed-future-post-v0083-main-manual.yml@refs/heads/main"||
  e.GITHUB_EVENT_NAME!=="workflow_dispatch"||e.GITHUB_RUN_ATTEMPT!=="1"||
  !/^[a-f0-9]{40}$/.test(e.GITHUB_SHA??"")||!p6ReviewedPolicyMatchesRuntime(e,e.V39_P5_POST_APPROVED_CODE_SHA)||
- e.P6_POST_ACTOR_PREFLIGHT_CONFIRM!==P7_POST_ACTOR_CONFIRM||e.ADB_AUTO_COLLECT!=="0"||e.V39_PHASE6_PROCESS_ARMED!=="0"||e.V39_PHASE6_OWNER_APPROVED!=="0"||
+ e.P6_POST_ACTOR_PREFLIGHT_CONFIRM!==P7_POST_ACTOR_CONFIRM||e.ADB_AUTO_COLLECT!=="0"||e.V39_PHASE6_PROCESS_ARMED!=="0"||!["0","1"].includes(e.V39_PHASE6_OWNER_APPROVED??"")||
  e.NODE_TLS_REJECT_UNAUTHORIZED==="0"||[e.AERODATABOX_API_KEY,e.RAPIDAPI_KEY,e.AERODATABOX_WEBHOOK_SECRET,e.DATABASE_URL,e.V39_DATABASE_RUNTIME_URL,
  e.P5_V39_OTHER_REST_RESERVE_DATABASE_URL,e.P5_V39_OTHER_REST_REVIEW_DATABASE_URL,e.P5_V39_PRE_DATABASE_URL,e.P5_V39_PREPARE_DATABASE_URL,e.P5_V39_T24_WITNESS_DATABASE_URL].some(Boolean)||
  Object.entries(e).some(([k,v])=>!!v&&((k.includes("PRIVATE_KEY")||k.endsWith("_REVIEWER_KEY_BASE64"))&&!(role==="reviewer"&&k===SIGNER)||
@@ -94,14 +94,19 @@ async function storage(e:NodeJS.ProcessEnv,dir:string){
  const w=pool(a.privateUrls.writer,"p7_actor_bundle_writer"),r=pool(a.privateUrls.reader,"p7_actor_bundle_reader");
  try{await preflightPhase7DurableBundleActors(w,r,a.privatePolicy.contract,{writerRole:P7_POST_ACTORS.writer.role,readerRole:P7_POST_ACTORS.reader.role})}finally{await Promise.allSettled([w.end(),r.end()])}
 }
-function cleanup(dir:string){
+export function cleanupP7PostActorScratch(dir:string){
  try{checkDir(dir)}catch(err){if((err as NodeJS.ErrnoException).code==="ENOENT")return;throw err}
+ // Reviewer can create the private directory and fail before writing its
+ // endpoint. Remove only an empty directory, never recursive content.
+ try{lstatSync(join(dir,"endpoint.txt"))}catch(err){
+  if((err as NodeJS.ErrnoException).code==="ENOENT"){rmdirSync(dir);return}throw err
+ }
  endpointOnly(dir);unlinkSync(join(dir,"endpoint.txt"));rmdirSync(dir);
 }
 async function main(){
  process.umask(0o077);const e=process.env,role=process.argv[2] as Role|"cleanup";
  if(process.argv.length!==3)hold("MODE");
- if(role==="cleanup"){cleanup(scratch(e));console.log("P7_POST_ACTOR_SCRATCH_CLEAN");return}
+ if(role==="cleanup"){cleanupP7PostActorScratch(scratch(e));console.log("P7_POST_ACTOR_SCRATCH_CLEAN");return}
  admitP7ActorOnlyPost(e,role);
  if(execFileSync("git",["rev-parse","HEAD"],{encoding:"utf8",stdio:["ignore","pipe","ignore"],timeout:5000}).trim()!==e.GITHUB_SHA)hold("CHECKOUT");
  const dir=scratch(e);

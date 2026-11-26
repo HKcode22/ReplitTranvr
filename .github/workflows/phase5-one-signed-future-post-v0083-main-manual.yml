@@ -154,18 +154,28 @@ jobs:
         with:
           persist-credentials: false
       - name: Verify exact disarmed POST actor admission
+        env:
+          P6_POST_ACTOR_PARENT_ROUTE: ${{ vars.P6_PRIVATE_POST_PARENT_ENABLED }}
         run: |
           set -Eeuo pipefail
           set +x
-          test "$V39_PHASE6_PROCESS_ARMED" = 0
-          test "$V39_PHASE6_OWNER_APPROVED" = 0
-          [[ ( "$V39_P5_POST_APPROVED_CODE_SHA" == "$GITHUB_SHA" && -z "${P6_PHASE5B_RUNTIME_EXECUTABLE_SHA:-}" ) || ( "$V39_P5_POST_APPROVED_CODE_SHA" == "9c9cddb1aaeb04934d94af2937ee158e6d991f6c" && "$GITHUB_SHA" == "${P6_PHASE5B_RUNTIME_EXECUTABLE_SHA:-}" ) ]]
-          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          hold() { echo "HOLD_P7_POST_ACTOR_PREFLIGHT_$1" >&2; exit 2; }
+          test "$V39_PHASE6_PROCESS_ARMED" = 0 || hold PROCESS_ARMED
+          # Global owner authorization for existing SOURCE does not arm this
+          # isolated nonpaid actor. Require an explicit known boolean.
+          [[ "$V39_PHASE6_OWNER_APPROVED" == 0 || "$V39_PHASE6_OWNER_APPROVED" == 1 ]] || hold OWNER_APPROVAL_UNKNOWN
+          test "$P6_POST_ACTOR_PARENT_ROUTE" = false || hold POST_PARENT_NOT_DISABLED
+          test "$P6_POST_ACTOR_PREFLIGHT_CONFIRM" = ONLY_POST_INDEPENDENT_ACTOR_PREFLIGHT_NO_PROVIDER || hold EXACT_CONFIRM
+          test -z "$AERODATABOX_API_KEY$RAPIDAPI_KEY$AERODATABOX_WEBHOOK_SECRET$DATABASE_URL$V39_DATABASE_RUNTIME_URL" || hold FORBIDDEN_CREDENTIAL
+          [[ ( "$V39_P5_POST_APPROVED_CODE_SHA" == "$GITHUB_SHA" && -z "${P6_PHASE5B_RUNTIME_EXECUTABLE_SHA:-}" ) || ( "$V39_P5_POST_APPROVED_CODE_SHA" == "9c9cddb1aaeb04934d94af2937ee158e6d991f6c" && "$GITHUB_SHA" == "${P6_PHASE5B_RUNTIME_EXECUTABLE_SHA:-}" ) ]] || hold REVIEWED_CODE
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA" || hold CHECKOUT
+          echo P7_POST_ACTOR_LOCAL_ADMISSION_NO_PROVIDER
       - uses: actions/setup-node@v4
         with:
           node-version: '20'
           cache: npm
-      - run: npm ci --include=dev --no-audit --no-fund
+      - id: post_actor_dependencies
+        run: npm ci --include=dev --no-audit --no-fund
       - name: Preflight actual independent POST reviewer no observation
         env:
           V39_P5_SOURCE_DATABASE_URL: ${{ secrets.V39_P5_SOURCE_DATABASE_URL }}
@@ -189,7 +199,8 @@ jobs:
           P6_PHASE7_POST_BUNDLE_READER_DATABASE_URL: ${{ secrets.P6_PHASE7_POST_BUNDLE_READER_DATABASE_URL }}
         run: npx --no-install tsx scripts/v39_phase7_post_actor_preflight_v39.ts storage
       - name: Cleanup endpoint-only scratch
-        if: always()
+        # No actor or scratch can have started before dependency success.
+        if: ${{ always() && steps.post_actor_dependencies.outcome == 'success' }}
         run: npx --no-install tsx scripts/v39_phase7_post_actor_preflight_v39.ts cleanup
   exact-signed-one-v0083-future-post:
     environment: phase6-protected-runtime
