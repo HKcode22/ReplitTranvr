@@ -3,6 +3,7 @@
 const {createRequire}=require("node:module");
 const {join}=require("node:path");
 const {Client}=createRequire(join(process.cwd(),"package.json"))("pg");
+let stage="ADMISSION";
 async function main(){
  if(!process.env.DATABASE_URL)throw Error("NO_OWNER_DSN");
  const c=new Client({connectionString:process.env.DATABASE_URL,connectionTimeoutMillis:8000});
@@ -15,6 +16,17 @@ async function main(){
   const a=await c.query("SELECT DISTINCT manifest_sha256 FROM clean.adb_phase6_authorization WHERE enabled AND revoked_at_utc IS NULL");
   if(a.rowCount!==1||!/^[a-f0-9]{64}$/.test(a.rows[0].manifest_sha256))throw Error("NO_EXACT_ACTIVE_MANIFEST");
   const m=a.rows[0].manifest_sha256;
+  stage="SCHEMA_TYPES";
+  const types=await c.query(`SELECT table_name,column_name,data_type FROM information_schema.columns WHERE table_schema='clean' AND ((table_name IN ('flight_snapshots','flight_population','fids_query_response','phase5_fids_original_binding_v39') AND column_name='population_query_id') OR (table_name='flight_snapshots' AND column_name IN ('fids_response_hash','horizon','created_at','prediction_cutoff_utc'))) ORDER BY table_name,column_name`);
+  console.log(JSON.stringify({status:"P6_PRE_FUNNEL_SCHEMA_METADATA",rows:types.rows}));
+  stage="SOURCE_CUSTODY";
+  const custody=await c.query(`SELECT q.run_day_index,q.horizon,q.slot_id,count(*)::int bound_originals,sum(b.normalized_members_count)::bigint normalized_member_observations,count(*) FILTER (WHERE r.available_at<=q.prediction_cutoff_utc)::int timely_originals,count(*) FILTER (WHERE r.raw_expired_at_utc IS NULL AND b.source_expires_at_utc>transaction_timestamp())::int live_originals,min(b.source_expires_at_utc) FILTER (WHERE r.raw_expired_at_utc IS NULL AND b.source_expires_at_utc>transaction_timestamp()) earliest_live_expiry_utc FROM clean.phase5_fids_allowed_query_v39 q JOIN clean.phase5_fids_original_binding_v39 b USING(manifest_sha256,query_digest) JOIN clean.fids_query_response r ON r.population_query_id=b.population_query_id AND r.response_hash=b.response_hash WHERE q.manifest_sha256=$1 AND q.run_day_index IN (2,3) GROUP BY 1,2,3 ORDER BY 1,2,3`,[m]);
+  console.log(JSON.stringify({status:"P6_BOUND_SOURCE_SALVAGE_CUSTODY_READONLY",at:g.at,rows:custody.rows,memberObservationsNotDistinctFlights:true,trainingEligibilityCertified:false,providerCalls:0,productionWrites:0}));
+  stage="PRIVATE_PRE_POST_AND_QUEUE_CUSTODY";
+  const packets=await c.query(`SELECT run_day_index,kind,count(*)::int packets,count(*) FILTER (WHERE retention_not_after_utc>transaction_timestamp())::int within_retention FROM phase6_private.frozen_native_packet_v39 WHERE manifest_sha256=$1 AND run_day_index IN (2,3) GROUP BY 1,2 ORDER BY 1,2`,[m]);
+  const tasks=await c.query(`SELECT t.horizon,t.state,count(*)::int tasks,count(*) FILTER (WHERE t.verified_snapshot_id IS NOT NULL)::int tasks_with_snapshot_ref,count(*) FILTER (WHERE t.state='VERIFIED_ON_TIME' AND s.id IS NOT NULL AND s.created_at<=s.prediction_cutoff_utc AND s.prediction_state='PRE_DEPARTURE')::int linked_cutoff_safe_verified FROM clean.phase5_cd_pre_task_v39 t LEFT JOIN clean.flight_snapshots s ON s.id=t.verified_snapshot_id AND s.population_query_id=t.source_population_query_id AND s.fids_response_hash=t.source_response_sha256 AND s.horizon=t.horizon AND s.flight_instance_id=t.flight_instance_id WHERE t.manifest_sha256=$1 GROUP BY 1,2 ORDER BY 1,2`,[m]);
+  console.log(JSON.stringify({status:"P6_PRIVATE_PACKET_AND_PRE_TASK_CUSTODY_READONLY",at:g.at,packets:packets.rows,tasks:tasks.rows,packetCountIsNotFlightCount:true,trainingEligibilityCertified:false,providerCalls:0,productionWrites:0}));
+  stage="PRE_FUNNEL";
   const report=await c.query(`
   WITH bound AS MATERIALIZED (
     SELECT q.run_day_index,q.horizon,q.slot_id,q.airport_icao,q.service_window_start_utc,q.service_window_end_utc,
@@ -58,7 +70,7 @@ async function main(){
   ), snapshots AS (
     SELECT b.run_day_index,b.horizon,b.slot_id,count(s.id)::bigint source_linked_pre_rows,
       count(s.id) FILTER (WHERE s.created_at<=s.prediction_cutoff_utc)::bigint source_linked_cutoff_safe_pre_rows
-    FROM bound b LEFT JOIN clean.flight_snapshots s ON s.population_query_id=b.population_query_id
+    FROM bound b LEFT JOIN clean.flight_snapshots s ON s.population_query_id=b.population_query_id::text AND s.fids_response_hash=b.response_hash
       AND s.horizon=b.horizon AND s.prediction_state='PRE_DEPARTURE'
     GROUP BY 1,2,3
   )
@@ -76,6 +88,7 @@ async function main(){
    leadCountsAreOptimisticUpperBoundsAtMemberAvailability:true,actualHistoricalAuditClockReconstructed:false,
    retainedCrossOriginalAliasScreenReproduced:false,publicationOrTrainingEligibilityCertified:false,
    expiredOriginalsExcluded:true,providerCalls:0,productionWrites:0}));
+  stage="SOURCE_BUDGET";
   const budget=await c.query(`
   SELECT (p.committed_at_utc AT TIME ZONE 'UTC')::date::text physical_utc_day,
     count(*)::int source_reservations,sum(p.charged_reserved_units)::bigint source_reserved_units
@@ -86,4 +99,4 @@ async function main(){
    sourceOnlyNotAllCategories:true,providerBillingProven:false,providerCalls:0,productionWrites:0}));
  }finally{await c.query("ROLLBACK").catch(()=>{});await c.end().catch(()=>{});}
 }
-main().catch(e=>{console.error(JSON.stringify({status:"P6_PRE_FUNNEL_READ_HOLD",code:/^[0-9A-Z]{5}$/.test(e?.code??"")?e.code:"READ_OR_IDENTITY_FAILED",providerCalls:0,productionWrites:0}));process.exitCode=2;});
+main().catch(e=>{console.error(JSON.stringify({status:"P6_PRE_FUNNEL_READ_HOLD",stage,code:/^[0-9A-Z]{5}$/.test(e?.code??"")?e.code:"READ_OR_IDENTITY_FAILED",providerCalls:0,productionWrites:0}));process.exitCode=2;});
