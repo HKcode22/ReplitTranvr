@@ -142,12 +142,47 @@ export function deriveP6ConditionalProofReadScope(receipt,selected,selector,trus
   expectedLocalFrom:m.localFrom,expectedLocalTo:m.localTo,expectedServiceWindowStartUtc:q.expectedServiceWindowStartUtc,
   expectedServiceWindowEndUtc:q.expectedServiceWindowEndUtc,externalContentUseReviewSha256:f.externalContentUseReviewSha256});
 }
+/** Shared exact SOURCE identity continuity check for concurrent append-only
+ * PRE/POST registry publication. Neither an advanced revision nor an ACK
+ * changes the original signed query, shard or bytes. */
+export function assertP6SameCommittedSourceAcrossRevisions(previous,latest,selector,currentSelector,trust){
+ if(!checkSelector(selector)||!checkSelector(currentSelector)||
+    currentSelector.runDayIndex!==selector.runDayIndex||currentSelector.queryDigestSha256!==selector.queryDigestSha256||
+    currentSelector.indexRevision<selector.indexRevision||
+    (currentSelector.indexRevision===selector.indexRevision&&currentSelector.indexSha256!==selector.indexSha256))
+  fail("REVISION_ROLLBACK");
+ const a=selectP6CommittedNativeSourceQuery(previous,selector,trust),b=selectP6CommittedNativeSourceQuery(latest,currentSelector,trust);
+ if(a.entry.filePath!==b.entry.filePath||a.entry.fileSha256!==b.entry.fileSha256||
+    a.entry.shardIndex!==b.entry.shardIndex||a.q.filePath!==b.q.filePath||
+    a.q.expectedPacketSha256!==b.q.expectedPacketSha256)
+  fail("ORIGINAL_SIGNED_QUERY_CHANGED");
+ return b;
+}
+export async function selectP6CurrentCommittedSourceSelector({readerClient,trust,selector}){
+ if(!checkSelector(selector)||trust?.independentStudyTrustPinsApproved!==true)fail("UNAUTHENTICATED_EXACT_DAY_REGISTRY");
+ const scope={privateStoredReviewReadOnlyApproved:true,existingPaidDispatchApproved:false};
+ const original=await readP6StoredPrivateReviewOnce({client:readerClient,trust,scope,
+  selector:{kind:"EXACT_DAY",runDayIndex:selector.runDayIndex,indexRevision:selector.indexRevision,indexSha256:selector.indexSha256}});
+ const current=await readP6StoredPrivateReviewOnce({client:readerClient,trust,scope,
+  selector:{kind:"CURRENT_DAY",runDayIndex:selector.runDayIndex}});
+ const now={...selector,indexRevision:current.pins.expectedIndexRevision,indexSha256:current.pins.expectedIndexSha256};
+ if(!checkSelector(now)||now.indexRevision<selector.indexRevision||
+    (now.indexRevision===selector.indexRevision&&now.indexSha256!==selector.indexSha256))fail("REVISION_ROLLBACK");
+ if(now.indexSha256===selector.indexSha256)return selector;
+ const load=(review,requireCurrentRevisionForPlanning)=>hydrateP6DayEpochFullRegistriesReadOnly({
+  client:readerClient,pins:review.pins,wire:review.wire,publicKeyPem:review.publicKeyPem,
+  scope:{privateDayRegistryReadOnlyApproved:true,existingPaidDispatchApproved:false,requireCurrentRevisionForPlanning}});
+ const previous=await load(original,false),latest=await load(current,true);
+ assertP6SameCommittedSourceAcrossRevisions(previous,latest,selector,now,trust);
+ return now;
+}
 export async function readP6ConditionalProofScopeFromStoredSource({readerClient,trust,selector,policy,permit}){
  if(!checkSelector(selector)||trust?.independentStudyTrustPinsApproved!==true||
     policy?.independentNativeCandidateReadOnlyApproved!==true||policy.existingPaidDispatchApproved!==false||
     policy.noProviderCredentialsInAudit!==true||!policy.conditionalPreFeatureReview||
     permit?.runDayIndex!==selector.runDayIndex||permit?.queryDigestSha256!==selector.queryDigestSha256)
   fail("NO_EXPLICIT_CONDITIONAL_PROOF_SCOPE");
+ selector=await selectP6CurrentCommittedSourceSelector({readerClient,trust,selector});
  const scope={privateStoredReviewReadOnlyApproved:true,existingPaidDispatchApproved:false};
  const review=await readP6StoredPrivateReviewOnce({client:readerClient,trust,scope,
   selector:{kind:"EXACT_DAY",runDayIndex:selector.runDayIndex,indexRevision:selector.indexRevision,indexSha256:selector.indexSha256}});

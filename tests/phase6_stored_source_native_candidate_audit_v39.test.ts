@@ -1,6 +1,6 @@
 import {createHash,generateKeyPairSync,createPublicKey} from "node:crypto";
 import {describe,it,expect} from "vitest";
-import {selectP6CommittedNativeSourceQuery,deriveP6CommittedNativeQueryScope,deriveP6ConditionalProofReadScope,readP6ConditionalProofScopeFromStoredSource,auditP6StoredCommittedNativeSource,selectP6PendingNativeLaterReview,readP6PendingNativeLaterReview,buildP6PostcommitUnsignedPreReview,completeP6PostcommitReviewedPreBatch,signP6DelegatedNativeLaterReviewPage}
+import {selectP6CommittedNativeSourceQuery,deriveP6CommittedNativeQueryScope,deriveP6ConditionalProofReadScope,readP6ConditionalProofScopeFromStoredSource,assertP6SameCommittedSourceAcrossRevisions,auditP6StoredCommittedNativeSource,selectP6PendingNativeLaterReview,readP6PendingNativeLaterReview,buildP6PostcommitUnsignedPreReview,completeP6PostcommitReviewedPreBatch,signP6DelegatedNativeLaterReviewPage}
  from "../server/lib/disruption/phase6StoredSourceNativeCandidateAudit_v39.mjs";
 const h=(b:Buffer|string)=>createHash("sha256").update(b).digest("hex"),H=(c:string)=>c.repeat(64);
 function fixture(){
@@ -458,5 +458,24 @@ describe("T028 independent conditional proof signed-source scope",()=>{
   const f=fixture();let calls=0;
   await expect(readP6ConditionalProofScopeFromStoredSource({readerClient:{query:async()=>{calls++;}},trust:f.trust,selector:f.selector,policy:f.policy,permit:{}})).rejects.toThrow("NO_EXPLICIT_CONDITIONAL_PROOF_SCOPE");
   expect(calls).toBe(0);
+ });
+});
+
+describe("F038 conditional proof current signed SOURCE revision continuity",()=>{
+ it("accepts an advanced append-only revision with exact unchanged SOURCE, rejects rollback and changed bytes",()=>{
+  const f=fixture(),old=f.index.privateParsedIndex.entries[0],registry=f.index.getFrozen(old.filePath);
+  const make=(change=false)=>{
+   const bytes=change?Buffer.from(JSON.stringify({...JSON.parse(registry.toString()),entries:[{...JSON.parse(registry.toString()).entries[0],expectedPacketSha256:H("8")}]})):registry;
+   const parsed={...f.index.privateParsedIndex,revision:2,previousIndexSha256:f.selector.indexSha256,entries:[{...old,fileSha256:h(bytes)}]};
+   const raw=Buffer.from(JSON.stringify(parsed)),selector={...f.selector,indexRevision:2,indexSha256:h(raw)};
+   const index:any={redactedSummary:{...f.index.redactedSummary,indexRevision:2,indexSha256:h(raw)}};
+   Object.defineProperties(index,{privateParsedIndex:{value:parsed},privateCurrentIndexBytes:{value:raw},getFrozen:{value:()=>bytes}});
+   return {index,selector};
+  };
+  const current=make(),changed=make(true);
+  expect(assertP6SameCommittedSourceAcrossRevisions(f.index,current.index,f.selector,current.selector,f.trust).q.expectedPacketSha256).toBe(h(f.receipt.privateBytes));
+  expect(()=>assertP6SameCommittedSourceAcrossRevisions(current.index,f.index,current.selector,f.selector,f.trust)).toThrow("REVISION_ROLLBACK");
+  expect(()=>assertP6SameCommittedSourceAcrossRevisions(f.index,changed.index,f.selector,changed.selector,f.trust)).toThrow("ORIGINAL_SIGNED_QUERY_CHANGED");
+  expect(()=>assertP6SameCommittedSourceAcrossRevisions(f.index,current.index,f.selector,{...current.selector,indexRevision:1},f.trust)).toThrow("REVISION_ROLLBACK");
  });
 });

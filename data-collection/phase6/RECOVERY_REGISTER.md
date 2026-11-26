@@ -50,6 +50,8 @@ F = failure family or evidenced defect; I = corrective implementation; C = incom
 | F036 | Implemented staged; exact relay CI pending | Four ROLLING_ROOT cancellations (45727773405, 45717616827, 45713496477, 45709128629), empty job lists; no runner execution or paid call proven. Concurrency replacement is plausible, not proven cause. | I035 |
 | F037 | Code-discovered deadline risk; implemented staged | Seven serial distinct route groups with up to 10s active read and 10s dispatch each can exceed 120s wake deadline; late route starvation risk, historical attribution not proven. | I036 |
 
+| F038 | Code-discovered concurrency risk; staged | Conditional independent proof resolver used the original child index as current, although another valid PRE/POST append can advance it. Never substitute a changed SOURCE or roll back. | I037 |
+
 ## Implementations
 
 | ID | Status | Repair | Failure IDs |
@@ -94,6 +96,8 @@ F = failure family or evidenced defect; I = corrective implementation; C = incom
 
 | I035 | Implemented relay PR30; CI pending | Canceled run audit reads exact job metadata, distinguishes empty runner list and uncertain execution; keeps unresolved and never collection proof. | F036 |
 | I036 | Implemented relay PR30; CI pending | Bound distinct route wake concurrency to two, retain per-route active check, one POST maximum, no retransmit and deadline. | F037 |
+
+| I037 | Implemented staged; exact CI pending | Reuse current signed revision resolution for both native audit and conditional proof; authenticate original and current, compare exact SOURCE registry, shard, query path and bytes. | F038 |
 
 ## Completion components (not gates)
 
@@ -152,6 +156,8 @@ T IDs are permanent scenarios, not claims of passing CI. Each references existin
 
 | T030 | New relay regression; exact CI pending | Canceled relay job metadata empty vs present vs unavailable; no log read or false proof; unresolved remains | F036 | I035 | C010 | https://github.com/HKcode22/TravnrClockRelay/blob/b2dec744491d5438a8041adc38f74d9fcc9f3b64/cron-audit.test.mjs |
 | T031 | New relay regression; exact CI pending | Slow first route does not serialize paired independent lane; cap two route groups; deadline during active reads prevents POST and no retry | F037 | I036 | C010 | https://github.com/HKcode22/TravnrClockRelay/blob/b2dec744491d5438a8041adc38f74d9fcc9f3b64/isolated/independent-wake.test.mjs |
+
+| T032 | New regression; exact CI pending | Advanced append with unchanged SOURCE is accepted; rollback, changed packet, same-revision digest drift fail closed | F038 | I037 | C002 | tests/phase6_stored_source_native_candidate_audit_v39.test.ts |
 
 ## Scientific and retention authorities
 
