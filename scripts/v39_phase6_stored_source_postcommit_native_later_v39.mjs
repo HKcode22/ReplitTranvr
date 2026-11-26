@@ -200,6 +200,20 @@ export async function runP6NativeLaterRuntime(env,phase7ProofPort){
  const pre=new pg.Pool({connectionString:x.preUrl,max:1,connectionTimeoutMillis:8000,query_timeout:25000,
   application_name:"p6_native_later_pre_evidence"});
  try{
+  // Audit the actual immutable SOURCE first. Empty candidate sets need
+  // neither an authenticated publication connection nor a contended lock.
+  // All genuine publication still reauthenticates current signed registries.
+  const actual=await runP6PostcommitNativeAudit(x.auditEnv);
+  const handoff=actual.privateUnsignedPreReview;
+  let features=actual.privateNativeFeatureReview;
+  if(!handoff||handoff.runDayIndex!==x.c.selector.runDayIndex)hold("SOURCE_HANDOFF_MISSING");
+  const report={status:"ACTUAL_SOURCE_TO_LATER_REVIEW_RUNTIME_NO_PAID_GO",runDayIndex:handoff.runDayIndex,horizon:handoff.horizon,
+   candidateCount:handoff.reviewEntryCount,reviewedCount:0,committedShardCount:0,insertedPrivateRows:0,
+   missingNativeOriginal:0,unresolvedT24:0,lateOrRetention:0,heldPages:0,providerCalls:0,phase6PaidGo:false,
+   ...(actual.conditionalSourceReview?{conditionalSourceReview:actual.conditionalSourceReview}:{}),
+   nativeReadback:p6NativeLaterReadbackDiagnostics(actual,handoff,features,v.nativeT24ReviewApproved)};
+  if(!handoff.reviewEntryCount||!features?.matchedCount||(handoff.horizon==="T-24h"&&v.nativeT24ReviewApproved!==true))
+   return {...report,sourceAuditOnly:true};
   await publisher.connect();await publisher.query("SET ROLE phase6_private_frozen_publisher_v39");
   // Session-scoped lock on the direct connection, not a transaction-pooler
   // connection. Serialize concurrent SOURCE follow-ons per study/day,
@@ -208,16 +222,7 @@ export async function runP6NativeLaterRuntime(env,phase7ProofPort){
   await publisher.query("SET lock_timeout='20s'");
   await publisher.query("SELECT pg_advisory_lock(('x'||$1)::bit(64)::bigint)",[lockId]);
   await publisher.query("RESET lock_timeout");
-  const actual=await runP6PostcommitNativeAudit(x.auditEnv);
-  const handoff=actual.privateUnsignedPreReview;
-  let features=actual.privateNativeFeatureReview;
-  if(!handoff||handoff.runDayIndex!==x.c.selector.runDayIndex)hold("SOURCE_HANDOFF_MISSING");
-  const report={status:"ACTUAL_SOURCE_TO_LATER_REVIEW_RUNTIME_NO_PAID_GO",runDayIndex:handoff.runDayIndex,horizon:handoff.horizon,
-   candidateCount:handoff.reviewEntryCount,reviewedCount:0,committedShardCount:0,insertedPrivateRows:0,
-   missingNativeOriginal:0,unresolvedT24:0,lateOrRetention:0,heldPages:0,providerCalls:0,phase6PaidGo:false,
-   nativeReadback:p6NativeLaterReadbackDiagnostics(actual,handoff,features,v.nativeT24ReviewApproved)};
-  if(!handoff.reviewEntryCount||!features?.matchedCount||(handoff.horizon==="T-24h"&&v.nativeT24ReviewApproved!==true))
-   return {...report,sourceAuditOnly:true};
+
   // Reuse genuine independently archived public weather if its reader is
   // commissioned. Optional absent observations remain explicit missingness;
   // an invalid signed source is not downgraded to missing.

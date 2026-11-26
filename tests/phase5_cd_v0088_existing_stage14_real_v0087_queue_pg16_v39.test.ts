@@ -88,9 +88,16 @@ active("Phase5 C+D actual Stage14 source-bound parallel PRE on disposable PG16",
    flight:"CD"+String(i+1).padStart(3,"0"),
    status:"Boarding"
   }));
+  const conditional=process.env.V39_P5B_CONDITIONAL_QUEUE_CI==="1";
+  const conditionalId="leg:g5a:"+h("7");
+  const cohort=new Date(Math.floor(native.getTime()/60000)*60000).toISOString();
+  if(conditional)arr.push({flight:"CD900",status:"Boarding"});
   const payload=Buffer.from(JSON.stringify({departures:arr}));
   const bodyHash=createHash("sha256").update(payload).digest("hex");
   const original={
+   ...(conditional?{phase5PopulationIdentityVersion:"P5_CANONICAL_SHA256_V1",fidsRequestContract:{
+    schema:"v39.fids-request-frame.application-intent.v1",endpointKind:"airport_local_fids",direction:"Departure",withLeg:true,withCargo:false,withPrivate:false,withCancelled:true,withCodeshared:true,withLocation:false,airportIcao:"WSSS",openapiSha256:contract,
+    phase5ConditionalService:{protocolSha256:h("8"),cohortStartUtc:cohort}}}:{}),
    originalDecodedEntityBodyPreserved:true,
    originalHttpWireBytesPreserved:false,
    originalDecodedEntityBodyEvidence:{
@@ -170,13 +177,20 @@ active("Phase5 C+D actual Stage14 source-bound parallel PRE on disposable PG16",
     "'confirmed_operating_leg',statement_timestamp(),'1.15.4','v39',$9)",
     [native,native,end,cutoff,qid,flight,response,fn,contract]);
   }
+  if(conditional){
+   await admin.query(
+    "INSERT INTO clean.flight_population"+
+    "(source_airport_icao,dep_airport_icao,arr_airport_icao,dep_scheduled_utc,window_start_utc,window_end_utc,cutoff_utc,source_type,population_query_id,analytic_identity_id,canonical_flight_instance_id,population_role,scope_classification,available_at,response_hash,flight_number,query_direction,from_local,to_local,airport_iana_timezone,codeshare_resolution_status,fids_retrieval_utc,provider_api_version,fids_protocol_version,openapi_sha256)"+
+    " VALUES('WSSS','WSSS','YSSY',$1,$1,$2,$3,'fids',$4,$5,$5,'requested_airport_primary','unknown',statement_timestamp(),$6,'CD900','Departure','2027-01-01T00:00','2027-01-01T04:00','Asia/Singapore','g5a_conditional_operator_composite_no_native_id',statement_timestamp(),'1.15.4','v39',$7)",
+    [native,end,cutoff,qid,conditionalId,response,contract]);
+  }
   await admin.query(
    "INSERT INTO clean.phase5_fids_original_binding_v39"+
    "(population_query_id,reservation_sha256,query_digest,manifest_sha256,"+
    "response_hash,decoded_original_body_sha256,rights_review_sha256,"+
    "normalized_members_count,source_expires_at_utc)"+
    "VALUES($1,$2,$3,$4,$5,$6,$7,$8,clock_timestamp()+interval '1 hour')",
-   [qid,reservation,query,manifest,response,bodyHash,rights,FLIGHTS]);
+   [qid,reservation,query,manifest,response,bodyHash,rights,FLIGHTS+Number(conditional)]);
   await admin.query("CREATE ROLE "+ROLE+
    " LOGIN PASSWORD '"+process.env.P5_CD_CI_PASSWORD+"' NOSUPERUSER NOCREATEDB NOCREATEROLE");
   await admin.query("GRANT USAGE ON SCHEMA clean TO "+ROLE);
@@ -344,6 +358,22 @@ active("Phase5 C+D actual Stage14 source-bound parallel PRE on disposable PG16",
        ...args.slice(0,4),
        new Date(Date.parse(permit.selectedTNativeUtc)+900_000).toISOString(),
        ...args.slice(5)])).rejects.toThrow("P5_CD_V0091_SOURCE_MEMBER_NOT_NATIVE_OPERATING_LEG");
+      await client.query("ROLLBACK");
+      await client.query("BEGIN");
+      await client.query("SET LOCAL ROLE "+PREP);
+     }
+     if(conditional){
+      // Real PREPARE login and the existing V0100 wrapper: prospectively
+      // marked conditional member gets a task, not a native reclassification.
+      // Roll back synthetic test task to preserve native test denominator.
+      const ca=[...args];ca[2]=conditionalId;ca[5]=h("9");
+      const got=await client.query(restartable?ensure:call,ca);
+      expect(String(got.rows[0].task_id??got.rows[0].task)).toMatch(/^[1-9][0-9]*$/);
+      await client.query("ROLLBACK");
+      await client.query("BEGIN");
+      await client.query("SET LOCAL ROLE "+PREP);
+      const wrong=[...ca];wrong[2]="leg:g5a:"+h("6");
+      await expect(client.query(restartable?ensure:call,wrong)).rejects.toThrow("P5_CD_V0091_SOURCE_MEMBER_MISSING_OR_DUPLICATED");
       await client.query("ROLLBACK");
       await client.query("BEGIN");
       await client.query("SET LOCAL ROLE "+PREP);

@@ -22,23 +22,23 @@ async function main(){
       count(a.reservation_sha256)::int reservations,
       COALESCE(sum(a.charged_reserved_units),0)::bigint reserved_units,
       count(b.population_query_id)::int original_bindings,
-      count(*) FILTER (WHERE b.population_query_id IS NOT NULL AND r.population_query_id IS NULL)::int binding_response_mismatch,
-      count(*) FILTER (WHERE b.population_query_id IS NOT NULL AND r.available_at<=q.prediction_cutoff_utc)::int original_available_by_planned_cutoff,
-      count(*) FILTER (WHERE b.population_query_id IS NOT NULL AND r.available_at<=q.prediction_cutoff_utc AND b.bound_at_utc<=q.prediction_cutoff_utc)::int original_bound_by_planned_cutoff,
+      count(*) FILTER (WHERE b.population_query_id IS NOT NULL AND (r.population_query_id IS NULL OR (r.raw_expired_at_utc IS NULL AND r.response_hash IS DISTINCT FROM b.response_hash) OR (r.raw_expired_at_utc IS NOT NULL AND r.response_hash IS NOT NULL)))::int binding_response_mismatch,
+      count(*) FILTER (WHERE b.population_query_id IS NOT NULL AND r.response_hash=b.response_hash AND r.available_at<=q.prediction_cutoff_utc)::int original_available_by_planned_cutoff,
+      count(*) FILTER (WHERE b.population_query_id IS NOT NULL AND b.bound_at_utc<=q.prediction_cutoff_utc)::int original_bound_by_planned_cutoff,
       count(*) FILTER (WHERE a.reservation_sha256 IS NOT NULL AND b.population_query_id IS NULL)::int reserved_without_binding,
       count(*) FILTER (WHERE a.reservation_sha256 IS NULL AND q.hard_latest_dispatch_utc<transaction_timestamp())::int elapsed_unreserved,
       count(*) FILTER (WHERE a.reservation_sha256 IS NULL AND q.planned_dispatch_utc<=transaction_timestamp() AND q.hard_latest_dispatch_utc>=transaction_timestamp())::int open_unreserved,
       count(*) FILTER (WHERE a.reservation_sha256 IS NULL AND q.planned_dispatch_utc>transaction_timestamp())::int future_unreserved,
-      count(*) FILTER (WHERE r.raw_expired_at_utc IS NOT NULL)::int expired_response_metadata,
-      count(*) FILTER (WHERE r.raw_expired_at_utc IS NULL AND b.source_expires_at_utc>transaction_timestamp() AND r.population_query_id IS NOT NULL)::int live_bound_metadata
+      count(*) FILTER (WHERE r.raw_expired_at_utc IS NOT NULL AND r.response_hash IS NULL)::int expired_response_metadata,
+      count(*) FILTER (WHERE r.raw_expired_at_utc IS NULL AND b.source_expires_at_utc>transaction_timestamp() AND r.response_hash=b.response_hash)::int live_bound_metadata
     FROM clean.phase5_fids_allowed_query_v39 q
     LEFT JOIN clean.phase5_fids_physical_attempt_v39 a ON a.manifest_sha256=q.manifest_sha256 AND a.query_digest=q.query_digest
     LEFT JOIN clean.phase5_fids_original_binding_v39 b ON b.manifest_sha256=q.manifest_sha256 AND b.query_digest=q.query_digest AND b.reservation_sha256=a.reservation_sha256
-    LEFT JOIN clean.fids_query_response r ON r.population_query_id=b.population_query_id AND r.response_hash=b.response_hash
+    LEFT JOIN clean.fids_query_response r ON r.population_query_id=b.population_query_id
     WHERE q.manifest_sha256=$1 AND q.run_day_index IN (1,2,3)
     GROUP BY 1,2 ORDER BY 1,2`,[m]);
   console.log(JSON.stringify({status:"P6_THREE_DAY_SOURCE_DENOMINATOR_READONLY",at:g.at,rows:days.rows,
-    designQueriesPerDayHorizon:64,missingPreparedRowsAreNotProviderFailures:true,
+    designQueriesPerDayHorizon:64,expiredResponseHashNullIsExpectedV0107:true,availabilityOfExpiredOriginalNotReconstructed:true,missingPreparedRowsAreNotProviderFailures:true,
     reservationsAreNotHttpOrBillingProof:true,providerCalls:0,productionWrites:0}));
   stage="ALL_BOUND_PRE_METADATA";
   const allPre=await c.query(`
