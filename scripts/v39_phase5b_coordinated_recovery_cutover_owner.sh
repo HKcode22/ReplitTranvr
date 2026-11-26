@@ -75,8 +75,9 @@ active(){
 }
 # New paid parent admission is already paused. Never cancel active work.
 drain(){
- for wf in phase5-one-signed-day-source-child-dispatch.yml phase5-one-signed-future-post-v0083-main-manual.yml;do
-  [[ "$(active "$R" "$wf")" == 0 ]] || hold ACTIVE_PAID_CHILD_NO_CANCEL
+ local wf
+ for wf in phase5-source-upcoming-queue-main-scheduled-readonly.yml phase6-rolling-controller-bounded-session.yml phase5-one-signed-day-source-child-dispatch.yml phase5-one-signed-future-post-v0083-main-manual.yml;do
+  [[ "$(active "$R" "$wf")" == 0 ]] || hold ACTIVE_PARENT_OR_CHILD_NO_CANCEL
  done
 }
 merge_exact(){

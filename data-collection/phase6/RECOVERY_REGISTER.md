@@ -181,7 +181,7 @@ T IDs are permanent scenarios, not claims of passing CI. Each references existin
 
 | T037 | New regression; exact CI pending | Concurrent append after CURRENT_DAY read retries only stale current revision up to three times; original anchor preserved, changed query/expiry/integrity errors never retried | F038 | I042 | C002, C009 | tests/phase6_stored_source_native_candidate_audit_v39.test.ts |
 
-| T038 | New syntax check; owner actual execution pending | Guarded dual repository exact head/base/tree/CI, paused and drained acquisition, effective environment pins and full-retention readback. No automatic paid resume | F026 | I043 | C007, C010 | scripts/v39_phase5b_coordinated_recovery_cutover_owner.sh; .github/workflows/phase5b-source-diagnostics-offline.yml |
+| T038 | New syntax check; owner actual execution pending | Guarded dual repository exact head/base/tree/CI, paused and drained acquisition, effective environment pins and full-retention readback. No automatic paid resume | F026 | I043 | C007, C010 | .github/workflows/phase5b-source-diagnostics-offline.yml |
 
 ## Scientific and retention authorities
 
