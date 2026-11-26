@@ -15,6 +15,9 @@ type Scope={protocolSha256:string;ownerProspectiveSeparateTierApproved:true;
  runDayIndex:number;
  airportIcao:string;frozenStudyStartUtc:string;policyEffectiveUtc:string;
  plannedSourceUtc:string;sourceAvailableUtc:string;sourceExpiresUtc:string;dbObservedUtc:string;
+ /** Original available-at clock, distinct from later binding eligibility.
+  * Stage14 measures staleness from original availability, not binding. */
+ originalSourceAvailableUtc?:string;
  serviceWindowStartUtc:string;serviceWindowEndUtc:string;horizon:"T-24h"|"T-6h"|"T-90m";
  maximumStalenessSeconds:number;minimumReviewLeadSeconds:number};
 type Candidate={serviceKey:string;sourceIndex:number;selectedReportedDepartureUtc:string;ownCutoffUtc:string;
@@ -30,6 +33,8 @@ export function prepareP5ConditionalFidsServiceRecoveryV39(payload:unknown,s:Sco
   !Number.isSafeInteger(s.minimumReviewLeadSeconds)||s.minimumReviewLeadSeconds<120||s.minimumReviewLeadSeconds>3600)fail("SEPARATE_PROSPECTIVE_SCOPE");
  const [frame,effective,planned,available,expires,now,start,end]=[s.frozenStudyStartUtc,s.policyEffectiveUtc,s.plannedSourceUtc,s.sourceAvailableUtc,s.sourceExpiresUtc,s.dbObservedUtc,s.serviceWindowStartUtc,s.serviceWindowEndUtc].map(iso);
  if(![frame,effective,planned,available,expires,now,start,end].every(Number.isFinite)||effective>planned||planned>available||available>now||now>=expires||start>=end||frame>start)fail("CLOCK_OR_RETROSPECTIVE_SCOPE");
+ const originalAvailable=s.originalSourceAvailableUtc===undefined?available:iso(s.originalSourceAvailableUtc);
+ if(!Number.isFinite(originalAvailable)||originalAvailable<planned||originalAvailable>available)fail("ORIGINAL_AVAILABLE_CLOCK");
  if(verifyCanonicalFidsEnvelopeV39(payload)!=="verified"||verifyStoredDecodedFidsBodyV39({payload,persisted_response_hash:s.sourceResponseSha256})!=="verified")fail("ORIGINAL_INTEGRITY");
  const p=payload as Record<string,any>,q=p.fidsRequestContract;
  if(q?.schema!=="v39.fids-request-frame.application-intent.v1"||q.direction!=="Departure"||q.airportIcao!==s.airportIcao||
@@ -64,7 +69,7 @@ export function prepareP5ConditionalFidsServiceRecoveryV39(payload:unknown,s:Sco
   // Stable only within the frozen service frame; no revised time or provider ID in the key.
   const serviceKey=composite(number,dest);
   const providerId=typeof f.id==="string"&&f.id.trim()?f.id.trim():null,cutoff=selected-offset;
-  provisional.push({providerId,timely:available<=cutoff&&cutoff-now>s.minimumReviewLeadSeconds*1000&&cutoff<expires&&cutoff-available<=s.maximumStalenessSeconds*1000,
+  provisional.push({providerId,timely:available<=cutoff&&cutoff-now>s.minimumReviewLeadSeconds*1000&&cutoff<expires&&cutoff-originalAvailable<=s.maximumStalenessSeconds*1000,
    candidate:{serviceKey,sourceIndex:i,selectedReportedDepartureUtc:new Date(selected).toISOString(),ownCutoffUtc:new Date(cutoff).toISOString(),
     originEvidence:origin===s.airportIcao?"EXPLICIT_REPORTED_ORIGIN":"REQUESTED_DEPARTURE_CONTEXT_ONLY",
     commercialScope:f.isCargo===false&&f.isPrivate===false&&f.isCharter===false?"EXPLICIT_CORE_FLAGS":"QUERY_FILTERED_SCOPE_UNKNOWN",

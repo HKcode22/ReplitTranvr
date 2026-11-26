@@ -35,6 +35,11 @@ describe("source-bound conditional service preparation",()=>{
   expect(x.stage14MatchedMembershipCount).toBe(1);
   expect(x.privateReviewProposals[0]).toMatchObject({flightInstanceId:id,identityEvidenceTier:"CONDITIONAL_QUERY_FILTERED_SERVICE",reviewedStableServiceKeySha256:id.slice(8)});
   expect(x.actualPreIssued).toBe(false);
+  expect(x.privateReviewProposals[0]).toMatchObject({sourceMemberAvailableUtc:t("05:02"),observedDbClockUtc:t("05:04"),
+   sourceBodySha256:scope.expectedDecodedBodySha256,queryDigestSha256:scope.source.queryDigestSha256});
+  for(const patch of [{dep_scheduled_utc:null},{available_at:null},{available_at:"invalid"},{available_at:t("05:01")}])
+   expect(match(scope,report,[{...m,...patch}],1,t("05:04"),t("05:02")).stage14MatchedMembershipCount).toBe(0);
+  expect(()=>match(scope,report,[m,{...m,analytic_identity_id:"other"}],2,t("05:04"))).toThrow(/DUPLICATE_POPULATION_MEMBER_ID/);
   expect(JSON.stringify(x)).not.toContain(id);
   expect(match(scope,report,[{...m,canonical_flight_instance_id:null}],1,t("05:04")).stage14MatchedMembershipCount).toBe(0);
   expect(match(scope,prepare(scope,[o],[r],t("05:04")),[m],1,t("05:04")).stage14MatchedMembershipCount).toBe(0);
@@ -81,7 +86,8 @@ describe("source-bound conditional service preparation",()=>{
  });
  it("runtime signed read binds the actual stored digest and requires the prospective source marker before raw read",async()=>{
   const {scope,o,r}=fixture();
-  const {expectedDecodedBodySha256,...input}=scope;
+  const {expectedDecodedBodySha256,...rest}=scope;
+  const input={...rest,expectedServiceWindowStartUtc:t("11:00"),expectedServiceWindowEndUtc:t("15:00")};
   const raw=r.raw_payload as any;
   const {canonicalEnvelopeHashSchema,canonicalEnvelopeSha256,...bare}=raw;
   const marked=addCanonicalFidsEnvelopeHashV39({...bare,fidsRequestContract:{...bare.fidsRequestContract,phase5ConditionalService:{protocolSha256:scope.protocolSha256,cohortStartUtc:scope.frozenStudyStartUtc}}});
@@ -100,6 +106,9 @@ describe("source-bound conditional service preparation",()=>{
   };
   const good=make(scope.protocolSha256,expectedDecodedBodySha256);
   expect((await readSigned(good.pool,input)).report.counts.conditionalCandidates).toBe(1);
+  const window=make(scope.protocolSha256,expectedDecodedBodySha256);
+  await expect(readSigned(window.pool,{...input,expectedServiceWindowEndUtc:t("14:00")})).rejects.toThrow(/SIGNED_SOURCE_WINDOW_DRIFT/);
+  expect(window.queries.some(x=>x.includes("SELECT r.raw_payload"))).toBe(false);
   expect(good.queries.at(-1)).toBe("COMMIT");
   for(const [marker,body] of [[h("9"),expectedDecodedBodySha256],[scope.protocolSha256,"bad"]]){
    const rejected=make(marker,body);

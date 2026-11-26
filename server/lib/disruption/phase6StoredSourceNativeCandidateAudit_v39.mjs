@@ -145,7 +145,8 @@ export async function auditP6StoredCommittedNativeSource({readerClient,sourcePoo
   frozenStudyStartUtc:conditional.cohortStartUtc,policyEffectiveUtc:conditional.effectiveUtc,
   minimumReviewLeadSeconds:900,expectedPopulationQueryId:audit.sourcePopulationQueryId,
   expectedResponseSha256:audit.sourceResponseSha256,expectedLocalFrom:conditional.localFrom,
-  expectedLocalTo:conditional.localTo}):null;
+  expectedLocalTo:conditional.localTo,expectedServiceWindowStartUtc:auditedScope.expectedServiceWindowStartUtc,
+  expectedServiceWindowEndUtc:auditedScope.expectedServiceWindowEndUtc}):null;
  const out={status:"ACTUAL_COMMITTED_SOURCE_CANDIDATES_AWAIT_INDEPENDENT_PRE_REVIEW",
   runDayIndex:selector.runDayIndex,horizon:auditedScope.horizon,
   candidateAuditSha256:digestP5ActualSourceCandidateAudit(audit),observedMemberCount:audit.observedMemberCount,
@@ -154,7 +155,7 @@ export async function auditP6StoredCommittedNativeSource({readerClient,sourcePoo
   ...(audit.retainedCrossOriginalIdentityReview?{retainedCrossOriginalIdentityReview:audit.retainedCrossOriginalIdentityReview}:{}),
   ...(conditionalReview?{conditionalSourceReview:{status:conditionalReview.report.status,
     counts:conditionalReview.report.counts,stage14MatchedMembershipCount:conditionalReview.memberReview.stage14MatchedMembershipCount,
-    actualPreIssued:false,providerCalls:0,databaseWrites:0}}:{}),
+    observedDbClockUtc:conditionalReview.observedDbClockUtc,actualPreIssued:false,providerCalls:0,databaseWrites:0}}:{}),
   actualDbClockUtc:audit.actualDbClockUtc,providerCalls:0,databaseWrites:0,signedPrePacketsIssued:0,phase6PaidGo:false};
  Object.defineProperties(out,{privateConditionalSourceReview:{value:conditionalReview,enumerable:false},privateAuditBytes:{value:Buffer.from(JSON.stringify(audit)),enumerable:false},
   privateSourceScope:{value:Object.freeze({...auditedScope,expectedSourceGithubRunId:audit.sourceGithubRunId}),enumerable:false},

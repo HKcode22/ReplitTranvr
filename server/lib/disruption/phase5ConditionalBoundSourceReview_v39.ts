@@ -13,6 +13,7 @@ type ReviewScope={
  frozenStudyStartUtc:string;policyEffectiveUtc:string;minimumReviewLeadSeconds:number;
  expectedPopulationQueryId:string;expectedResponseSha256:string;expectedDecodedBodySha256:string;
  expectedLocalFrom:string;expectedLocalTo:string;
+ expectedServiceWindowStartUtc?:string;expectedServiceWindowEndUtc?:string;
 };
 const SHA=/^[a-f0-9]{64}$/;
 const UUID=/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i;
@@ -23,6 +24,7 @@ const stamp=(x:unknown)=>{
  return new Date(n).toISOString();
 };
 const ms=(x:unknown)=>Date.parse(stamp(x));
+const maybeMs=(x:unknown)=>x instanceof Date?x.getTime():typeof x==="string"?Date.parse(x):NaN;
 export function prepareP5BoundConditionalServiceReview(s:ReviewScope,rows:readonly Record<string,unknown>[],originals:readonly Record<string,unknown>[],clock:Date|string){
  const q=s?.source;
  if(!q||s.ownerProspectiveSeparateTierApproved!==true||![q.manifestSha256,q.queryDigestSha256,q.reviewedReleaseSha256,q.rightsReviewSha256,q.providerContractSha256,q.earlyDrawSha256,s.protocolSha256,s.expectedResponseSha256,s.expectedDecodedBodySha256].every(x=>SHA.test(x??""))||
@@ -43,6 +45,8 @@ export function prepareP5BoundConditionalServiceReview(s:ReviewScope,rows:readon
  p?.fidsRequestContract?.openapiSha256!==q.providerContractSha256||p?.fidsRequestContract?.fromLocal!==s.expectedLocalFrom||
  p?.fidsRequestContract?.toLocal!==s.expectedLocalTo)hold("ORIGINAL_BINDING");
  const n=ms(clock),res=ms(o.reserved_at),ret=ms(o.fids_retrieval_utc),persist=ms(o.raw_persisted_at_utc),avail=ms(o.source_available),bound=ms(o.bound_at_utc),exp=ms(o.source_expires_at_utc);
+ if((s.expectedServiceWindowStartUtc!==undefined&&ms(o.service_window_start_utc)!==ms(s.expectedServiceWindowStartUtc))||
+    (s.expectedServiceWindowEndUtc!==undefined&&ms(o.service_window_end_utc)!==ms(s.expectedServiceWindowEndUtc)))hold("SIGNED_SOURCE_WINDOW_DRIFT");
  if(ms(q.plannedRequestUtc)>res||res>ret||ret>persist||persist>avail||avail>bound||bound>n||n>=exp||
  exp>avail+23*3600000||ms(r.raw_persisted_at_utc)!==persist||ms(r.source_expires_at_utc)!==exp)hold("SOURCE_CLOCK");
  // Bound-at (not merely retrieval/available-at) is the earliest possible
@@ -51,7 +55,7 @@ export function prepareP5BoundConditionalServiceReview(s:ReviewScope,rows:readon
   protocolSha256:s.protocolSha256,ownerProspectiveSeparateTierApproved:true,
   manifestSha256:q.manifestSha256,runDayIndex:q.runDayIndex,sourceResponseSha256:s.expectedResponseSha256,sourceQueryId:s.expectedPopulationQueryId,
   airportIcao:q.airportIcao,frozenStudyStartUtc:s.frozenStudyStartUtc,policyEffectiveUtc:s.policyEffectiveUtc,
-  plannedSourceUtc:stamp(q.plannedRequestUtc),sourceAvailableUtc:stamp(o.bound_at_utc),sourceExpiresUtc:stamp(o.source_expires_at_utc),dbObservedUtc:stamp(clock),
+  plannedSourceUtc:stamp(q.plannedRequestUtc),sourceAvailableUtc:stamp(o.bound_at_utc),originalSourceAvailableUtc:stamp(o.source_available),sourceExpiresUtc:stamp(o.source_expires_at_utc),dbObservedUtc:stamp(clock),
   serviceWindowStartUtc:stamp(o.service_window_start_utc),serviceWindowEndUtc:stamp(o.service_window_end_utc),horizon:q.horizon,
   maximumStalenessSeconds:q.maxPopulationStalenessSeconds,minimumReviewLeadSeconds:s.minimumReviewLeadSeconds
  });
@@ -60,12 +64,17 @@ export function prepareP5BoundConditionalServiceReview(s:ReviewScope,rows:readon
  * does not fabricate a signed permit or an issued PRE. */
 export function matchP5ConditionalStage14Members(
  s:ReviewScope,report:ReturnType<typeof prepareP5BoundConditionalServiceReview>,
- members:readonly Record<string,unknown>[],expectedCount:number,dbClock:string){
+ members:readonly Record<string,unknown>[],expectedCount:number,dbClock:string,originalSourceAvailableUtc?:string){
+ const observed=ms(dbClock),originalAvailable=originalSourceAvailableUtc===undefined?null:ms(originalSourceAvailableUtc);
+ if(originalAvailable!==null&&originalAvailable>observed)hold("MEMBER_SOURCE_CLOCK");
  if(!Number.isSafeInteger(expectedCount)||expectedCount<0||expectedCount>2500||members.length!==expectedCount)hold("MEMBER_COUNT");
- const by=new Map<string,Record<string,unknown>[]>();
+ const by=new Map<string,Record<string,unknown>[]>(),memberIds=new Set<string>();
  for(const m of members){
   if(m.population_query_id!==s.expectedPopulationQueryId||m.response_hash!==s.expectedResponseSha256||m.provider_content_expired_at_utc!==null||
    typeof m.population_member_id!=="string"||!m.population_member_id)hold("MEMBER_CUSTODY");
+  const memberId=String(m.population_member_id);
+  if(memberIds.has(memberId))hold("DUPLICATE_POPULATION_MEMBER_ID");
+  memberIds.add(memberId);
   const key=String(m.analytic_identity_id??"");
   by.set(key,[...(by.get(key)??[]),m]);
  }
@@ -76,14 +85,14 @@ export function matchP5ConditionalStage14Members(
   if(id===null){missingOrAmbiguous++;continue;}
   const rows=by.get(id)??[];
   if(rows.length!==1){missingOrAmbiguous++;continue;}
-  const m=rows[0];
+  const m=rows[0],scheduled=maybeMs(m.dep_scheduled_utc),available=maybeMs(m.available_at);
   if(m.canonical_flight_instance_id!==id||m.source_airport_icao!==s.source.airportIcao||
     m.dep_airport_icao!==s.source.airportIcao||m.arr_airport_icao!==candidate.destinationIcao||
     m.flight_number!==candidate.operatorFlightNumber||m.scope_classification!=="unknown"||
     m.codeshare_resolution_status!=="g5a_conditional_operator_composite_no_native_id"||
     m.source_type!=="fids"||m.population_role!=="requested_airport_primary"||m.query_direction!=="Departure"||
-    ms(m.dep_scheduled_utc)!==ms(candidate.selectedReportedDepartureUtc)||
-    ms(m.available_at)>ms(dbClock)||ms(m.available_at)>ms(candidate.ownCutoffUtc)){
+    !Number.isFinite(scheduled)||!Number.isFinite(available)||scheduled!==ms(candidate.selectedReportedDepartureUtc)||
+    (originalAvailable!==null&&available<originalAvailable)||available>observed||available>ms(candidate.ownCutoffUtc)){
    missingOrAmbiguous++;continue;
   }
   matched.push(Object.freeze({flightInstanceId:id,populationMemberId:String(m.population_member_id),
@@ -92,7 +101,10 @@ export function matchP5ConditionalStage14Members(
    requireProspectiveConditionalSourceMarker:true as const,
    reviewedStableServiceKeySha256:id.slice("leg:g5a:".length),expectedOperatorFlightNumber:candidate.operatorFlightNumber,
    expectedDestinationIcao:candidate.destinationIcao,selectedTNativeUtc:candidate.selectedReportedDepartureUtc,
-   predictionCutoffUtc:candidate.ownCutoffUtc}));
+   predictionCutoffUtc:candidate.ownCutoffUtc,sourceMemberAvailableUtc:new Date(available).toISOString(),
+   observedDbClockUtc:new Date(observed).toISOString(),sourceBodySha256:s.expectedDecodedBodySha256,
+   queryDigestSha256:s.source.queryDigestSha256,expectedGithubSourceRunId:s.source.expectedSourceGithubRunId,
+   manifestSha256:s.source.manifestSha256,runDayIndex:s.source.runDayIndex,horizon:s.source.horizon,airportIcao:s.source.airportIcao}));
  }
  const summary={stage14MatchedMembershipCount:matched.length,missingOrAmbiguous,actualPreIssued:false,providerCalls:0,databaseWrites:0};
  return Object.freeze(Object.defineProperty(summary,"privateReviewProposals",{value:Object.freeze(matched),enumerable:false})) as typeof summary&{readonly privateReviewProposals:readonly (typeof matched)[number][]};
@@ -103,7 +115,8 @@ export async function readP5BoundConditionalServiceReview(pool:P5EReadOnlyPgPool
 /** Runtime-only entry: the caller has verified signed SOURCE packet bytes and
  * an actual committed-query audit. Derive decoded-body digest from the exact
  * existing immutable binding, not from the body to be verified. */
-export async function readP5SignedConditionalServiceReview(pool:P5EReadOnlyPgPool,s:Omit<ReviewScope,"expectedDecodedBodySha256">){
+export async function readP5SignedConditionalServiceReview(pool:P5EReadOnlyPgPool,s:Omit<ReviewScope,"expectedDecodedBodySha256">&{expectedServiceWindowStartUtc:string;expectedServiceWindowEndUtc:string}){
+ if(!s.expectedServiceWindowStartUtc||!s.expectedServiceWindowEndUtc||ms(s.expectedServiceWindowStartUtc)>=ms(s.expectedServiceWindowEndUtc))hold("SIGNED_SOURCE_WINDOW_REQUIRED");
  return readBound(pool,s,true);
 }
 async function readBound(pool:P5EReadOnlyPgPool,input:Omit<ReviewScope,"expectedDecodedBodySha256">&{expectedDecodedBodySha256?:string},signed:boolean){
@@ -135,6 +148,7 @@ async function readBound(pool:P5EReadOnlyPgPool,input:Omit<ReviewScope,"expected
     o.provider_contract_sha256!==q.providerContractSha256||o.early_draw_sha256!==q.earlyDrawSha256||o.original_current!==true||
     o.population_query_id!==s.expectedPopulationQueryId||o.original_response_hash!==s.expectedResponseSha256||o.fids_response_hash!==s.expectedResponseSha256||
     ms(o.source_expires_at_utc)<=ms((await c.query("SELECT clock_timestamp() AS at")).rows[0]?.at)+30000)hold("ORIGINAL_SCOPE_OR_EXPIRY");
+  if(signed&&(ms(o.service_window_start_utc)!==ms(s.expectedServiceWindowStartUtc)||ms(o.service_window_end_utc)!==ms(s.expectedServiceWindowEndUtc)))hold("SIGNED_SOURCE_WINDOW_DRIFT");
   // Existing reader SQL plus a fresh retention fence before retrieving raw.
   const sql=P5_E_BATCH_ORIGINAL_SQL.replace("AND r.raw_payload IS NOT NULL","AND b.source_expires_at_utc>clock_timestamp()+interval '30 seconds' AND r.raw_payload IS NOT NULL");
   if(sql===P5_E_BATCH_ORIGINAL_SQL)hold("QUERY_CONTRACT");
@@ -153,8 +167,8 @@ async function readBound(pool:P5EReadOnlyPgPool,input:Omit<ReviewScope,"expected
   if(fresh.length!==1||ms(fresh[0].at)>=ms(o.source_expires_at_utc))hold("FRESH_MEMBER_CLOCK");
   // Reprepare at actual fresh clock: member reading cannot steal PRE lead.
   const finalReport=prepareP5BoundConditionalServiceReview(s,rows,originals,stamp(fresh[0].at));
-  const memberReview=matchP5ConditionalStage14Members(s,finalReport,members,Number(o.normalized_members_count),stamp(fresh[0].at));
+  const memberReview=matchP5ConditionalStage14Members(s,finalReport,members,Number(o.normalized_members_count),stamp(fresh[0].at),stamp(o.source_available));
   await c.query("COMMIT");began=false;
-  return Object.freeze({report:finalReport,memberReview});
+  return Object.freeze({report:finalReport,memberReview,observedDbClockUtc:stamp(fresh[0].at)});
  }finally{if(began)await c.query("ROLLBACK").catch(()=>{});c.release();}
 }

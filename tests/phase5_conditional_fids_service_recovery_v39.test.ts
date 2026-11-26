@@ -63,6 +63,13 @@ describe("prospective conditional service recovery, separate from physical nativ
   expect(()=>prepare(original([flight()]),{...scope,policyEffectiveUtc:stamp("05:01")})).toThrow(/RETROSPECTIVE/);
   expect(()=>prepare(original([flight()]),{...scope,sourceExpiresUtc:stamp("05:02")})).toThrow(/CLOCK/);
  });
+ it("uses original availability rather than a later binding to measure staleness",()=>{
+  const bound={...scope,sourceAvailableUtc:stamp("05:10"),dbObservedUtc:stamp("05:11"),maximumStalenessSeconds:55*60};
+  expect(prepare(original([flight()]),bound).counts.conditionalCandidates).toBe(1);
+  const real={...bound,originalSourceAvailableUtc:stamp("05:02")};
+  expect(prepare(original([flight()]),real).counts.lateOrStale).toBe(1);
+  expect(()=>prepare(original([flight()]),{...real,originalSourceAvailableUtc:stamp("05:12")})).toThrow(/ORIGINAL_AVAILABLE_CLOCK/);
+ });
  it("rejects mutated body or separate approval absent",()=>{
   const x=original([flight()]);(x as any).departures[0].number="CHANGED";
   expect(()=>prepare(x,scope)).toThrow(/INTEGRITY/);
