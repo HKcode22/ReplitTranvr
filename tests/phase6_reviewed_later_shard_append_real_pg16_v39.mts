@@ -307,8 +307,17 @@ try{
  assert.ok(roster.privateEntries[0].bytes.equals(cf.bytes));
  assert.ok(!JSON.stringify(roster).includes(cf.permit.flightInstanceId));
  verifyPhase7SignedPreFieldProof(cf.proofEnv,cf.permit,cf.policy,[],JSON.parse(roster.privateEntries[0].bytes.toString("utf8")).phase7FieldProof);
- await assert.rejects(readP6PrivateLaterQueueRoster({client:reader,trust,selector,policy:{...queuePolicy,conditionalPreScope:undefined}}),/CONDITIONAL/);
- await assert.rejects(readP6PrivateLaterQueueRoster({client:reader,trust,selector,policy:{...queuePolicy,independentlyApprovedStandaloneProtocolSha256:undefined}}),/MISSING_SIGNED_INDEPENDENT_STANDALONE_REVIEW/);
+ // The SQL hydration boundary intentionally redacts detailed verifier
+ // reasons. Assert its exact public refusal, not private reason strings.
+ const refusal={message:"REFUSED_P5_PHASE6_PRIVATE_PG_HYDRATION_PRIVATE_SQL_READ_UNKNOWN_OR_WITHOUT_COMMIT_PROOF"};
+ await assert.rejects(readP6PrivateLaterQueueRoster({client:reader,trust,selector,policy:{...queuePolicy,conditionalPreScope:undefined}}),refusal);
+ await assert.rejects(readP6PrivateLaterQueueRoster({client:reader,trust,selector,policy:{...queuePolicy,independentlyApprovedStandaloneProtocolSha256:undefined}}),refusal);
+ // The reader rolls back a refused hydration. A valid fresh read must
+ // remain available, without changing the immutable signed day or bytes.
+ const afterRefusals=await readP6PrivateLaterQueueRoster({client:reader,trust,selector,policy:queuePolicy});
+ assert.equal(afterRefusals.packetCount,1);
+ assert.equal(afterRefusals.privateEntries[0].packetSha256,cf.packetSha);
+ assert.ok(afterRefusals.privateEntries[0].bytes.equals(cf.bytes));
  assert.equal((await owner.query("SELECT count(*)::int n FROM phase6_private.signed_run_day_index_revision_v39 WHERE run_day_index=17")).rows[0].n,4);
  assert.equal((await owner.query("SELECT count(*)::int n FROM "+table+" WHERE run_day_index=17")).rows[0].n,7);
  console.log("T071_REAL_PG16_CONDITIONAL_PRIVATE_APPEND_CURRENT_SIGNED_DAY_QUEUE_CONSUMER_NO_REPLAY_CI_ONLY");
