@@ -4,7 +4,7 @@
  * manufactures a review, signs a production registry or grants paid GO.
  * Legacy Stage14 field names are retained for compatible execution, but
  * the evidence is explicitly conditional service / reported schedule only. */
-import {createHash,createPublicKey,verify} from "node:crypto";
+import {createHash,createPublicKey,verify,sign,type KeyObject} from "node:crypto";
 import {attachPhase7SignedProofBeforeRoster} from "./phase7SignedPreFieldProof_v39";
 import {hashPhase7DurableCandidate} from "./phase7DurableDerivedBundleCandidate_v39";
 import type {Phase7CanonicalFieldDisposition} from "./phase7CanonicalFieldParity_v39";
@@ -297,4 +297,98 @@ export async function prepareP5ConditionalPrePermitPageFromSignedReviews(pool:P5
  // Existing fresh restricted original read revalidates every member, clock,
  // feature bundle, witness or standalone protocol and Stage14 preflight.
  return prepareP5ConditionalPrePermitPageForIndependentSigning(pool,scope,inputs);
+}
+
+/** Independent restricted SOURCE lane, not the registry publisher. An
+ * explicit prospective protected T24 delegation may use the existing
+ * independent lane authority key in this distinct review domain. No
+ * automatic standalone later/missingness or native identity assertion. */
+export type P5ConditionalT24ReviewDelegation={
+ schema:"v39.phase5.conditional-t24-permit-review-delegation.v1";approved:true;
+ protocolSha256:string;externalContentUseReviewSha256:string;reviewerFingerprintSha256:string;
+ reportedScheduleSemanticsSha256:string;validFromUtc:string;validUntilUtc:string;
+};
+export function readP5ConditionalT24ReviewDelegation(policyBytes:Buffer,expectedPolicySha256:string,
+ scope:P5SignedConditionalFeatureReadScope,expectedReviewedCodeSha:string,expectedReviewerFingerprintSha256:string){
+ if(!Buffer.isBuffer(policyBytes)||policyBytes.length<100||policyBytes.length>35000||!H.test(expectedPolicySha256??"")||
+   hash(policyBytes)!==expectedPolicySha256||!C.test(expectedReviewedCodeSha??"")||!H.test(expectedReviewerFingerprintSha256??""))
+  return hold("UNPINNED_CONDITIONAL_T24_DELEGATION");
+ let p:any;try{p=JSON.parse(policyBytes.toString("utf8"));}catch{return hold("UNPINNED_CONDITIONAL_T24_DELEGATION");}
+ const q=scope?.source,v=p?.nativeLaterReview,d=p?.conditionalT24PermitReview as P5ConditionalT24ReviewDelegation,
+  f=p?.conditionalPreFeatureReview,cfg=v?.selectedTConfig;
+ const keys=["schema","approved","protocolSha256","externalContentUseReviewSha256","reviewerFingerprintSha256","reportedScheduleSemanticsSha256","validFromUtc","validUntilUtc"];
+ if(!q||q.horizon!=="T-24h"||p.schema!=="v39.phase6.delegated-daily-source-review-policy.v1"||
+   p.delegatedDailyPacketProductionApproved!==true||p.approvedCodeSha!==expectedReviewedCodeSha||
+   p.manifestSha256!==q.manifestSha256||p.rightsSha256!==q.rightsReviewSha256||p.releaseSha256!==q.reviewedReleaseSha256||
+   p.providerContractSha256!==q.providerContractSha256||!d||Object.keys(d).sort().join("|")!==keys.sort().join("|")||
+   d.schema!=="v39.phase5.conditional-t24-permit-review-delegation.v1"||d.approved!==true||
+   d.protocolSha256!==scope.protocolSha256||d.externalContentUseReviewSha256!==scope.externalContentUseReviewSha256||
+   d.reviewerFingerprintSha256!==expectedReviewerFingerprintSha256||!H.test(d.reportedScheduleSemanticsSha256??"")||
+   f?.schema!=="v39.phase5.conditional-pre-feature-review-policy.v1"||f.approved!==true||f.rightsSha256!==p.rightsSha256||
+   f.protocolSha256!==d.protocolSha256||f.externalContentUseReviewSha256!==d.externalContentUseReviewSha256||
+   v?.approved!==true||v.nativeT24ReviewApproved!==true||v.independentT24WitnessProtocolReviewed!==true||
+   v.reviewedWitnessOnlyRole!==P5_STAGE28_GROUPS.witness||
+   v.conditionalT24Scope?.protocolSha256!==d.protocolSha256||v.conditionalT24Scope?.externalContentUseReviewSha256!==d.externalContentUseReviewSha256||
+   Object.keys(v.conditionalT24Scope??{}).length!==2||
+   v.frameSha256!==p.frameSha256||v.configSha256!==p.configSha256||
+   ![v.frameSha256,v.configSha256,v.builderSha256,v.runAndRetentionEvidenceSha256,v.laterReviewerFingerprintSha256,cfg?.artifactHash].every(x=>H.test(x??""))||
+   v.laterReviewerFingerprintSha256===d.reviewerFingerprintSha256||cfg?.verifiedProviderNativeSchedule!==true||
+   cfg.milestone!=="departure.scheduledTime.utc"||cfg.semanticsEvidenceSha256!==d.reportedScheduleSemanticsSha256||
+   typeof cfg.version!=="string"||!cfg.version.trim()||time(d.validFromUtc)>=time(d.validUntilUtc)||
+   time(d.validFromUtc)<time(v.validFromUtc)||time(d.validUntilUtc)>time(v.validUntilUtc)||time(d.validFromUtc)>time(q.plannedRequestUtc)||
+   time(v.builderFrozenAtUtc)>time(q.plannedRequestUtc))
+  return hold("EXACT_CONDITIONAL_T24_DELEGATION_REQUIRED");
+ return {delegation:d,frameSha256:v.frameSha256 as string,configSha256:v.configSha256 as string,
+  builderSha256:v.builderSha256 as string,builderFrozenAtUtc:v.builderFrozenAtUtc as string,
+  runAndRetentionEvidenceSha256:v.runAndRetentionEvidenceSha256 as string,selectedTConfig:cfg as Review["selectedTConfig"]};
+}
+export async function issueP5ConditionalT24SignedReviewPage(pool:P5EReadOnlyPgPool,scope:P5SignedConditionalFeatureReadScope,
+ requestedFlightIds:readonly string[],input:{policyBytes:Buffer;expectedPolicySha256:string;expectedReviewedCodeSha:string;
+  expectedReviewerFingerprintSha256:string;forbiddenSignerFingerprints:readonly string[];signer:KeyObject;env:NodeJS.ProcessEnv}){
+ const q=scope?.source;
+ if(!q||!input||input.env.P6_PHASE7_PRE_LANE_EVIDENCE_AUTHORITY_APPROVED!=="1"||
+   input.env.P6_PHASE7_PRE_LANE_EVIDENCE_AUTHORITY_FINGERPRINT_SHA256!==input.expectedReviewerFingerprintSha256||
+   input.env.P6_NONPAID_DAILY_POLICY_SHA256!==input.expectedPolicySha256||
+   input.env.V39_P5_MANIFEST_SHA256!==q.manifestSha256||input.env.V39_P5_RIGHTS_SHA256!==q.rightsReviewSha256||
+   input.env.AERODATABOX_API_KEY||input.env.RAPIDAPI_KEY||input.env.AERODATABOX_WEBHOOK_SECRET||
+   input.env.P6_PHASE7_PRE_PROOF_REVIEWER_PRIVATE_KEY_BASE64||input.env.P6_PRIVATE_LATER_REVIEWER_KEY_BASE64||
+   input.env.P6_PRIVATE_DAY_REVIEWER_KEY_BASE64||input.env.P6_PRIVATE_PUBLISHER_DATABASE_URL||
+   !Array.isArray(input.forbiddenSignerFingerprints)||input.forbiddenSignerFingerprints.some(k=>!H.test(k)||k===input.expectedReviewerFingerprintSha256)||
+   input.expectedReviewerFingerprintSha256===input.env.P6_PHASE7_PRE_PROOF_REVIEWER_FINGERPRINT_SHA256||
+   !Array.isArray(requestedFlightIds)||requestedFlightIds.length<1||requestedFlightIds.length>96||
+   requestedFlightIds.some(id=>!/^leg:g5a:[a-f0-9]{64}$/.test(id))||new Set(requestedFlightIds).size!==requestedFlightIds.length)
+  return hold("INDEPENDENT_T24_ISSUER_SCOPE");
+ try{if(input.signer?.type!=="private"||input.signer.asymmetricKeyType!=="ed25519"||
+   hash(createPublicKey(input.signer).export({format:"der",type:"spki"}))!==input.expectedReviewerFingerprintSha256)
+  return hold("INDEPENDENT_T24_ISSUER_KEY");}catch{return hold("INDEPENDENT_T24_ISSUER_KEY");}
+ const v=readP5ConditionalT24ReviewDelegation(input.policyBytes,input.expectedPolicySha256,scope,input.expectedReviewedCodeSha,input.expectedReviewerFingerprintSha256);
+ const actual=await readP5SignedConditionalServiceReview(pool,scope),now=time(actual.observedDbClockUtc);
+ if(now<time(v.delegation.validFromUtc)||now>=time(v.delegation.validUntilUtc))return hold("CONDITIONAL_T24_DELEGATION_CLOCK");
+ const proposals=new Map(actual.memberReview.privateReviewProposals.map(p=>[p.flightInstanceId,p])),
+  drafts=new Map(actual.privateFeatureDrafts.map(d=>[d.flightInstanceId,d]));
+ if(proposals.size!==actual.memberReview.privateReviewProposals.length||drafts.size!==actual.privateFeatureDrafts.length)
+  return hold("AMBIGUOUS_PAGE_SOURCE");
+ const reviews=requestedFlightIds.map(flightInstanceId=>{
+  const member=proposals.get(flightInstanceId),draft=drafts.get(flightInstanceId);
+  if(!member||!draft||time(member.predictionCutoffUtc)>=time(v.delegation.validUntilUtc))return hold("CURRENT_ELIGIBLE_MEMBER_REQUIRED");
+  const evidence=digestP5ConditionalPermitEvidence(member,draft,actual.privateSourceBoundAtUtc);
+  const review:Review={schema:"v39.phase5.external-conditional-pre-permit-review.v1",reviewedCodeSha:input.expectedReviewedCodeSha,
+   reviewedProtocolSha256:scope.protocolSha256,reviewedMemberEvidenceSha256:evidence,reviewedAtUtc:actual.observedDbClockUtc,
+   reviewedFrameSha256:v.frameSha256,reviewedConfigSha256:v.configSha256,
+   reviewedConditionalServiceEvidenceSha256:hash(JSON.stringify({schema:"v39.phase5.delegated-conditional-t24-evidence.v1",policySha256:input.expectedPolicySha256,memberEvidenceSha256:evidence})),
+   reviewedReportedScheduleEvidenceSha256:v.delegation.reportedScheduleSemanticsSha256,reviewedRunAndRetentionEvidenceSha256:v.runAndRetentionEvidenceSha256,
+   frozenBuilderSha256:v.builderSha256,builderFrozenAtUtc:v.builderFrozenAtUtc,selectedTConfig:v.selectedTConfig,
+   reviewedConditionalScheduleSourceAndUse:true,nativeOperatingLegCertified:false};
+  const b=Buffer.from(JSON.stringify(review));
+  // Independently prove the exact prospective permit can be constructed
+  // before signing the review. No PRE/witness claim is issued here.
+  constructFromBound(scope,actual,member,draft,review,{expectedReviewArtifactSha256:hash(b),expectedReviewedCodeSha:input.expectedReviewedCodeSha,
+   expectedConditionalProtocolSha256:scope.protocolSha256,expectedExternalContentUseReviewSha256:scope.externalContentUseReviewSha256});
+  return {flightInstanceId,reviewArtifactBase64:b.toString("base64"),reviewArtifactSha256:hash(b)};
+ });
+ const page:P5ConditionalReviewPage={schema:"v39.phase5.conditional-pre-external-review-page.v1",reviewedCodeSha:input.expectedReviewedCodeSha,
+  manifestSha256:q.manifestSha256,rightsSha256:q.rightsReviewSha256,protocolSha256:scope.protocolSha256,externalContentUseReviewSha256:scope.externalContentUseReviewSha256,
+  queryDigestSha256:q.queryDigestSha256,populationQueryId:scope.expectedPopulationQueryId,responseSha256:scope.expectedResponseSha256,runDayIndex:q.runDayIndex,
+  horizon:q.horizon,sourceGithubRunId:q.expectedSourceGithubRunId,reviews};
+ return {page,signatureBase64:sign(null,p5ConditionalReviewPagePreimage(page),input.signer).toString("base64")} satisfies P5ConditionalReviewPageWire;
 }

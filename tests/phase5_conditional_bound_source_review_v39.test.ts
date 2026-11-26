@@ -8,7 +8,7 @@ import {createHash} from "node:crypto";
 import {describe,it,expect} from "vitest";
 import {addCanonicalFidsEnvelopeHashV39} from "../server/lib/disruption/fidsEnvelopeCanonical_v39";
 import {readP7ExactConditionalSelectedFeaturesPage,readP7ReviewedTierSelectedFeaturesPage,requireP7ActualSourceReadback} from "../server/lib/disruption/phase7IndependentPreSourceReader_v39";
-import {digestP5ConditionalPermitEvidence,prepareP5ConditionalPrePermitForIndependentSigning,prepareP5ConditionalPrePermitPageForIndependentSigning,buildP5ConditionalPrePacketPreview,buildP5ConditionalPreProofPage,completeP5ConditionalPreProofPage,attachP5ConditionalPreFieldProof,prepareP5ConditionalPrePermitPageFromSignedReviews,p5ConditionalReviewPagePreimage,type P5ConditionalReviewPage} from "../server/lib/disruption/phase5ConditionalPrePermitPreparation_v39";
+import {digestP5ConditionalPermitEvidence,prepareP5ConditionalPrePermitForIndependentSigning,prepareP5ConditionalPrePermitPageForIndependentSigning,buildP5ConditionalPrePacketPreview,buildP5ConditionalPreProofPage,completeP5ConditionalPreProofPage,attachP5ConditionalPreFieldProof,prepareP5ConditionalPrePermitPageFromSignedReviews,p5ConditionalReviewPagePreimage,issueP5ConditionalT24SignedReviewPage,type P5ConditionalReviewPage} from "../server/lib/disruption/phase5ConditionalPrePermitPreparation_v39";
 import {generateKeyPairSync,sign} from "node:crypto";
 import {hashPhase7DurableCandidate} from "../server/lib/disruption/phase7DurableDerivedBundleCandidate_v39";
 import {digestP5LaterShardPrivatePacketFileManifest,signedP5ExternalLaterReviewBytes,verifyP5ExternalEd25519ReviewOfLaterShard,type P5Ed25519ExternalLaterShardReview,type P5Ed25519ReviewWireEnvelope} from "../server/lib/disruption/phase5ExternalEd25519LaterShardReviewerVerify_v39";
@@ -468,4 +468,55 @@ it("T025 independent conditional authority routing refuses absent scope and mixe
  await expect(readP7ReviewedTierSelectedFeaturesPage(pool,[p,n],h("8"))).rejects.toThrow("MIXED_IDENTITY_TIERS");
  await expect(readP7ReviewedTierSelectedFeaturesPage(pool,[n,p],h("8"))).rejects.toThrow("MIXED_IDENTITY_TIERS");
  expect(calls).toBe(0);
+});
+
+it("T048 independent conditional T24 issuer reads one genuine marked original, signs exact review page, and refuses uncommissioned scope",async()=>{
+ const {scope,o,r}=fixture(),selected="2035-11-26T05:45:00.000Z",windowStart="2035-11-26T05:00:00.000Z",windowEnd="2035-11-26T06:00:00.000Z";
+ const raw=r.raw_payload as any,{canonicalEnvelopeHashSchema,canonicalEnvelopeSha256,...bare}=raw;
+ const departures=[{...bare.departures[0],departure:{scheduledTime:{utc:selected},revisedTime:{utc:"2035-11-26T06:00:00.000Z"}},arrival:{...bare.departures[0].arrival,scheduledTime:{utc:"2035-11-26T13:00:00.000Z"}}}];
+ const hash=(x:string|Buffer)=>createHash("sha256").update(x).digest("hex"),body=Buffer.from(JSON.stringify({departures,arrivals:[]}));
+ const from="2035-11-26T13:00",to="2035-11-26T14:00",frozen=windowStart;
+ const marked=addCanonicalFidsEnvelopeHashV39({...bare,departures,fidsRequestContract:{...bare.fidsRequestContract,fromLocal:from,toLocal:to,phase5ConditionalService:{protocolSha256:scope.protocolSha256,cohortStartUtc:frozen}},
+  originalDecodedEntityBodyEvidence:{...bare.originalDecodedEntityBodyEvidence,bodySha256:hash(body),bodyLengthBytes:body.length,bodyBase64:body.toString("base64")}});
+ const proofScope={...scope,source:{...scope.source,horizon:"T-24h" as const},frozenStudyStartUtc:frozen,expectedLocalFrom:from,expectedLocalTo:to,
+  expectedServiceWindowStartUtc:windowStart,expectedServiceWindowEndUtc:windowEnd,externalContentUseReviewSha256:h("8"),expectedDecodedBodySha256:hash(body)};
+ const original={...r,raw_payload:marked,decoded_original_body_sha256:hash(body)},bound={...o,horizon:"T-24h",service_window_start_utc:windowStart,service_window_end_utc:windowEnd,
+  decoded_original_body_sha256:hash(body),conditional_source_protocol_sha256:scope.protocolSha256,normalized_members_count:1};
+ const id=prepare(proofScope,[bound],[original],t("05:04")).privateCandidates[0].stage14ConditionalFlightInstanceId!;
+ const member={population_query_id:scope.expectedPopulationQueryId,response_hash:scope.expectedResponseSha256,provider_content_expired_at_utc:null,population_member_id:"member-t24",analytic_identity_id:id,canonical_flight_instance_id:id,source_airport_icao:"WSSS",dep_airport_icao:"WSSS",arr_airport_icao:"YSSY",flight_number:"SQ78",scope_classification:"unknown",codeshare_resolution_status:"g5a_conditional_operator_composite_no_native_id",source_type:"fids",population_role:"requested_airport_primary",query_direction:"Departure",dep_scheduled_utc:selected,available_at:t("05:02")};
+ const make=()=>{const queries:string[]=[];return {queries,pool:{connect:async()=>({release(){},query:async(sql:string)=>{
+  queries.push(sql);
+  if(sql.startsWith("SELECT session_user"))return {rows:[{login:"phase5_p5_source_login_20261108",actor:"phase5_fids_source_prod_20261107",db:"neondb",version:160010,ro:"on",primary:true}]};
+  if(sql.includes("FROM clean.phase5_fids_allowed_query_v39"))return {rows:[bound]};
+  if(sql.includes("SELECT r.raw_payload"))return {rows:[original]};
+  if(sql.includes("FROM clean.flight_population"))return {rows:[member]};
+  if(sql.startsWith("SELECT clock_timestamp()"))return {rows:[{at:t("05:04")}]};
+  return {rows:[]};
+ }})}}};
+ const keys=generateKeyPairSync("ed25519"),fp=hash(keys.publicKey.export({format:"der",type:"spki"})),code="a".repeat(40);
+ const conditional={protocolSha256:scope.protocolSha256,externalContentUseReviewSha256:proofScope.externalContentUseReviewSha256};
+ const policy={schema:"v39.phase6.delegated-daily-source-review-policy.v1",delegatedDailyPacketProductionApproved:true,approvedCodeSha:code,
+  manifestSha256:scope.source.manifestSha256,rightsSha256:scope.source.rightsReviewSha256,releaseSha256:scope.source.reviewedReleaseSha256,
+  providerContractSha256:scope.source.providerContractSha256,frameSha256:h("4"),configSha256:h("5"),
+  conditionalPreFeatureReview:{schema:"v39.phase5.conditional-pre-feature-review-policy.v1",approved:true,rightsSha256:scope.source.rightsReviewSha256,...conditional},
+  conditionalT24PermitReview:{schema:"v39.phase5.conditional-t24-permit-review-delegation.v1",approved:true,...conditional,reviewerFingerprintSha256:fp,
+   reportedScheduleSemanticsSha256:h("7"),validFromUtc:t("04:00"),validUntilUtc:t("23:00")},
+  nativeLaterReview:{approved:true,nativeT24ReviewApproved:true,independentT24WitnessProtocolReviewed:true,reviewedWitnessOnlyRole:"phase5_fids_t24_witness_prod_20261107",
+   conditionalT24Scope:conditional,frameSha256:h("4"),configSha256:h("5"),builderSha256:h("9"),builderFrozenAtUtc:t("04:00"),
+   runAndRetentionEvidenceSha256:h("8"),laterReviewerFingerprintSha256:h("c"),validFromUtc:t("00:00"),validUntilUtc:t("23:00"),
+   selectedTConfig:{milestone:"departure.scheduledTime.utc",version:"v1",artifactHash:h("a"),verifiedProviderNativeSchedule:true,semanticsEvidenceSha256:h("7")}}};
+ const b=Buffer.from(JSON.stringify(policy)),sha=hash(b),input={policyBytes:b,expectedPolicySha256:sha,expectedReviewedCodeSha:code,
+  expectedReviewerFingerprintSha256:fp,forbiddenSignerFingerprints:[h("c")],signer:keys.privateKey,env:{P6_PHASE7_PRE_LANE_EVIDENCE_AUTHORITY_APPROVED:"1",
+   P6_PHASE7_PRE_LANE_EVIDENCE_AUTHORITY_FINGERPRINT_SHA256:fp,P6_NONPAID_DAILY_POLICY_SHA256:sha,
+   V39_P5_MANIFEST_SHA256:scope.source.manifestSha256,V39_P5_RIGHTS_SHA256:scope.source.rightsReviewSha256}};
+ const db=make(),wire=await issueP5ConditionalT24SignedReviewPage(db.pool,proofScope,[id],input);
+ expect(db.queries.filter(x=>x.includes("SELECT r.raw_payload"))).toHaveLength(1);
+ const next=make(),prepared=await prepareP5ConditionalPrePermitPageFromSignedReviews(next.pool,proofScope,[id],wire,
+  {expectedReviewerFingerprintSha256:fp,reviewerPublicKeyPem:keys.publicKey.export({format:"pem",type:"spki"}).toString(),expectedReviewedCodeSha:code,forbiddenSignerFingerprints:[h("c")]});
+ expect(prepared.privatePrepared[0].privatePermit).toMatchObject({flightInstanceId:id,horizon:"T-24h",identityEvidenceTier:"CONDITIONAL_QUERY_FILTERED_SERVICE"});
+ expect(prepared.privatePrepared[0].privateWitnessReview).toMatchObject({reviewedConditionalProtocolSha256:scope.protocolSha256,expectedT24CutoffUtc:t("05:45")});
+ const deny=make(),bad=Buffer.from(JSON.stringify({...policy,conditionalT24PermitReview:undefined}));
+ await expect(issueP5ConditionalT24SignedReviewPage(deny.pool,proofScope,[id],{...input,policyBytes:bad,expectedPolicySha256:hash(bad),env:{...input.env,P6_NONPAID_DAILY_POLICY_SHA256:hash(bad)}})).rejects.toThrow("EXACT_CONDITIONAL_T24_DELEGATION_REQUIRED");
+ await expect(issueP5ConditionalT24SignedReviewPage(deny.pool,proofScope,[id],{...input,forbiddenSignerFingerprints:[fp]})).rejects.toThrow("INDEPENDENT_T24_ISSUER_SCOPE");
+ expect(deny.queries).toHaveLength(0);
 });
