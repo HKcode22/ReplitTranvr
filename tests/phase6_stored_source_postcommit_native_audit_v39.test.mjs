@@ -68,7 +68,7 @@ test("feature readback is not called without approved purpose; mismatched privat
 });
 
 
-import {admitP6NativeLaterRuntime,planP6NativeLaterAppendScope,p6NativeLaterReadbackDiagnostics} from "../scripts/v39_phase6_stored_source_postcommit_native_later_v39.mjs";
+import {admitP6NativeLaterRuntime,planP6NativeLaterAppendScope,p6NativeLaterReadbackDiagnostics,selectP6ConditionalT24ReviewPage} from "../scripts/v39_phase6_stored_source_postcommit_native_later_v39.mjs";
 function runtimeFixture(){
  const dayKey=generateKeyPairSync("ed25519"),queryKey=generateKeyPairSync("ed25519"),laterKey=generateKeyPairSync("ed25519"),custodyKey=generateKeyPairSync("ed25519");
  const fp=k=>sha(k.publicKey.export({type:"spki",format:"der"})),pem=k=>k.publicKey.export({type:"spki",format:"pem"}).toString(),
@@ -165,4 +165,15 @@ test("same-child later PRE reports count-only funnel and lead sensitivity even w
  assert.equal(p6NativeLaterReadbackDiagnostics({observedMemberCount:0,candidateCount:0},{reviewEntryCount:0},null,true).sourceAuditOnlyReason,"NO_OBSERVED_MEMBERS");
  assert.equal(p6NativeLaterReadbackDiagnostics({observedMemberCount:4,candidateCount:2},{reviewEntryCount:0},null,true).sourceAuditOnlyReason,"NO_PENDING_REVIEW_ENTRIES");
  assert.equal(p6NativeLaterReadbackDiagnostics({observedMemberCount:4,candidateCount:2},{reviewEntryCount:2},{matchedCount:0},true).sourceAuditOnlyReason,"NO_MATCHED_NATIVE_FEATURES");
+});
+
+test("T050 selects still-live unindexed conditional T24 independently of native count",()=>{
+ const ids=[0,1,2,3].map(i=>"leg:g5a:"+String(i+1).repeat(64)),now="2035-11-25T05:00:00.000Z";
+ const actual={privateConditionalSourceScope:{source:{horizon:"T-24h",runDayIndex:2}},privateConditionalSourceReview:{
+  privateFeatureDrafts:ids.map(flightInstanceId=>({flightInstanceId})),memberReview:{privateReviewProposals:ids.map((flightInstanceId,i)=>({flightInstanceId,predictionCutoffUtc:["2035-11-25T05:25:00.000Z","2035-11-25T05:15:00.000Z","2035-11-25T05:30:00.000Z","2035-11-25T08:01:00.000Z"][i]}))}}};
+ const current={status:"CURRENT_PRIVATE_T24_REGISTRY_SET_NO_GO",runDayIndex:2,observedDbClockUtc:now,privateExistingFlightIds:new Set([ids[2]])};
+ assert.deepEqual(selectP6ConditionalT24ReviewPage(actual,current),[ids[0]]);
+ assert.deepEqual(selectP6ConditionalT24ReviewPage(actual,{...current,privateExistingFlightIds:new Set([ids[0],ids[2]])}),[]);
+ assert.throws(()=>selectP6ConditionalT24ReviewPage(actual,{...current,runDayIndex:3}),/CONDITIONAL_T24_PAGE_SCOPE/);
+ assert.throws(()=>selectP6ConditionalT24ReviewPage({...actual,privateConditionalSourceReview:{...actual.privateConditionalSourceReview,privateFeatureDrafts:[{flightInstanceId:ids[0]},{flightInstanceId:ids[0]}]}},current),/CONDITIONAL_T24_PAGE_SCOPE/);
 });

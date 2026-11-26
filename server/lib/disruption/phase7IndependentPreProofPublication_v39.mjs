@@ -47,5 +47,6 @@ export async function resolveP7ConditionalPublicationPage({pool,scope,requestedF
  const preview=buildP5ConditionalPreProofPage(prepared.privatePrepared);
  const proofs=await resolveP7PublicationProofs({preview,env:protectedEnv,port,readClock,
   forbiddenSignerFingerprints:[...forbiddenSignerFingerprints,authority.expectedReviewerFingerprintSha256]});
- return completeP5ConditionalPreProofPage(preview,protectedEnv,policy.reviewSha256,policy.dispositions,proofs.phase7IndependentProofsByPermitSha256);
+ const done=completeP5ConditionalPreProofPage(preview,protectedEnv,policy.reviewSha256,policy.dispositions,proofs.phase7IndependentProofsByPermitSha256);
+ return Object.freeze(Object.defineProperties({...done},{privateAttachedPackets:{value:done.privateAttachedPackets,enumerable:false},privateSourceExpiresAtUtc:{value:prepared.privateSourceExpiresAtUtc,enumerable:false}}));
 }

@@ -152,8 +152,8 @@ export async function prepareP5ConditionalPrePermitPageForIndependentSigning(poo
  const summary={status:"CONDITIONAL_STAGE14_PERMIT_PAGE_PREPARED_NOT_SIGNED",preparedCount:prepared.length,originalBodyReadCount:1,
   identityEvidenceTier:"CONDITIONAL_QUERY_FILTERED_SERVICE",nativeOperatingLegCertified:false,physicalGateOutCertified:false,
   signedPrePacketsIssued:0,providerCalls:0,databaseWrites:0,phase6PaidGo:false};
- return Object.freeze(Object.defineProperty(summary,"privatePrepared",{value:Object.freeze(prepared),enumerable:false})) as typeof summary&{
-  readonly privatePrepared:readonly ReturnType<typeof constructFromBound>[]};
+ return Object.freeze(Object.defineProperties(summary,{privatePrepared:{value:Object.freeze(prepared),enumerable:false},privateSourceExpiresAtUtc:{value:read.privateSourceExpiresAtUtc,enumerable:false}})) as typeof summary&{
+  readonly privatePrepared:readonly ReturnType<typeof constructFromBound>[];readonly privateSourceExpiresAtUtc:string};
 }
 export async function prepareP5ConditionalPrePermitForIndependentSigning(pool:P5EReadOnlyPgPool,scope:P5SignedConditionalFeatureReadScope,
  flightInstanceId:string,reviewBytes:Buffer,pins:Pins){

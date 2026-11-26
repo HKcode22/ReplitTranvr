@@ -371,7 +371,7 @@ export async function auditP6StoredCommittedNativeSource({readerClient,sourcePoo
  const conditional=auditedScope.conditionalServiceScope;
  const featurePolicy=policy.conditionalPreFeatureReview;
  if(conditional&&featurePolicy&&featurePolicy.protocolSha256!==conditional.protocolSha256)fail("CONDITIONAL_FEATURE_PROTOCOL_DRIFT");
- const conditionalReview=conditional?await readP5SignedConditionalServiceReview(sourcePool,{
+ const conditionalScope=conditional?Object.freeze({
   source:{...auditedScope,expectedSourceGithubRunId:audit.sourceGithubRunId},
   protocolSha256:conditional.protocolSha256,ownerProspectiveSeparateTierApproved:true,
   frozenStudyStartUtc:conditional.cohortStartUtc,policyEffectiveUtc:conditional.effectiveUtc,
@@ -380,6 +380,7 @@ export async function auditP6StoredCommittedNativeSource({readerClient,sourcePoo
   expectedLocalTo:conditional.localTo,expectedServiceWindowStartUtc:auditedScope.expectedServiceWindowStartUtc,
   expectedServiceWindowEndUtc:auditedScope.expectedServiceWindowEndUtc,
   ...(featurePolicy?{externalContentUseReviewSha256:featurePolicy.externalContentUseReviewSha256}:{})}):null;
+ const conditionalReview=conditionalScope?await readP5SignedConditionalServiceReview(sourcePool,conditionalScope):null;
  const out={status:"ACTUAL_COMMITTED_SOURCE_CANDIDATES_AWAIT_INDEPENDENT_PRE_REVIEW",
   runDayIndex:selector.runDayIndex,horizon:auditedScope.horizon,
   candidateAuditSha256:digestP5ActualSourceCandidateAudit(audit),observedMemberCount:audit.observedMemberCount,
@@ -390,7 +391,7 @@ export async function auditP6StoredCommittedNativeSource({readerClient,sourcePoo
     counts:conditionalReview.report.counts,stage14MatchedMembershipCount:conditionalReview.memberReview.stage14MatchedMembershipCount,
     observedDbClockUtc:conditionalReview.observedDbClockUtc,featureReview:conditionalReview.conditionalFeatureReview,actualPreIssued:false,providerCalls:0,databaseWrites:0}}:{}),
   actualDbClockUtc:audit.actualDbClockUtc,providerCalls:0,databaseWrites:0,signedPrePacketsIssued:0,phase6PaidGo:false};
- Object.defineProperties(out,{privateConditionalSourceReview:{value:conditionalReview,enumerable:false},privateAuditBytes:{value:Buffer.from(JSON.stringify(audit)),enumerable:false},
+ Object.defineProperties(out,{privateConditionalSourceReview:{value:conditionalReview,enumerable:false},privateConditionalSourceScope:{value:conditionalScope,enumerable:false},privateAuditBytes:{value:Buffer.from(JSON.stringify(audit)),enumerable:false},
   privateSourceScope:{value:Object.freeze({...auditedScope,expectedSourceGithubRunId:audit.sourceGithubRunId}),enumerable:false},
   privateSourceRegistrySha256:{value:selected.entry.fileSha256,enumerable:false},
   privateSourceRegistryPath:{value:selected.entry.filePath,enumerable:false},

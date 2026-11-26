@@ -366,7 +366,7 @@ describe("source-bound conditional service preparation",()=>{
    t24ReviewerPublicKeyPem:reviewerPem,conditionalT24Scope:gate.conditionalPreScope};
   const t24Reg={schema:"v39.phase6.conditional-t24-private-registry.v1",runDayIndex:p.runDayIndex,shardIndex:1,reviewedCodeSha:gate.approvedCodeSha,
    manifestSha256:gate.manifestSha256,rightsSha256:gate.rightsSha256,releaseSha256:p.expectedReviewedReleaseSha256,
-   sourceRegistryPath:sourcePath,sourceRegistrySha256:hd(srcBytes),sourceReviewEvidenceSha256:sourceEvidence,conditionalT24Scope:gate.conditionalPreScope,
+   sourceRegistryPath:sourcePath,sourceRegistrySha256:hd(srcBytes),sourceReviewEvidenceSha256:sourceEvidence,conditionalT24Scope:gate.conditionalPreScope,sourceExpiresAtUtc:t("23:00"),
    entries:[{filePath:t24Path,packetSha256:t24Digest,flightInstanceId:p.flightInstanceId,queryDigestSha256:p.queryDigestSha256,
     selectedTNativeUtc:t24Permit.selectedTNativeUtc,cutoffUtc:t("06:00")}]};
   const idx={runDayIndex:p.runDayIndex,manifestSha256:gate.manifestSha256,reviewedCodeSha:gate.approvedCodeSha,
