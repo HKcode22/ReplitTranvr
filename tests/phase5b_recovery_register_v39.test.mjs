@@ -34,6 +34,8 @@ function validateRegister(rows){
 test("consecutive F/I/C/T identifiers, valid reciprocal references and durable operator entrypoint",()=>{
  const rows=parseRegister(doc);validateRegister(rows);
  for(const row of rows.filter(r=>r[0].startsWith("T")))for(const path of row[6].split(";").map(x=>x.trim())){
+  // Cross-repository fixtures must be immutable exact-commit links; existence is checked separately in relay CI and checkpoint.
+  if(/^https:\/\/github\.com\/HKcode22\/TravnrClockRelay\/blob\/[a-f0-9]{40}\/(?:isolated\/)?[A-Za-z0-9_.-]+\.test\.mjs$/.test(path))continue;
   assert.match(path,/^(tests\/|\.github\/workflows\/)[A-Za-z0-9_.\/-]+$/);
   assert.ok(!path.split("/").includes(".."),"invalid test path");
   assert.ok(existsSync(new URL("../"+path,import.meta.url)),row[0]+" missing test path "+path);

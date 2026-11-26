@@ -47,6 +47,9 @@ F = failure family or evidenced defect; I = corrective implementation; C = incom
 | F034 | Open monitoring distinction | Managed cron audit failed with pending or unresolved wake evidence; HTTP ACK not execution proof. Relay runs 45709316609, 45573403453, 45562024566, 45424056708. Later audit pass is not proof every wake executed. | I032 |
 | F035 | Historical fixture correction observed | Relay isolated test 45525733215 failed three assertions: extra active-state GETs, unknown active-read deferred before dispatch, pin rejection fixture. Current relay test models active states; exact-head isolated CI evidence pending. | I032 |
 
+| F036 | Implemented staged; exact relay CI pending | Four ROLLING_ROOT cancellations (45727773405, 45717616827, 45713496477, 45709128629), empty job lists; no runner execution or paid call proven. Concurrency replacement is plausible, not proven cause. | I035 |
+| F037 | Code-discovered deadline risk; implemented staged | Seven serial distinct route groups with up to 10s active read and 10s dispatch each can exceed 120s wake deadline; late route starvation risk, historical attribution not proven. | I036 |
+
 ## Implementations
 
 | ID | Status | Repair | Failure IDs |
@@ -89,6 +92,9 @@ F = failure family or evidenced defect; I = corrective implementation; C = incom
 
 | I034 | Implemented staged; CI pending | Construct exact conditional Stage14 permit from independently pinned review artifact and fresh authenticated original/member/draft; preserve separate T24 witness or honest standalone later path; no native claim or production signing. | F005, F018, F027 |
 
+| I035 | Implemented relay PR30; CI pending | Canceled run audit reads exact job metadata, distinguishes empty runner list and uncertain execution; keeps unresolved and never collection proof. | F036 |
+| I036 | Implemented relay PR30; CI pending | Bound distinct route wake concurrency to two, retain per-route active check, one POST maximum, no retransmit and deadline. | F037 |
+
 ## Completion components (not gates)
 
 | ID | Status | Component | Failure IDs | Implementation IDs |
@@ -103,7 +109,7 @@ F = failure family or evidenced defect; I = corrective implementation; C = incom
 | C008 | Open | Missingness, representativeness, no leakage and 31-day split audit | F005, F026, F029 | I018, I020 |
 | C009 | Open | Remove redundant runtime dependencies and isolate failures without weakening custody | F007, F021, F023, F024 | I006, I019, I021, I022 |
 
-| C010 | Open | Independent clock relay execution/ACK evidence and exact relay regression reconciliation | F034, F035 | I032 |
+| C010 | Partial | Independent clock relay execution/ACK evidence, canceled wake classification, bounded lane starvation repair and exact regression reconciliation | F034, F035, F036, F037 | I032, I035, I036 |
 
 ## Regression tests
 
@@ -143,6 +149,9 @@ T IDs are permanent scenarios, not claims of passing CI. Each references existin
 | T028 | New regression; CI pending | Exact signed query and independent conditional content purpose bind to permit; refuse native promotion, changed query/early draw, unapproved purpose or extra policy keys before original read | F027 | I033 | C002 | tests/phase6_stored_source_native_candidate_audit_v39.test.ts |
 
 | T029 | New regression; CI pending | Exact conditional Stage14 permit creation from live original/member and external artifact pin; reject fake native attestation, changed evidence, cutoff miss, incorrect standalone T24 protocol | F005, F018, F027 | I034 | C001 | tests/phase5_conditional_bound_source_review_v39.test.ts |
+
+| T030 | New relay regression; exact CI pending | Canceled relay job metadata empty vs present vs unavailable; no log read or false proof; unresolved remains | F036 | I035 | C010 | https://github.com/HKcode22/TravnrClockRelay/blob/b2dec744491d5438a8041adc38f74d9fcc9f3b64/cron-audit.test.mjs |
+| T031 | New relay regression; exact CI pending | Slow first route does not serialize paired independent lane; cap two route groups; deadline during active reads prevents POST and no retry | F037 | I036 | C010 | https://github.com/HKcode22/TravnrClockRelay/blob/b2dec744491d5438a8041adc38f74d9fcc9f3b64/isolated/independent-wake.test.mjs |
 
 ## Scientific and retention authorities
 
