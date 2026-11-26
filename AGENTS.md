@@ -86,3 +86,6 @@ Read [the permanent seven-priority and seven-requirement F/I/C/T crosswalk](data
 
 
 **Nov26 15:26 PST coordinated deployment complete:** #977 target c2bb8e18, #31 relay 2d96b223 both merged, owner exact final SOURCE_ONLY readback, target retention 45910885837 both jobs actual success. Do not rerun cutover or pause production. Prior docs-only priority crosswalk reconciled on this successor (not deployed). Read [new checkpoint](data-collection/phase6/checkpoints/2026-11-26_1526_PST_COORDINATED_DEPLOYMENT_AND_CONDITIONAL_READINESS.md) before any decision. I085/T079 redacted conditional policy-readiness receipt only; separate commissioning/actual tasks still required. No standalone authority inferred.
+
+
+**Nov26 15:33 PST paid audit:** First exact new-main autonomous wake 45911127179 and six workers passed; SOURCE no due with fresh queue, not paid receipt. I086/T080 adds bounded GitHub actual child evidence audit, distinguishes timely/late original vs HTTP OK unbound, 429, actor-only, skipped, unknown and later overall failure. Never count ACK/green/reservation as billed or saved PRE. Read [paid audit checkpoint](data-collection/phase6/checkpoints/2026-11-26_1533_PST_PAID_SOURCE_CHILD_AUDIT.md). Keep SOURCE active and POST disabled; no fresh deploy during prearm without safe exact review.

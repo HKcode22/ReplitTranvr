@@ -60,3 +60,52 @@ export function sourceChildFailureDiagnostic(stage,error){
  if(!SOURCE_CHILD_STAGES.has(stage))throw Error("UNKNOWN_SOURCE_CHILD_DIAGNOSTIC_STAGE");
  return Object.freeze({status:"P6_SOURCE_CHILD_FAILURE_DIAG_NO_PROVIDER_CONTENT",stage,category:sourceDbDiagnosticLabel(error)});
 }
+
+/** GitHub job logs add timestamps. Only complete allowlisted lines,
+ * never echoed shell commands, raw output, or arbitrary strings. */
+export function readSafeTimestampedSourceDiagnostics(log){
+ if(typeof log!=="string"||log.length>10*1024*1024)return [];
+ const lines=[];
+ for(const line of log.split(/\r?\n/)){
+  const m=/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,9})?Z P6_SOURCE_DIAG ([A-Z0-9_]+)$/.exec(line);
+  if(m&&LABELS.has(m[1]))lines.push(PREFIX+m[1]);
+ }
+ return readSafeSourceDiagnosticLines(lines.join("\n"),null).map(x=>x.slice(PREFIX.length));
+}
+const EXACT_PAID_STEP="Authenticate real private PG16 signed index and query, then ORIGINAL one-physical-GET child";
+const ACTOR_ONLY_STEP="Admission for real actor preflight ONLY (no paid capability)";
+const JOB_NAME="exact-private-source-existing-one-get-child";
+const HTTP_LABELS=new Set([...LABELS].filter(x=>x.startsWith("HTTP_")&&x!=="HTTP_STARTED"));
+/** One exact private child, not parent ACK, billing or PRE. An overall red
+ * job may still have committed a timely original before follow-on failure. */
+export function classifyP6PaidChildReceipt(run,jobs,log){
+ const out=(status,diagnostics=[])=>Object.freeze({runId:Number.isSafeInteger(run?.id)&&run.id>0?run.id:null,status,
+  diagnostics,providerBillingVerified:false,independentDbReadbackVerified:false,actualPreCommitVerified:false,trainingEligibilityCertified:false});
+ if(!Number.isSafeInteger(run?.id)||run.id<=0||!/^[a-f0-9]{40}$/.test(run.head_sha??"")||run.event!=="workflow_dispatch"||run.head_branch!=="main"||
+  run.run_attempt!==1||!Array.isArray(jobs))return out("RUN_IDENTITY_UNVERIFIED");
+ if(run.status!=="completed")return out("RUN_NOT_TERMINAL");
+ const found=jobs.filter(j=>j.name===JOB_NAME);
+ if(found.length!==1||jobs.some(j=>j.name!==JOB_NAME&&j.conclusion!=="skipped"))return out("JOB_SCOPE_UNVERIFIED");
+ const j=found[0];
+ if(j.run_id!==run.id||j.head_sha!==run.head_sha||j.run_attempt!==1||j.status!=="completed"||!Array.isArray(j.steps))return out("JOB_IDENTITY_UNVERIFIED");
+ const paid=j.steps.filter(x=>x.name===EXACT_PAID_STEP),actor=j.steps.filter(x=>x.name===ACTOR_ONLY_STEP);
+ if(paid.length!==1||actor.length!==1)return out("STEP_SCOPE_UNVERIFIED");
+ if(paid[0].conclusion==="skipped"&&actor[0].conclusion==="success")return out("NONPAID_ACTOR_PREFLIGHT_NO_COLLECTION");
+ if(paid[0].conclusion==="skipped")return out("PAID_STEP_SKIPPED_NO_COLLECTION_PROOF");
+ if(!["success","failure","cancelled","timed_out"].includes(paid[0].conclusion)||actor[0].conclusion!=="skipped")return out("STEP_SCOPE_UNVERIFIED");
+ const d=readSafeTimestampedSourceDiagnostics(log),has=x=>d.includes(x),http=d.filter(x=>HTTP_LABELS.has(x)),outcomes=d.filter(x=>["OUTCOME_TIMELY","OUTCOME_LATE","OUTCOME_UNOBSERVED"].includes(x));
+ if(!d.length)return out("PAID_STEP_LOG_UNAVAILABLE_OR_NO_DIAGNOSTIC");
+ if(http.length>1||outcomes.length>1||
+  has("ORIGINAL_PERSIST_CONFIRMED")&&(!has("HTTP_OK")||!has("RESERVATION_CONFIRMED")||has("OUTCOME_UNOBSERVED"))||
+  (has("OUTCOME_TIMELY")||has("OUTCOME_LATE"))&&!has("ORIGINAL_PERSIST_CONFIRMED"))return out("CONTRADICTORY_DIAGNOSTICS_REVIEW",d);
+ if(has("PREARM_COMMITTED")&&has("RESERVATION_CONFIRMED")&&has("HTTP_OK")&&has("ORIGINAL_PERSIST_CONFIRMED")){
+  if(has("OUTCOME_TIMELY"))return out("TIMELY_ORIGINAL_REPORTED_BY_CHILD",d);
+  if(has("OUTCOME_LATE"))return out("LATE_ORIGINAL_REPORTED_BY_CHILD",d);
+  return out("ORIGINAL_PERSIST_REPORTED_TIMING_UNVERIFIED",d);
+ }
+ if(has("HTTP_RATE_LIMIT"))return out("RATE_LIMIT_NO_ORIGINAL_PROOF",d);
+ if(has("HTTP_OK"))return out("HTTP_OK_NO_ORIGINAL_PROOF",d);
+ if(http.length===1)return out("HTTP_NON_SUCCESS_NO_ORIGINAL_PROOF",d);
+ if(has("RESERVATION_CONFIRMED"))return out("RESERVATION_NO_ORIGINAL_PROOF",d);
+ return out("ADMISSION_OR_TRANSPORT_UNVERIFIED_NO_ORIGINAL_PROOF",d);
+}
