@@ -1,3 +1,5 @@
+import {deriveP6ConditionalT24Scope,verifyP6T24PrivateRegistry,p6T24RegistryReviewPreimage} from "../server/lib/disruption/phase6PrivateT24RegistryTransport_v39.mjs";
+import {projectP6T24QueuePackets} from "../server/lib/disruption/phase6PrivateT24QueueRouting_v39.mjs";
 import {resolveP7ConditionalPublicationPage} from "../server/lib/disruption/phase7IndependentPreProofPublication_v39.mjs";
 import type {Phase7CanonicalFieldDisposition} from "../server/lib/disruption/phase7CanonicalFieldParity_v39";
 import {verifyP5SignedLaterPreDayRegistry,type P5SignedLaterPreDayRegistry,type P5SignedLaterPreDayRegistryPins} from "../server/lib/disruption/phase5SignedLaterPreDayRegistry_v39";
@@ -342,6 +344,58 @@ describe("source-bound conditional service preparation",()=>{
   expect(()=>check(signed,reviewerPins,t("06:00"))).toThrow("REVIEW_SIGNATURE_PREMATURE_EXPIRED_OR_REPLAYED");
   const {conditionalPreScope:_scope,...legacyReview}=externalReview;
   expect(()=>check({...signed,signatureBase64:wireFor(legacyReview).signatureBase64})).toThrow("EXTERNAL_REVIEW_SIGNATURE_INVALID");
+  // T047 synthetic T24 signed transport/witness metadata, not a real PRE.
+  // Use a separate conditional registry domain and the existing singleton
+  // roster. No standalone later approval is allowed in a T24 packet.
+  const {reviewedStandaloneLaterNoT24:_laterOnly,...t24Base}=built.privatePermit;
+  const t24Permit={...t24Base,horizon:"T-24h" as const,selectedTNativeUtc:"2035-11-26T06:00:00.000Z"};
+  const witnessReview={flightInstanceId:t24Permit.flightInstanceId,sourcePopulationQueryId:t24Permit.expectedSourcePopulationQueryId,
+   expectedSourceResponseSha256:t24Permit.expectedSourceResponseSha256,expectedSourceQueryDigestSha256:t24Permit.queryDigestSha256,
+   expectedFrameSha256:t24Permit.reviewedFrameSha256,expectedConfigSha256:t24Permit.reviewedConfigSha256,selectedTNativeUtc:t24Permit.selectedTNativeUtc,
+   expectedT24CutoffUtc:t("06:00"),expectedSelectedTVersion:t24Permit.selectedTConfig.milestone+":"+t24Permit.selectedTConfig.version+":"+t24Permit.selectedTConfig.artifactHash,
+   expectedWitnessOnlyRole:"phase5_fids_t24_witness_prod_20261107",reviewedConditionalProtocolSha256:scope.protocolSha256};
+  const t24Packet={...packet.packet,schema:"v39.phase5.github-conditional-t24-pre-witness-reviewed.v1",prePermit:t24Permit,
+   witnessReview,phase7FieldProof:sharedWire(t24Permit)};
+  const t24Bytes=Buffer.from(JSON.stringify(t24Packet)),t24Digest=hd(t24Bytes),t24Path="data-collection/phase5/frozen/t24p_"+t24Digest+".json",
+   sourcePath=reg.sourceDayRegistryFilePath,sourceEvidence=h("d");
+  const t24Trust={independentStudyTrustPinsApproved:true,independentNativeT24RegistryApproved:true,reviewedCodeSha:gate.approvedCodeSha,
+   manifestSha256:gate.manifestSha256,calendarSha256:h("a"),rightsSha256:gate.rightsSha256,releaseSha256:p.expectedReviewedReleaseSha256,
+   expectedT24ReviewerFingerprintSha256:reviewerFp,expectedT24PolicySha256:h("e"),expectedFrameSha256:t24Permit.reviewedFrameSha256,
+   expectedConfigSha256:t24Permit.reviewedConfigSha256,maximumPrivateRetentionHours:48,policyValidFromUtc:t("00:00"),policyValidUntilUtc:t("23:00"),
+   expectedSelectedTVersion:witnessReview.expectedSelectedTVersion,dayReviewerFingerprintSha256:h("4"),queryReviewerFingerprintSha256:h("5"),
+   t24ReviewerPublicKeyPem:reviewerPem,conditionalT24Scope:gate.conditionalPreScope};
+  const t24Reg={schema:"v39.phase6.conditional-t24-private-registry.v1",runDayIndex:p.runDayIndex,shardIndex:1,reviewedCodeSha:gate.approvedCodeSha,
+   manifestSha256:gate.manifestSha256,rightsSha256:gate.rightsSha256,releaseSha256:p.expectedReviewedReleaseSha256,
+   sourceRegistryPath:sourcePath,sourceRegistrySha256:hd(srcBytes),sourceReviewEvidenceSha256:sourceEvidence,conditionalT24Scope:gate.conditionalPreScope,
+   entries:[{filePath:t24Path,packetSha256:t24Digest,flightInstanceId:p.flightInstanceId,queryDigestSha256:p.queryDigestSha256,
+    selectedTNativeUtc:t24Permit.selectedTNativeUtc,cutoffUtc:t("06:00")}]};
+  const idx={runDayIndex:p.runDayIndex,manifestSha256:gate.manifestSha256,reviewedCodeSha:gate.approvedCodeSha,
+   reviewedRightsSha256:gate.rightsSha256,reviewedReleaseSha256:p.expectedReviewedReleaseSha256,calendarSha256:t24Trust.calendarSha256,
+   entries:[{lane:"SOURCE",filePath:sourcePath,fileSha256:hd(srcBytes),reviewEvidenceSha256:sourceEvidence}]};
+  const idxBytes=Buffer.from(JSON.stringify(idx)),index=Object.defineProperties({redactedSummary:{status:"SIGNED_DAY_EPOCH_FULL_REGISTRY_READONLY_NO_DISPATCH",
+   externalEd25519ReviewerVerified:true,restrictedPrivatePg16ReaderVerified:true,providerCalls:0,databaseWrites:0,phase6PaidGo:false,runDayIndex:p.runDayIndex,indexSha256:hd(idxBytes)}},
+   {privateCurrentIndexBytes:{value:idxBytes},privateParsedIndex:{value:idx},getFrozen:{value:()=>srcBytes}});
+  const t24RegBytes=Buffer.from(JSON.stringify(t24Reg)),t24RegSha=hd(t24RegBytes);
+  const t24Review={schema:"v39.phase6.conditional-t24-registry-ed25519.v1",audience:"HKcode22/ReplitTranvr:PHASE6_T24_CONDITIONAL_PRE_REGISTRY_ONLY",
+   logicalPath:"data-collection/phase5/frozen/t24r_"+t24RegSha+".json",runDayIndex:p.runDayIndex,shardIndex:1,registrySha256:t24RegSha,
+   reviewedCodeSha:gate.approvedCodeSha,manifestSha256:gate.manifestSha256,rightsSha256:gate.rightsSha256,releaseSha256:p.expectedReviewedReleaseSha256,
+   policySha256:t24Trust.expectedT24PolicySha256,reviewedAtUtc:t("05:04"),validUntilUtc:t("07:00"),retentionNotAfterUtc:t("08:00"),
+   reviewerFingerprintSha256:reviewerFp,conditionalT24Scope:gate.conditionalPreScope};
+  const t24Wire={review:t24Review,signatureBase64:sign(null,p6T24RegistryReviewPreimage(t24Review),reviewer.privateKey).toString("base64")};
+  const t24Files=[{filePath:t24Path,packetSha256:t24Digest,bytes:t24Bytes}],t24Args={trust:t24Trust,index,registryBytes:t24RegBytes,wire:t24Wire,observedDbClockUtc:t("05:05"),files:t24Files};
+  expect(verifyP6T24PrivateRegistry(t24Args).reg).toEqual(t24Reg);
+  expect(()=>verifyP6T24PrivateRegistry({...t24Args,trust:{...t24Trust,conditionalT24Scope:undefined}})).toThrow("CONDITIONAL_T24_SCOPE");
+  expect(()=>verifyP6T24PrivateRegistry({...t24Args,wire:{...t24Wire,signatureBase64:sign(null,p6T24RegistryReviewPreimage({...t24Review,schema:"v39.phase6.native-t24-registry-ed25519.v1"}),reviewer.privateKey).toString("base64")}})).toThrow("REGISTRY_SIGNATURE_INVALID");
+  const gotT24=Object.defineProperties({status:"EXACT_PRIVATE_CONDITIONAL_T24_PACKETS_READONLY_NO_GO",registrySha256:t24RegSha,
+   runDayIndex:p.runDayIndex,observedDbClockUtc:t("05:05"),packetCount:1,providerCalls:0,databaseWrites:0,phase6PaidGo:false},
+   {privateRegistry:{value:t24Reg},privateFiles:{value:t24Files}});
+  expect(projectP6T24QueuePackets(gotT24,t24Trust,"ENROLLMENT")[0].entry.permit).toEqual(t24Permit);
+  expect(projectP6T24QueuePackets(gotT24,t24Trust,"PRE_EXECUTION")).toHaveLength(0);
+  expect(()=>projectP6T24QueuePackets(gotT24,{...t24Trust,conditionalT24Scope:undefined},"ENROLLMENT")).toThrow("CONDITIONAL_T24_SCOPE");
+  const t24Policy={rightsSha256:gate.rightsSha256,nativeLaterReview:{conditionalT24Scope:gate.conditionalPreScope},
+   conditionalPreFeatureReview:{schema:"v39.phase5.conditional-pre-feature-review-policy.v1",approved:true,rightsSha256:gate.rightsSha256,...gate.conditionalPreScope}};
+  expect(deriveP6ConditionalT24Scope(t24Policy)).toEqual(gate.conditionalPreScope);
+  expect(()=>deriveP6ConditionalT24Scope({...t24Policy,conditionalPreFeatureReview:undefined})).toThrow("CONDITIONAL_T24_SCOPE");
   const readReg=(pins=rp,r=reg,s=src)=>verifyP5SignedLaterPreDayRegistry(regBytes,r,srcBytes,s,pins,()=>packet.packetBytes);
   expect(readReg().entries[0].packet.prePermit).toEqual(built.privatePermit);
   expect(()=>readReg({...rp,conditionalPreScope:undefined})).toThrow("SEPARATE_PROSPECTIVE_SCOPE");

@@ -36,7 +36,7 @@ F = failure family or evidenced defect; I = corrective implementation; C = incom
 | F024 | Tested branch | Optional weather archive read for FIDS-only permit. [Commit](https://github.com/HKcode22/ReplitTranvr/commit/3327ff5d84d9d0aa0478a34bb41e44e788cd3a9a) | I022 |
 | F025 | Corrected and exact #976 CI passed | Superseded V0112 predecessor mismatch 45796497453; seven workflows on 6572192 failed same TS18048; two on 41d5d38f failed synthetic Phase7 digest shape. Successor #976 exact 454349c9 passed 46/46, including TypeScript, focused proof/registration, PG16 and full offline safety. Production install separate. Four #977 runs on 427411f4 failed one TS2345 legacy-child union mismatch; 433082ba focused diagnostics and V0094 PG16 passed, full offline pending at 03:50 PST. | I023, I026 |
 | F026 | Historical loss | Day1 zero bindings; Day2 52 bindings zero PRE; pause missed T90 and elapsed Day3 T24. [Owner census](checkpoints/2026-11-26_0152_PST_PHASE5B_OWNER_CENSUS_AND_QUEUE_REPAIR.md) | I008, I012, I013, I014, I016, I043, I045 |
-| F027 | Partial; staged conditional later registry reader | Native-only private registry/producer/feature proof despite separate conditional writer. #976 implements independent source proof/permit preparation and conditional queue packets; #977 connects protected current later registry reader. No actual conditional producer signature or observed PRE. | I005, I014, I016, I025, I029, I031, I033, I034, I038, I039, I040, I041, I044, I046, I047, I048, I050, I051 |
+| F027 | Partial; staged conditional later registry reader | Native-only private registry/producer/feature proof despite separate conditional writer. #976 implements independent source proof/permit preparation and conditional queue packets; #977 connects protected current later registry reader. No actual conditional producer signature or observed PRE. | I005, I014, I016, I025, I029, I031, I033, I034, I038, I039, I040, I041, I044, I046, I047, I048, I050, I051, I052 |
 | F028 | Superseded CI failure | Stacked PR excluded full offline CI; trigger fixed. [Checkpoint](checkpoints/2026-11-25_1730_PST_PHASE5B_DRAIN_AND_STACKED_CI_COVERAGE.md) | I023 |
 | F029 | Open | Actual physical gate-out source not certified; schedule revision is not substitute. [Adopted runtime scope](../phase5/evidence/2026-11-22_PHASE6_RUNTIME_BINDING_OWNER_DELEGATED_SCOPE_REVIEW.md) | I005 |
 | F030 | Focused tested, full pending | Conditional raw/normalized matcher parity corrected in c66f6307; [focused run](https://github.com/HKcode22/ReplitTranvr/actions/runs/45799119831) passed. Not a demonstrated live cause. | I024 |
@@ -125,6 +125,7 @@ F = failure family or evidenced defect; I = corrective implementation; C = incom
 | I049 | Focused heartbeat CI passed; full exact CI pending | Bounded first-parent early-draw handover requires actual successful prior worker step, exact commit ancestry, no current-main run and existing slot deadline; retain prior/current distinction, no draw or paid authorization. | F041 |
 | I050 | Staged; exact CI required | Authenticated independent signed review artifact page binds exact source, study, code, protocol, member set and optional separately pinned standalone protocol before SQL; existing fresh restricted reread and Stage14 preflight reused. | F027 |
 | I051 | Staged; exact CI required | Compose authenticated conditional permit ingress with original protected Phase7 proof port, real clock check, distinct signers and exact proof attachment; no unsigned fallback. | F027 |
+| I052 | Staged; exact CI required | Conditional T24 registry distinct signature domain, explicit separate protected scope and existing private registry publication/readback/singleton queue projection. | F027 |
 
 ## Completion components (not gates)
 
@@ -207,6 +208,7 @@ T IDs are permanent scenarios, not claims of passing CI. Each references existin
 | T044 | Focused 45818163362 passed; full exact CI pending | Prior successful worker and exact first-parent cutover with next-slot deadline produce explicit handover notice; current failure, expired grace, wrong ancestry and missing step still alert; no collection proof. | F041 | I049 | C009, C010 | tests/phase6_autonomous_github_controller_heartbeat_v39.test.mjs |
 | T045 | New regression; exact CI pending | Exact independent Ed25519 artifact page reaches real prepared member; wrong signature, alias, cross-query, altered artifact, standalone scope and duplicate fail before SQL. | F027 | I050 | C001, C002 | tests/phase5_conditional_bound_source_review_v39.test.ts |
 | T046 | New regression; exact CI pending | Signed review page through shared protected proof resolver and genuine packet attachment; missing proof, cutoff and signer alias rejected; synthetic policy fixture only. | F027 | I051 | C001, C002 | tests/phase5_conditional_bound_source_review_v39.test.ts |
+| T047 | New regression; exact CI pending | Synthetic signed conditional T24 registry and witness packet through existing authenticated transport and singleton routing; missing scope, wrong signature, out-of-window execution rejected. Actual restricted publisher/DB positive path still required. | F027 | I052 | C001, C005 | tests/phase5_conditional_bound_source_review_v39.test.ts |
 
 ## Scientific and retention authorities
 
@@ -262,3 +264,7 @@ Exact 5554f655 18/19 successful, full safety 45818163156 still running; heartbea
 ## Nov26 continuation — I051/T046
 
 Shared protected Phase7 proof resolver conditional entrypoint connects signed review-page ingress, actual restricted reread, exact independent proof port and fresh clock, then genuine packet attachment. Native invocation unchanged; no production authority commissioned. Exact CI required; see [checkpoint](checkpoints/2026-11-26_PHASE5B_CONDITIONAL_SHARED_PROOF_RESOLVER.md).
+
+## Nov26 continuation — I052/T047
+
+Conditional T24 registry transport and queue projection now accept only separately pinned conditional tier with a distinct Ed25519 domain. Existing native registry signature schema and reader remain unchanged. New bounded unsigned proposal consumes genuine attached packets; external signature required before existing restricted publisher. Synthetic transport/queue fixture only, not actual T24 PRE. Production source runtime integration, protected commissioning and actual PG16 path still required. See [checkpoint](checkpoints/2026-11-26_PHASE5B_CONDITIONAL_T24_REGISTRY_TRANSPORT.md).

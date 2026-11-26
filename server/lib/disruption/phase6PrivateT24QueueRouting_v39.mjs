@@ -4,7 +4,8 @@
  * and exact current signed SOURCE provenance before becoming a candidate.
  * The original V0100 enrollment and V0092 claim own real write authority. */
 import {createHash,createPublicKey} from "node:crypto";
-import {readP6T24CurrentRegistrySet,readP6T24PrivateRegistryPackets} from "./phase6PrivateT24RegistryTransport_v39.mjs";
+import {sameP5ConditionalLaterReviewerScope} from "./phase5ExternalEd25519LaterShardReviewerVerify_v39.ts";
+import {deriveP6ConditionalT24Scope,readP6T24CurrentRegistrySet,readP6T24PrivateRegistryPackets} from "./phase6PrivateT24RegistryTransport_v39.mjs";
 import {verifyP5CdFrozenRoster} from "./phase5CdGithubBoundedPreTick_v39.ts";
 import {verifyP5T24PreWitnessCrossReview} from "./phase5T24PreIndependentWitnessChain_v39.ts";
 const H=/^[a-f0-9]{64}$/;
@@ -39,7 +40,8 @@ export function deriveP6T24QueueTrust({trust:t,policyBytes:b,expectedPolicySha25
   if(k.asymmetricKeyType!=="ed25519"||hash(k.export({format:"der",type:"spki"}))!==v.laterReviewerFingerprintSha256)
    hold("WRONG_REVIEWER_KEY");
  }catch{hold("WRONG_REVIEWER_KEY");}
- return Object.freeze({...t,independentNativeT24RegistryApproved:true,
+ const conditional=deriveP6ConditionalT24Scope(p);
+ return Object.freeze({...t,independentNativeT24RegistryApproved:true,...(conditional?{conditionalT24Scope:conditional}:{}),
   expectedT24ReviewerFingerprintSha256:v.laterReviewerFingerprintSha256,expectedT24PolicySha256:expectedPolicySha256,
   expectedFrameSha256:v.frameSha256,expectedConfigSha256:v.configSha256,
   expectedSelectedTVersion:c.milestone+":"+c.version+":"+c.artifactHash,
@@ -89,13 +91,16 @@ export function chooseP6T24QueueRegistries(sets,trust,purpose){
  * Registry verification has already authenticated all packet bytes; the
  * singleton selection cannot be used to substitute another signed flight. */
 export function projectP6T24QueuePackets(got,trust,purpose){
- if(got?.status!=="EXACT_PRIVATE_NATIVE_T24_PACKETS_READONLY_NO_GO"||got.providerCalls!==0||got.databaseWrites!==0||got.phase6PaidGo!==false||
+ const conditional=got?.status==="EXACT_PRIVATE_CONDITIONAL_T24_PACKETS_READONLY_NO_GO";
+ if((!conditional&&got?.status!=="EXACT_PRIVATE_NATIVE_T24_PACKETS_READONLY_NO_GO")||got.providerCalls!==0||got.databaseWrites!==0||got.phase6PaidGo!==false||
     !H.test(got.registrySha256??"")||!sealed(got,"privateRegistry")||!sealed(got,"privateFiles")||
     !["ENROLLMENT","PRE_EXECUTION"].includes(purpose)||!Array.isArray(got.privateFiles)||
     got.privateFiles.length!==got.packetCount||got.packetCount<1||got.packetCount>96||
     got.privateRegistry.runDayIndex!==got.runDayIndex||got.privateRegistry.entries.length!==got.packetCount||
     hash(Buffer.from(JSON.stringify(got.privateRegistry)))!==got.registrySha256)
   hold("NO_EXACT_AUTHENTICATED_T24_PACKETS");
+ if(conditional?(!trust.conditionalT24Scope||!sameP5ConditionalLaterReviewerScope(trust.conditionalT24Scope,got.privateRegistry.conditionalT24Scope)):
+    Object.hasOwn(got.privateRegistry,"conditionalT24Scope"))hold("CONDITIONAL_T24_SCOPE_DRIFT");
  const now=utc(got.observedDbClockUtc),out=[];
  for(const [i,e] of got.privateRegistry.entries.entries()){
   const f=got.privateFiles[i],cutoff=utc(e.cutoffUtc);
@@ -105,9 +110,9 @@ export function projectP6T24QueuePackets(got,trust,purpose){
    manifestSha256:trust.manifestSha256,rightsSha256:trust.rightsSha256,entries:[{filePath:f.filePath,packetSha256:f.packetSha256}]};
   const rosterBytes=Buffer.from(JSON.stringify(roster)),rosterSha256=hash(rosterBytes);
   const packets=verifyP5CdFrozenRoster(rosterBytes,roster,[f],{approvedCodeSha:trust.reviewedCodeSha,
-   manifestSha256:trust.manifestSha256,rightsSha256:trust.rightsSha256,rosterSha256},"T24_WITH_SEPARATE_WITNESS");
+   manifestSha256:trust.manifestSha256,rightsSha256:trust.rightsSha256,rosterSha256,...(conditional?{releaseMode:"PHASE6_APPROVED",conditionalPreScope:trust.conditionalT24Scope}:{})},"T24_WITH_SEPARATE_WITNESS");
   const entry=packets.get(e.packetSha256),p=entry?.permit;
-  if(!p||!entry.witnessReview||p.horizon!=="T-24h"||p.flightInstanceId!==e.flightInstanceId||
+  if(!p||conditional!==(p.identityEvidenceTier==="CONDITIONAL_QUERY_FILTERED_SERVICE")||!entry.witnessReview||p.horizon!=="T-24h"||p.flightInstanceId!==e.flightInstanceId||
      p.runDayIndex!==got.runDayIndex||p.queryDigestSha256!==e.queryDigestSha256||p.selectedTNativeUtc!==e.selectedTNativeUtc||
      p.expectedReviewedReleaseSha256!==trust.releaseSha256||p.reviewedFrameSha256!==trust.expectedFrameSha256||
      p.reviewedConfigSha256!==trust.expectedConfigSha256||entry.witnessReview.expectedSelectedTVersion!==trust.expectedSelectedTVersion||
