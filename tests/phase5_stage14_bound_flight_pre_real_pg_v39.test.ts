@@ -1,3 +1,4 @@
+import {assertP6ConditionalT24MetadataReader,P6_CONDITIONAL_T24_SNAPSHOTS_SQL,P6_CONDITIONAL_T24_WITNESSES_SQL} from "../server/lib/disruption/phase6LaterT24EvidenceBatchReadOnly_v39";
 /**
  * True staged PRE writer integration on disposable PostgreSQL16:
  * B0062+staged V0079, one synthetic ORIGINAL, one primary operating member,
@@ -572,6 +573,32 @@ active("Phase5 Stage14 one physical original flight PRE, disposable real PG16",(
    expect(receipt.receipt.flightInstanceId).toBe(conditional.flightInstanceId);
    expect(receipt.reviewedByIndependentAuthority).toBe(false);
    expect((await admin.query("SELECT count(*)::int AS n FROM clean.phase5_t24_postcommit_witness_v39 WHERE flight_instance_id=$1",[conditional.flightInstanceId])).rows[0].n).toBe(1);
+   // T067: actual independent read-only login sees only conditional T24
+   // metadata after real writer/witness commits; cannot access base tables.
+   if(process.env.V39_P5B_CONDITIONAL_METADATA_REAL_PG16==="1"){
+    const login="phase6_private_reader_login_ci_t24meta";
+    await admin.query("CREATE ROLE "+login+" LOGIN NOINHERIT PASSWORD 'ci-only'");
+    await admin.query("GRANT phase6_private_frozen_reader_v39 TO "+login+" WITH SET TRUE, INHERIT FALSE, ADMIN FALSE");
+    const reader=new Pool({connectionString:"postgresql://"+login+":ci-only@localhost:5432/neondb?sslmode=disable",max:1});
+    try{
+     const c=await reader.connect();
+     try{
+      await c.query("SET ROLE phase6_private_frozen_reader_v39");
+      await c.query("BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY");
+      expect(await assertP6ConditionalT24MetadataReader(c,login)).toMatch(/^\d{4}-/);
+      const ids=[conditional.flightInstanceId,permit.flightInstanceId],args=[ids,5];
+      const snap=await c.query(P6_CONDITIONAL_T24_SNAPSHOTS_SQL,args),wit=await c.query(P6_CONDITIONAL_T24_WITNESSES_SQL,args);
+      expect(snap.rows).toEqual([{flight_instance_id:conditional.flightInstanceId,snapshot_id:result.committedSnapshotId}]);
+      expect(wit.rows).toHaveLength(1);
+      expect(wit.rows[0]).toMatchObject({flight_instance_id:conditional.flightInstanceId,snapshot_id:result.committedSnapshotId,joined_snapshot_id:result.committedSnapshotId,snapshot_horizon:"T-24h"});
+      expect((await c.query(P6_CONDITIONAL_T24_SNAPSHOTS_SQL,[["leg:g5a:"+h("0")],3])).rows).toEqual([]);
+      await c.query("ROLLBACK");
+      await expect(c.query("SELECT * FROM clean.flight_snapshots LIMIT 1")).rejects.toThrow(/permission denied/);
+      await expect(c.query("SELECT * FROM clean.phase5_t24_postcommit_witness_v39 LIMIT 1")).rejects.toThrow(/permission denied/);
+      await expect(c.query("DELETE FROM phase6_private.conditional_t24_snapshot_meta_v39")).rejects.toThrow(/permission denied/);
+     }finally{await c.query("ROLLBACK").catch(()=>{});c.release(true);}
+    }finally{await reader.end();}
+   }
   }
   await expect(persistP5V0079SingleBoundFlightPre(writer,conditional))
    .rejects.toThrow("EXISTING_PRE_NEVER_OVERWRITE_OR_RETCON");

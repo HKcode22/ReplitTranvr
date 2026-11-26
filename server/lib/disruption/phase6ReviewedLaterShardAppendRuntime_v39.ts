@@ -6,7 +6,7 @@
  */
 import {createHash,createPublicKey,sign,type KeyObject} from "node:crypto";
 import {publishP5ExternalLaterShardToPrivatePg16Once,type P5PrivatePgPublisherClient,type P5PrivatePgPublisherScope} from "./phase5Phase6Pg16PrivateLaterPrePublisher_v39";
-import {verifyP5ExternalEd25519ReviewOfLaterShard,type P5Ed25519ReviewWireEnvelope,type P5ExternalLaterReviewSignerPins} from "./phase5ExternalEd25519LaterShardReviewerVerify_v39";
+import {sameP5ConditionalLaterReviewerScope,verifyP5ExternalEd25519ReviewOfLaterShard,type P5Ed25519ReviewWireEnvelope,type P5ExternalLaterReviewSignerPins} from "./phase5ExternalEd25519LaterShardReviewerVerify_v39";
 import {hydrateP5PrivateLaterPreFromPg16ReadOnly} from "./phase5Phase6Pg16PrivateLaterPreHydrator_v39";
 import {verifyP5SignedLaterPreDayRegistry,type P5SignedLaterPreDayRegistry} from "./phase5SignedLaterPreDayRegistry_v39";
 import type {P5UnsignedLaterRegistryReviewPlan} from "./phase5ReviewedLaterPacketToUnsignedDayRegistryProposal_v39";
@@ -120,7 +120,9 @@ function sourceAndDuplicates(index:any,x:Input){
   {registryFilePath:p.proposedRegistryFilePath,expectedRegistrySha256:p.proposedRegistrySha256,
    expectedSourceDayRegistrySha256:source.fileSha256,expectedManifestSha256:x.trust.manifestSha256,
    expectedApprovedMainSha:x.trust.reviewedCodeSha,expectedRunDayIndex:head.runDayIndex,
-   expectedReleaseSha256:x.trust.releaseSha256,expectedRightsSha256:x.trust.rightsSha256},
+   expectedReleaseSha256:x.trust.releaseSha256,expectedRightsSha256:x.trust.rightsSha256,
+   ...(x.reviewerPins.conditionalPreScope?{conditionalPreScope:x.reviewerPins.conditionalPreScope,
+    independentlyApprovedStandaloneProtocolSha256:x.reviewerPins.conditionalPreScope.independentlyApprovedStandaloneProtocolSha256}:{})},
   path=>packetMap.get(path)??hold("MISSING_EXACT_REVIEWED_FLIGHT_BYTES"));
  return {source,head,already:already.length===1};
 }
@@ -132,7 +134,9 @@ async function readback(x:Input,source:Entry){
   expectedManifestSha256:t.manifestSha256,expectedApprovedMainSha:t.reviewedCodeSha,
   expectedReleaseSha256:t.releaseSha256,expectedRightsSha256:t.rightsSha256,expectedRunDayIndex:p.registryProposal.runDayIndex,
   expectedPrivateSessionLogin:t.expectedReaderSessionLogin,expectedSourceReviewEvidenceSha256:source.reviewEvidenceSha256,
-  expectedLaterReviewEvidenceSha256:x.reviewerPins.expectedIndependentReviewerEvidenceDigestSha256,privateReadOnlyApproved:true,paidProviderCallsAllowed:false});
+  expectedLaterReviewEvidenceSha256:x.reviewerPins.expectedIndependentReviewerEvidenceDigestSha256,privateReadOnlyApproved:true,paidProviderCallsAllowed:false,
+  ...(x.reviewerPins.conditionalPreScope?{conditionalPreScope:x.reviewerPins.conditionalPreScope,
+   independentlyApprovedStandaloneProtocolSha256:x.reviewerPins.conditionalPreScope.independentlyApprovedStandaloneProtocolSha256}:{})});
  if(got.verified.entries.length!==p.proposedPacketFiles.length||
     got.verified.entries.some((e,i)=>e.filePath!==p.proposedPacketFiles[i].filePath||!e.bytes.equals(p.proposedPacketFiles[i].bytes)))
   hold("INDEPENDENT_PRIVATE_POSTCOMMIT_PACKET_READBACK_DRIFT");
@@ -261,6 +265,8 @@ export async function runP6DelegatedReviewedLaterAppend(x:Input,approval:{
     p.dayReviewerFingerprintSha256!==t.dayReviewerFingerprintSha256||
     p.queryReviewerFingerprintSha256!==t.queryReviewerFingerprintSha256||
     p.laterReviewerFingerprintSha256!==x.scope.expectedLaterReviewerFingerprintSha256||
+    (x.reviewerPins.conditionalPreScope===undefined?Object.hasOwn(p,"conditionalLaterPreScope"):
+     !sameP5ConditionalLaterReviewerScope(p.conditionalLaterPreScope,x.reviewerPins.conditionalPreScope))||
     new Set([p.dayReviewerFingerprintSha256,p.queryReviewerFingerprintSha256,p.laterReviewerFingerprintSha256]).size!==3||
     !Number.isSafeInteger(p.maximumIndexRevision)||p.maximumIndexRevision<2||p.maximumIndexRevision>1024||
     utc(p.validFromUtc)>=utc(p.validUntilUtc))

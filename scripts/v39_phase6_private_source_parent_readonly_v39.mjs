@@ -304,6 +304,7 @@ export async function runP6RealPrivateSourceParentReadOnly(
    return Object.freeze({schema:P6_PRIVATE_SOURCE_REAL_RO_SCHEMA,
     status:"NO_DUE_SOURCE_DAYS_NO_PRIVATE_READ_OR_DISPATCH",
     observedActualSourceQueueQueries:scan.observedQueries,
+    observedSourceDatabaseClockUtc:scan.checkedAtDatabaseUtc,
     candidateCount:0,deferredDueDayCount:0,providerCalls:0,databaseWrites:0,
     githubDispatches:0,completeGHChildRunHistoryConsulted:false,paidPhase6Go:false});
   const result=await readDays(ctx,selection);
@@ -321,6 +322,7 @@ export async function runP6RealPrivateSourceParentReadOnly(
     return Object.freeze({schema:P6_PRIVATE_SOURCE_REAL_RO_SCHEMA,
      status:"SELECTED_SOURCE_DAY_REVIEWS_UNAVAILABLE_NO_DISPATCH",
      storedReviewMode:true,observedActualSourceQueueQueries:scan.observedQueries,
+     observedSourceDatabaseClockUtc:scan.checkedAtDatabaseUtc,
      candidateCount:0,unavailableSelectedDayCount:unavailable.length,
      unavailableSelectedDueQueryCount:scan.candidates.filter(x=>
       unavailable.includes(x.runDayIndex)&&x.status==="DUE_SOON_REVIEW_REQUIRED_NO_PAID_DISPATCH").length,

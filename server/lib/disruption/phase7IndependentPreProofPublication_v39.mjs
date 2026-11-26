@@ -3,6 +3,8 @@
 import {parsePhase7ProtectedPrePolicy} from "./phase7ProtectedPreResolver_v39.ts";
 import {hashPhase7DurableCandidate} from "./phase7DurableDerivedBundleCandidate_v39.ts";
 import {verifyPhase7SignedPreFieldProof} from "./phase7SignedPreFieldProof_v39.ts";
+import {prepareP5ConditionalPrePermitPageFromSignedReviews,buildP5ConditionalPreProofPage,completeP5ConditionalPreProofPage} from "./phase5ConditionalPrePermitPreparation_v39.ts";
+const conditionalResolvedPages=new WeakMap();
 const hold=s=>{throw Error("HOLD_P7_PRE_PROOF_PUBLICATION_"+s);};
 export async function resolveP7PublicationProofs({preview,env,port,readClock,forbiddenSignerFingerprints=[]}){
  const list=preview?.privateCompletedPackets;
@@ -23,4 +25,43 @@ export async function resolveP7PublicationProofs({preview,env,port,readClock,for
   if(Date.parse(proof.issuedAtUtc)>now||Date.parse(proof.validUntilUtc)<=now||cutoff<=now+900000)hold("STALE_OR_LATE_PROOF");
  }
  return {phase7ProofRequired:true,phase7ProtectedEnv:env,phase7IndependentProofsByPermitSha256:wires};
+}
+
+/** Actual conditional review ingress -> original independent proof port ->
+ * proof-attached private page. Runtime must supply protected scope/pins from
+ * authenticated SOURCE and owner policy. No signer or publication authority. */
+export async function resolveP7ConditionalPublicationPage({pool,scope,requestedFlightIds,reviewWire,reviewAuthority,env,port,readClock,forbiddenSignerFingerprints=[]}){
+ const protectedEnv=Object.freeze({...env});
+ const policy=parsePhase7ProtectedPrePolicy(protectedEnv);
+ const proofFp=protectedEnv.P6_PHASE7_PRE_PROOF_REVIEWER_FINGERPRINT_SHA256;
+ if(!/^[a-f0-9]{64}$/.test(proofFp??"")||!reviewAuthority||
+    !Array.isArray(reviewAuthority.forbiddenSignerFingerprints)||!Array.isArray(forbiddenSignerFingerprints)||
+    proofFp===reviewAuthority.expectedReviewerFingerprintSha256||
+    forbiddenSignerFingerprints.includes(proofFp)||
+    forbiddenSignerFingerprints.includes(reviewAuthority.expectedReviewerFingerprintSha256)||
+    protectedEnv.V39_P5_MANIFEST_SHA256!==scope?.source?.manifestSha256||
+    protectedEnv.V39_P5_RIGHTS_SHA256!==scope?.source?.rightsReviewSha256||
+    typeof port?.readExactPermitProofs!=="function"||typeof readClock!=="function")hold("CONDITIONAL_PROTECTED_SCOPE_OR_SIGNER_ALIAS");
+ const authority={...reviewAuthority,forbiddenSignerFingerprints:[
+  ...new Set([...reviewAuthority.forbiddenSignerFingerprints,...forbiddenSignerFingerprints,proofFp])]};
+ const prepared=await prepareP5ConditionalPrePermitPageFromSignedReviews(pool,scope,requestedFlightIds,reviewWire,authority);
+ const preview=buildP5ConditionalPreProofPage(prepared.privatePrepared);
+ const proofs=await resolveP7PublicationProofs({preview,env:protectedEnv,port,readClock,
+  forbiddenSignerFingerprints:[...forbiddenSignerFingerprints,authority.expectedReviewerFingerprintSha256]});
+ const done=completeP5ConditionalPreProofPage(preview,protectedEnv,policy.reviewSha256,policy.dispositions,proofs.phase7IndependentProofsByPermitSha256);
+ const result=Object.freeze(Object.defineProperties({...done},{privateAttachedPackets:{value:done.privateAttachedPackets,enumerable:false},privateSourceExpiresAtUtc:{value:prepared.privateSourceExpiresAtUtc,enumerable:false}}));
+ conditionalResolvedPages.set(result,Object.freeze({reviewerFingerprintSha256:authority.expectedReviewerFingerprintSha256,
+  proofReviewerFingerprintSha256:proofFp,reviewedCodeSha:authority.expectedReviewedCodeSha,
+  source:structuredClone(scope.source),protocolSha256:scope.protocolSha256,externalContentUseReviewSha256:scope.externalContentUseReviewSha256,
+  populationQueryId:scope.expectedPopulationQueryId,responseSha256:scope.expectedResponseSha256,
+  sourceExpiresAtUtc:prepared.privateSourceExpiresAtUtc,observedDbClockUtc:undefined,
+  ...(authority.independentlyApprovedStandaloneProtocolSha256===undefined?{}:{standaloneProtocolSha256:authority.independentlyApprovedStandaloneProtocolSha256})}));
+ return result;
+}
+
+/** Module-local provenance for the exact proof-resolved page, not a caller declaration. */
+export function readP7ResolvedConditionalPageBinding(page){
+ const binding=conditionalResolvedPages.get(page);
+ if(!binding||page.privateSourceExpiresAtUtc!==binding.sourceExpiresAtUtc)hold("ACTUAL_RESOLVED_CONDITIONAL_PAGE_REQUIRED");
+ return structuredClone(binding);
 }

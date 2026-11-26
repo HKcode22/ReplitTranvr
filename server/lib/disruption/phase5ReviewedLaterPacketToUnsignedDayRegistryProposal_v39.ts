@@ -26,6 +26,9 @@ import type {
 import type {P5SignedWitnessedLaterPrePacket}
  from "../../../scripts/v39_phase5_one_signed_witnessed_later_pre_github_owner_v39";
 
+import {assertP5ProofAttachedConditionalPacket,type P5ProofAttachedConditionalPacket} from "./phase5ConditionalPrePermitPreparation_v39";
+import {verifyP5ConditionalQueuePacket,type P5ConditionalQueueScope} from "./phase5ConditionalPreQueuePacket_v39";
+
 const SHA=/^[0-9a-f]{64}$/;
 const CODE=/^[0-9a-f]{40}$/;
 const UUID=/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -338,4 +341,80 @@ export function proposeP5ReviewedLaterPacketsAsUnsignedDayShard(
   providerCalls:0,paidProviderCalls:0,
   phase5ScientificFreezeGranted:false,phase6PaidGoGranted:false
  };
+}
+
+/** Conditional producer-side assembly. Use the same registry geometry and
+ * file envelope as native, but a separate explicitly scoped entrypoint.
+ * This is only a proposal: the native-only external signature verifier is
+ * deliberately not bypassed and cannot authorize these conditional bytes. */
+export function proposeP5ConditionalLaterPacketsAsUnsignedDayShard(
+ sourceRegistryBytes:Buffer,sourceRegistry:P5SignedSourceBatchRegistry,
+ scope:P5LaterPreUnsignedShardScope&{conditionalPreScope:P5ConditionalQueueScope;independentlyApprovedStandaloneProtocolSha256?:string},
+ proposedFiles:readonly {proposedFilePath:string;expectedExternallyPinnedReviewArtifactSha256:string;completed:P5ProofAttachedConditionalPacket}[]
+):P5UnsignedLaterRegistryReviewPlan{
+ if(!scope||![scope.expectedExternallyApprovedSourceRegistrySha256,scope.expectedManifestSha256,
+  scope.expectedReviewedReleaseSha256,scope.expectedReviewedSourceRightsSha256,scope.conditionalPreScope?.protocolSha256,
+  scope.conditionalPreScope?.externalContentUseReviewSha256].every(x=>SHA.test(x??""))||
+  !CODE.test(scope.reviewedMainCodeSha??"")||!FILE.test(scope.proposedLaterRegistryFilePath??"")||
+  !SOURCE_FILE.test(scope.sourceRegistryFilePath??"")||scope.proposedLaterRegistryFilePath===scope.sourceRegistryFilePath||
+  !Number.isSafeInteger(scope.runDayIndex)||scope.runDayIndex<1||scope.runDayIndex>31||
+  !Number.isSafeInteger(scope.shardIndex)||scope.shardIndex<1||scope.shardIndex>100000||
+  !Buffer.isBuffer(sourceRegistryBytes)||sourceRegistryBytes.length<100||sourceRegistryBytes.length>100000||
+  hash(sourceRegistryBytes)!==scope.expectedExternallyApprovedSourceRegistrySha256||
+  !Array.isArray(proposedFiles)||proposedFiles.length<1||proposedFiles.length>MAX_SHARD)
+  return fail("EXACT_CONDITIONAL_SOURCE_AND_SHARD_SCOPE");
+ let parsed:P5SignedSourceBatchRegistry;
+ try{parsed=JSON.parse(sourceRegistryBytes.toString("utf8"));}catch{return fail("EXTERNAL_SOURCE_REGISTRY_NOT_JSON");}
+ if(JSON.stringify(parsed)!==JSON.stringify(sourceRegistry)||parsed.schema!=="v39.phase5.signed-per-day-source-batch-readonly.v1"||
+  parsed.manifestSha256!==scope.expectedManifestSha256||parsed.runDayIndex!==scope.runDayIndex||
+  !Array.isArray(parsed.entries)||parsed.entries.length<1||parsed.entries.length>96)
+  return fail("SOURCE_REGISTRY_SCOPE_OR_EXACT_BYTES_CHANGED");
+ const sources=new Set<string>(),paths=new Set([scope.sourceRegistryFilePath,scope.proposedLaterRegistryFilePath]);
+ for(const e of parsed.entries){
+  if(!e||!SOURCE_FILE.test(e.filePath??"")||!SHA.test(e.expectedPacketSha256??"")||!SHA.test(e.expectedQueryDigestSha256??"")||
+   sources.has(e.expectedQueryDigestSha256)||paths.has(e.filePath))return fail("DUPLICATE_OR_MISSING_SOURCE_QUERY_IN_FROZEN_DAY");
+  sources.add(e.expectedQueryDigestSha256);paths.add(e.filePath);
+ }
+ const entries:P5SignedLaterPreRegistryEntry[]=[],bytesByPath=new Map<string,Buffer>(),
+  used=new Set<string>(),digests=new Set<string>(),reviews=new Set<string>();
+ let T6=0,T90=0,t24=0,missingT24=0;
+ for(const f of proposedFiles){
+  if(!f||!FILE.test(f.proposedFilePath??"")||paths.has(f.proposedFilePath)||!SHA.test(f.expectedExternallyPinnedReviewArtifactSha256??""))
+   return fail("REVIEW_PACKET_PATH_NOT_PRIVATE_FROZEN_OR_DUPLICATED");
+  const v=f.completed;
+  assertP5ProofAttachedConditionalPacket(v);
+  const pkt=JSON.parse(v.packetBytes.toString("utf8"));
+  const {permit:p}=verifyP5ConditionalQueuePacket(pkt,{releaseMode:"PHASE6_APPROVED",
+   approvedCodeSha:scope.reviewedMainCodeSha,manifestSha256:scope.expectedManifestSha256,
+   rightsSha256:scope.expectedReviewedSourceRightsSha256,conditionalPreScope:scope.conditionalPreScope,
+   independentlyApprovedStandaloneProtocolSha256:scope.independentlyApprovedStandaloneProtocolSha256},"LATER_ONLY");
+  const identity=p.flightInstanceId+"|"+p.horizon;
+  if(pkt.reviewArtifactSha256!==f.expectedExternallyPinnedReviewArtifactSha256||reviews.has(pkt.reviewArtifactSha256)||
+   digests.has(v.packetSha256)||used.has(identity)||p.runDayIndex!==scope.runDayIndex||
+   p.expectedReviewedReleaseSha256!==scope.expectedReviewedReleaseSha256||!sources.has(p.queryDigestSha256)||
+   !UUID.test(p.expectedSourcePopulationQueryId??"")||!SHA.test(p.expectedSourceResponseSha256??""))
+   return fail("CONDITIONAL_FLIGHT_DAY_SOURCE_RELEASE_OR_RIGHTS_NOT_BOUND");
+  const selected=exactUtc(p.selectedTNativeUtc),witness=p.reviewedT24WitnessReceipt?.receiptSha256;
+  if(witness)t24++;else missingT24++;
+  if(p.horizon==="T-6h")T6++;else T90++;
+  entries.push({filePath:f.proposedFilePath,expectedPacketSha256:v.packetSha256,expectedQueryDigestSha256:p.queryDigestSha256,
+   expectedFlightInstanceId:p.flightInstanceId,expectedHorizon:p.horizon as "T-6h"|"T-90m",expectedSelectedTNativeUtc:new Date(selected).toISOString(),
+   expectedSourcePopulationQueryId:p.expectedSourcePopulationQueryId,...(witness?{expectedT24ReceiptSha256:witness}:{})});
+  paths.add(f.proposedFilePath);bytesByPath.set(f.proposedFilePath,Buffer.from(v.packetBytes));used.add(identity);digests.add(v.packetSha256);reviews.add(pkt.reviewArtifactSha256);
+ }
+ const cutoff=(e:P5SignedLaterPreRegistryEntry)=>Date.parse(e.expectedSelectedTNativeUtc)-(e.expectedHorizon==="T-6h"?21600000:5400000);
+ entries.sort((a,b)=>cutoff(a)-cutoff(b)||a.expectedFlightInstanceId.localeCompare(b.expectedFlightInstanceId)||a.filePath.localeCompare(b.filePath));
+ const registryProposal:P5SignedLaterPreDayRegistry={schema:"v39.phase5.signed-later-pre-day-registry.v1",manifestSha256:scope.expectedManifestSha256,
+  reviewedCodeSha:scope.reviewedMainCodeSha,sourceDayRegistrySha256:scope.expectedExternallyApprovedSourceRegistrySha256,
+  sourceDayRegistryFilePath:scope.sourceRegistryFilePath,runDayIndex:scope.runDayIndex,shardIndex:scope.shardIndex,entries};
+ const registryProposalBytes=Buffer.from(JSON.stringify(registryProposal));
+ if(registryProposalBytes.length<100||registryProposalBytes.length>250000)return fail("DAY_REGISTRY_EXCEEDS_VERIFIER_BYTE_BOUND");
+ return {schema:"v39.phase5.review-ready-later-pre-unsigned-registry-plan.v1",
+  status:"REGISTRY_PACKET_BYTES_FOR_INDEPENDENT_EXTERNAL_SIGNATURE_NOT_PUBLISHED",sourceRegistrySha256:scope.expectedExternallyApprovedSourceRegistrySha256,
+  proposedRegistrySha256:hash(registryProposalBytes),proposedRegistryFilePath:scope.proposedLaterRegistryFilePath,registryProposal,registryProposalBytes,
+  proposedPacketFiles:entries.map(e=>({filePath:e.filePath,sha256:e.expectedPacketSha256,bytes:bytesByPath.get(e.filePath)!})),
+  redactedSummary:{runDayIndex:scope.runDayIndex,shardIndex:scope.shardIndex,proposedFlightHorizons:entries.length,T6,T90,reviewedT24Witnesses:t24,
+   separatelyReviewedNoT24:missingT24,sourceQueryCount:sources.size},
+  independentlySignedRegistry:false,existingRegistryVerifierCalled:false,flightFilesPublished:0,registeredV0091Tasks:0,githubDispatches:0,
+  databaseReads:0,databaseWrites:0,providerCalls:0,paidProviderCalls:0,phase5ScientificFreezeGranted:false,phase6PaidGoGranted:false};
 }

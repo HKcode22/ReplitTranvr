@@ -90,9 +90,11 @@ export function approveP5SignedLaterPreChild(
  const matching=verified.entries.filter(e=>e.filePath===packetPath);
  if(matching.length!==1)
   hold("SELECTED_PACKET_NOT_IN_INDEPENDENTLY_SIGNED_DAY_REGISTRY");
- const entry=matching[0];
+ const entry=matching[0],packet=entry.packet;
+ if(packet.schema!=="v39.phase5.github-witnessed-later-pre-reviewed.v1"&&packet.schema!=="v39.phase5.github-standalone-later-pre-asof-reviewed.v2")
+  return hold("CONDITIONAL_PACKET_REQUIRES_CURRENT_CD_QUEUE_PATH");
  return{
-  packetBytes:entry.bytes,packet:entry.packet,
+  packetBytes:entry.bytes,packet,
   // Passed to the ORIGINAL exhaustive prospective PRE owner admission.
   delegatedEnv:{
    ...env,

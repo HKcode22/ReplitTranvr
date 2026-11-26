@@ -182,7 +182,7 @@ export async function runP6PostcommitNativeAudit(env){
    independentReviewStillRequired:true}}:{})};
   // Existing CLI prints only the aggregate. A subsequent authorized
   // in-process reviewer may consume the exact private handoff.
-  return Object.freeze(Object.defineProperties(result,{privateConditionalSourceReview:{value:a.privateConditionalSourceReview,enumerable:false},privateUnsignedPreReview:{value:review,enumerable:false},
+  return Object.freeze(Object.defineProperties(result,{privateConditionalSourceReview:{value:a.privateConditionalSourceReview,enumerable:false},privateConditionalSourceScope:{value:a.privateConditionalSourceScope,enumerable:false},privateUnsignedPreReview:{value:review,enumerable:false},
    privateNativeFeatureReview:{value:features,enumerable:false}}));
  }finally{await Promise.allSettled([reader.end(),source.end()]);}
 }

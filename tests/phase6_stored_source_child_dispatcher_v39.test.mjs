@@ -214,3 +214,39 @@ test("approved new executable can dispatch unchanged historical study policy, bu
  for(const bad of [{P6_PHASE5B_RUNTIME_EXECUTABLE_SHA:""},{P6_PHASE5B_RUNTIME_EXECUTABLE_SHA:"8".repeat(40)},{V39_P5_APPROVED_CODE_SHA:"9".repeat(40)},{V39_PHASE5_SOURCE_RIGHTS_APPROVED:"0"},{GITHUB_RUN_ATTEMPT:"2"}])
   assert.throws(()=>admitP6StoredSourceDispatcher({...f.env,...bad}),/NO_EXACT_INDEPENDENT/);
 });
+
+test("T057 explains safe preflight hold, already submitted work and capacity deferrals without changing dispatch authority",async()=>{
+ const f=fixture();Object.assign(f.planned,{eligibleDueUnsubmitted:6,alreadySubmittedGitHubChildren:2,deferredDueCount:2,missedOrStoppedCensored:3});
+ const m=f.mock({children:Array.from({length:24},(_,i)=>f.run(100+i,"queued","P5 SOURCE "+H("9")))});
+ const cap=await runP6StoredSourceDispatcher(f.env,{...f.options,fetchImpl:m.fetchImpl});
+ assert.equal(cap.capacityDeferredCount,4);assert.equal(cap.availableInFlightSlots,0);assert.equal(cap.eligibleDueUnsubmitted,6);
+ assert.equal(cap.deferredDueCount,2);assert.equal(cap.acknowledgedGithubChildCount,0);assert.equal(m.posts.length,0);
+ const prior=f.run(12344,"completed","parent","failure"),job={name:"separately-authorized-stored-source-children",status:"completed",conclusion:"failure",
+  steps:[{name:"Dispatch stored SOURCE exact children",conclusion:"failure"}]};
+ const uncertain=f.mock({previous:[prior],jobs:[job]});
+ const hold=await runP6StoredSourceDispatcher(f.env,{...f.options,fetchImpl:uncertain.fetchImpl});
+ assert.equal(hold.preDispatchHoldStage,"PRIOR_DISPATCH_CERTAINTY");assert.equal(uncertain.posts.length,0);
+ const absent=f.mock();const err=await runP6StoredSourceDispatcher(f.env,{...f.options,fetchImpl:absent.fetchImpl,observe:async()=>{throw Error("PRIVATE_UNSAFE_DETAIL")}});
+ assert.equal(err.preDispatchHoldStage,"SOURCE_OBSERVATION");assert(!JSON.stringify(err).includes("PRIVATE_UNSAFE_DETAIL"));
+ const dup=f.mock({children:f.inputs.map((x,i)=>f.run(10+i,"completed","P5 SOURCE "+x.query_digest,"success"))});
+ const seen=await runP6StoredSourceDispatcher(f.env,{...f.options,fetchImpl:dup.fetchImpl});
+ assert.equal(seen.alreadySubmittedAtFinalReadCount,4);assert.equal(seen.capacityDeferredCount,0);assert.equal(dup.posts.length,0);
+});
+
+test("T057 no-due SOURCE metadata preserves DB clock and count, not full coverage",async()=>{
+ const f=fixture(),base={status:"NO_DUE_SOURCE_DAYS_NO_PRIVATE_READ_OR_DISPATCH",providerCalls:0,databaseWrites:0,githubDispatches:0,paidPhase6Go:false};
+ for(const [fields,expected] of [[{observedActualSourceQueueQueries:12,observedSourceDatabaseClockUtc:clock},[12,clock,true]],
+  [{observedActualSourceQueueQueries:0,observedSourceDatabaseClockUtc:clock},[0,clock,true]],
+  [{observedActualSourceQueueQueries:701,observedSourceDatabaseClockUtc:"bad"},[null,null,false]],
+  [{observedActualSourceQueueQueries:1,observedSourceDatabaseClockUtc:"2026-11-15T05:55:00.000Z"},[1,"2026-11-15T05:55:00.000Z",false]],
+  [{},[null,null,false]]]){
+  const m=f.mock(),out=await runP6StoredSourceDispatcher(f.env,{...f.options,fetchImpl:m.fetchImpl,observe:async()=>({...base,...fields,privateFlightContent:"NEVER_LOG"})});
+  assert.equal(out.status,"NO_DUE_SOURCE_NO_DISPATCH");
+  assert.deepEqual([out.observedActualSourceQueueQueries,out.observedSourceDatabaseClockUtc,out.queueObservationFresh],expected);
+  assert.equal(out.maxLeadMinutes,90);assert.equal(out.fullSignedCalendarCoverageVerified,false);
+  assert.equal(out.acknowledgedGithubChildCount,0);assert.equal(out.paidGetsCertifiedByParent,0);
+  assert.equal(m.calls.length,0);assert(!JSON.stringify(out).includes("NEVER_LOG"));
+ }
+ const m=f.mock(),out=await runP6StoredSourceDispatcher(f.env,{...f.options,fetchImpl:m.fetchImpl,observe:async()=>({...base,status:"SELECTED_SOURCE_DAY_REVIEWS_UNAVAILABLE_NO_DISPATCH",observedActualSourceQueueQueries:3,observedSourceDatabaseClockUtc:clock,unavailableSelectedDayCount:1,unavailableSelectedDueQueryCount:2})});
+ assert.equal(out.queueObservationFresh,true);assert.equal(out.observedActualSourceQueueQueries,3);assert.equal(out.unavailableSelectedDueQueryCount,2);assert.equal(m.calls.length,0);
+});

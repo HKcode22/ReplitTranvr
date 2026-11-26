@@ -156,3 +156,24 @@ describe("Canonical Amendment E: same-milestone gate-out delay, no provider IO",
    .toThrow("CONTRADICTORY_OUTCOME_EVENT_AND_AVAILABILITY");
  });
 });
+
+describe("T075 distinct scheduled and actual evidence at candidate boundary",()=>{
+ it.each(["schedule","frozen-original"] as const)("does not turn reused %s evidence into a physical numerical label",which=>{
+  const x=sample();
+  x.outcome.evidenceSha256=which==="schedule"?x.scheduled.evidenceSha256:x.frozenSourceOriginalSha256;
+  const r=assessP5AmendmentEGateOutDelayCandidate(x);
+  expect(r.status).toBe("ACTUAL_GATE_OUT_SEMANTICS_UNVERIFIED");
+  expect(r.candidateDelayMinutes).toBeNull();
+  expect(r.hasNumericalCandidate).toBe(false);
+  expect(r.authorizedForModelTrainingOrPrimaryHeadline).toBe(false);
+ });
+ it("keeps zero as an actual observed candidate only with separate evidence; not a missingness default",()=>{
+  const x=sample();x.outcome.actualUtc=native;x.outcome.firstAvailableAtUtc="2035-11-25T12:01:00.000Z";
+  const r=assessP5AmendmentEGateOutDelayCandidate(x);
+  expect(r.status).toBe("MATCHED_ACTUAL_GATE_OUT_CANDIDATE");
+  expect(r.candidateDelayMinutes).toBe(0);
+  expect(r.physicalMilestoneIndependentlyCertifiedByThisFunction).toBe(false);
+  x.outcome.evidenceSha256=x.scheduled.evidenceSha256;
+  expect(assessP5AmendmentEGateOutDelayCandidate(x).candidateDelayMinutes).toBeNull();
+ });
+});

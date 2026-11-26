@@ -39,7 +39,8 @@ export function admitP6CurrentPrivateLaterPre(env:NodeJS.ProcessEnv){
  const calendar=loadP6CurrentPreCalendarWindows(env,trust);
  return {trust,calendar,readerUrl:env.P6_PRIVATE_READER_DATABASE_URL!,
   policy:{independentLaterQueueTransportProjectionApproved:true,existingPaidDispatchApproved:false,
-   independentlyApprovedStandaloneProtocolSha256:base.independentlyApprovedStandaloneProtocolSha256}};
+   independentlyApprovedStandaloneProtocolSha256:base.independentlyApprovedStandaloneProtocolSha256,
+   ...(base.conditionalPreScope?{conditionalPreScope:base.conditionalPreScope}:{})}};
 }
 type Projection=Awaited<ReturnType<typeof readP6CurrentLaterQueueRosters>>["privateRosters"][number];
 type Selector={runDayIndex:number;indexRevision:number;shardIndex:number;indexSha256:string;laterRegistrySha256:string};

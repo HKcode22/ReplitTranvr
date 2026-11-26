@@ -1,5 +1,5 @@
 import {describe,it,expect} from "vitest";
-import {createHash} from "node:crypto";
+import {createHash,generateKeyPairSync} from "node:crypto";
 import {mkdtempSync,rmSync} from "node:fs";
 import {tmpdir} from "node:os";
 import {join} from "node:path";
@@ -55,7 +55,7 @@ describe("private same-runner PRE handoff transport",()=>{
  });
 });
 
-import {projectP7LocalRoleEnvironment} from "../scripts/v39_phase7_local_pre_evidence_roles_v39";
+import {projectP7LocalRoleEnvironment,readP7ConditionalInstructionRolePolicy} from "../scripts/v39_phase7_local_pre_evidence_roles_v39";
 describe("actual protected role credential projection",()=>{
  const base:NodeJS.ProcessEnv={GITHUB_ACTIONS:"true",GITHUB_REPOSITORY:"HKcode22/ReplitTranvr",GITHUB_REF:"refs/heads/main",GITHUB_EVENT_NAME:"workflow_dispatch",GITHUB_RUN_ATTEMPT:"1",
   GITHUB_WORKFLOW_REF:"HKcode22/ReplitTranvr/.github/workflows/phase5-one-signed-day-source-child-dispatch.yml@refs/heads/main",GITHUB_SHA:scope.codeSha,V39_P5_APPROVED_CODE_SHA:scope.codeSha,
@@ -82,9 +82,41 @@ describe("actual protected role credential projection",()=>{
     expect(()=>projectP7LocalRoleEnvironment({...env,...successor,...delta},role,role==="publisher"?endpoint.toString():undefined)).toThrow("PROTECTED_NO_PROVIDER_SCOPE");
   }
  });
+ it("T034 exact protected conditional role policy survives successor projection and authenticates the pinned day plan",()=>{
+  const stable="9c9cddb1aaeb04934d94af2937ee158e6d991f6c",head="7".repeat(40);
+  const dk=generateKeyPairSync("ed25519").publicKey,qk=generateKeyPairSync("ed25519").publicKey;
+  const fingerprint=(k:typeof dk)=>createHash("sha256").update(k.export({format:"der",type:"spki"})).digest("hex");
+  const plan=Buffer.from(JSON.stringify({schema:"v39.phase6.reviewed-future-day-source-plan.v1",runDayIndex:scope.runDayIndex,reviewedRefreshTiming:{maxPopulationStalenessSeconds:3600}}));
+  const planHash=createHash("sha256").update(plan).digest("hex"),calendar=h("calendar"),protocol=h("protocol"),review=h("conditional review");
+  const trust={independentStudyTrustPinsApproved:true,expectedReaderSessionLogin:"phase6_private_reader_login_ci_fixture",reviewedCodeSha:stable,manifestSha256:scope.manifestSha256,calendarSha256:calendar,releaseSha256:scope.releaseSha256,rightsSha256:scope.rightsSha256,dayReviewerFingerprintSha256:fingerprint(dk),dayReviewerPublicKeyPem:dk.export({format:"pem",type:"spki"}).toString(),queryReviewerFingerprintSha256:fingerprint(qk),queryReviewerPublicKeyPem:qk.export({format:"pem",type:"spki"}).toString()};
+  const daily={schema:"v39.phase6.delegated-daily-source-review-policy.v1",delegatedDailyPacketProductionApproved:true,approvedCodeSha:stable,manifestSha256:scope.manifestSha256,calendarSha256:calendar,releaseSha256:scope.releaseSha256,rightsSha256:scope.rightsSha256,providerContractSha256:scope.providerContractSha256,dayPlanSha256s:Array.from({length:31},(_,i)=>({runDayIndex:i+1,sha256:i+1===scope.runDayIndex?planHash:h("day "+(i+1))})),conditionalPreFeatureReview:{schema:"v39.phase5.conditional-pre-feature-review-policy.v1",approved:true,rightsSha256:scope.rightsSha256,protocolSha256:protocol,externalContentUseReviewSha256:review}};
+  const bytes=Buffer.from(JSON.stringify(daily)),pins={GITHUB_SHA:head,V39_P5_APPROVED_CODE_SHA:stable,P6_PHASE5B_RUNTIME_EXECUTABLE_SHA:head,P6_NONPAID_DAILY_POLICY_BASE64:bytes.toString("base64"),P6_NONPAID_DAILY_POLICY_SHA256:createHash("sha256").update(bytes).digest("hex"),P6_PRIVATE_SOURCE_STORED_REVIEW_APPROVED:"1",P6_PRIVATE_SOURCE_STABLE_TRUST_BASE64:Buffer.from(JSON.stringify(trust)).toString("base64"),P6_PRIVATE_DAY_INDEX_REVISION:"3",P6_PRIVATE_DAY_INDEX_SHA256:h("index"),P6_CONDITIONAL_SERVICE_PROTOCOL_SHA256:protocol};
+  const read=((path:unknown)=>{expect(path).toBe("data-collection/phase5/planning/phase6-source-day-02.json");return plan;}) as typeof import("node:fs").readFileSync;
+  for(const [role,env] of [["lane",lane],["proof",proof]] as const){
+   const projected=projectP7LocalRoleEnvironment({...env,...pins},role);
+   const got=readP7ConditionalInstructionRolePolicy(projected,read);
+   expect(got).toMatchObject({expectedSourceRunId:scope.runId,selector:{runDayIndex:2,indexRevision:3,indexSha256:h("index"),queryDigestSha256:scope.queryDigestSha256},policy:{maximumPopulationStalenessSeconds:3600,conditionalPreFeatureReview:daily.conditionalPreFeatureReview}});
+   expect(got.trust.reviewedCodeSha).toBe(stable);
+   for(const bad of [{P6_PRIVATE_DAY_INDEX_REVISION:"0"},{P6_CONDITIONAL_SERVICE_PROTOCOL_SHA256:h("different protocol")},{P6_NONPAID_DAILY_POLICY_SHA256:h("wrong daily")}]){
+    expect(()=>readP7ConditionalInstructionRolePolicy({...projected,...bad},read)).toThrow("CONDITIONAL_INSTRUCTION_POLICY");
+   }
+   expect(()=>readP7ConditionalInstructionRolePolicy(projected,(()=>Buffer.from("{}")) as typeof import("node:fs").readFileSync)).toThrow("CONDITIONAL_INSTRUCTION_DAY_PLAN");
+  }
+  const pub=projectP7LocalRoleEnvironment({...publisher,...pins},"publisher",endpoint.toString());
+  expect(pub.P6_PRIVATE_SOURCE_STABLE_TRUST_BASE64).toBeUndefined();expect(pub.P6_CONDITIONAL_SERVICE_PROTOCOL_SHA256).toBeUndefined();
+ });
  it("does not forward other keys, tokens, or the source password to publisher",()=>{
   const l=projectP7LocalRoleEnvironment(lane,"lane"),p=projectP7LocalRoleEnvironment(proof,"proof"),w=projectP7LocalRoleEnvironment(publisher,"publisher",endpoint.toString());
   expect(l.P6_PHASE7_PRE_LANE_EVIDENCE_AUTHORITY_PRIVATE_KEY_BASE64).toBe("synthetic-lane-key");expect(l.P6_PRIVATE_READER_DATABASE_URL).toBeUndefined();
+  // T068: only explicitly enabled lane receives existing private-reader
+  // credentials; never PRE writer or publisher credentials.
+  const meta={P6_CONDITIONAL_LATER_METADATA_READ_ENABLED:"1",P6_PRIVATE_READER_DATABASE_URL:"synthetic-reader-url",
+   P6_PHASE7_PRIVATE_REVIEW_TRANSPORT_APPROVED:"1",P6_PHASE7_PRIVATE_REVIEW_READER_LOGIN:"phase6_private_reader_login_ci_fixture"};
+  expect(projectP7LocalRoleEnvironment({...lane,...meta},"lane")).toMatchObject(meta);
+  expect(()=>projectP7LocalRoleEnvironment({...lane,...meta,P6_CONDITIONAL_LATER_METADATA_READ_ENABLED:"0"},"lane")).toThrow("CROSS_ROLE_LAUNCH_CREDENTIALS");
+  expect(()=>projectP7LocalRoleEnvironment({...lane,...meta,P5_V39_PRE_DATABASE_URL:"forbidden"},"lane")).toThrow("CROSS_ROLE_LAUNCH_CREDENTIALS");
+  expect(()=>projectP7LocalRoleEnvironment({...lane,...meta,P6_PRIVATE_PUBLISHER_DATABASE_URL:"forbidden"},"lane")).toThrow("CROSS_ROLE_LAUNCH_CREDENTIALS");
+  expect(()=>projectP7LocalRoleEnvironment({...lane,...meta,P6_PRIVATE_READER_DATABASE_URL:""},"lane")).toThrow("ROLE_CONFIGURATION_MISSING");
   expect(p.P6_PHASE7_PRE_PROOF_REVIEWER_PRIVATE_KEY_BASE64).toBe("synthetic-proof-key");expect(p.P6_PRIVATE_PUBLISHER_DATABASE_URL).toBeUndefined();
   expect(new URL(w.V39_P5_SOURCE_DATABASE_URL!).password).toBe("");
   for(const x of [l,p,w]){expect(x.GITHUB_TOKEN).toBeUndefined();expect(x.ACTIONS_RUNTIME_TOKEN).toBeUndefined();}
@@ -125,4 +157,57 @@ describe("T034 conditional instructions private role transport",()=>{
    await expect(callP7LocalPreRole(path,makeP7LocalPreRequest(scope,"issue_lane",[p],[],{...proof,opaque:"different"}))).rejects.toThrow("REMOTE_HOLD_NO_REPLAY");expect(calls).toBe(1);
   }finally{await server.close();rmSync(dir,{recursive:true,force:true});}
  });
+});
+
+it("T049 real local conditional T24 review transport accepts exact anchor and member list only on lane; replay cannot issue again",async()=>{
+ const dir=mkdtempSync(join(tmpdir(),"p7r-")),paths={lane:join(dir,"l.sock"),proof:join(dir,"p.sock"),publisher:join(dir,"w.sock")};
+ const id="leg:g5a:"+h("service"),request={anchor:{sourceGithubRunId:scope.runId,populationQueryId:"a23e4567-e89b-42d3-a456-426614174000",responseSha256:h("response")},flightInstanceIds:[id]};
+ const proof={schema:"synthetic instruction"},review={page:{schema:"v39.phase5.conditional-pre-external-review-page.v1" as const,reviewedCodeSha:scope.codeSha,
+ manifestSha256:scope.manifestSha256,rightsSha256:scope.rightsSha256,protocolSha256:h("protocol"),externalContentUseReviewSha256:h("contents"),
+ queryDigestSha256:scope.queryDigestSha256,populationQueryId:request.anchor.populationQueryId,responseSha256:request.anchor.responseSha256,
+ runDayIndex:scope.runDayIndex,horizon:"T-24h",sourceGithubRunId:scope.runId,reviews:[{flightInstanceId:id,reviewArtifactBase64:"fixture",reviewArtifactSha256:h("artifact")}]},
+ signatureBase64:Buffer.alloc(64,1).toString("base64")};
+ let called=0;
+ const server=await listenP7LocalPreRole({path:paths.lane,role:"lane",scope,maxLifetimeMs:30000,handler:async q=>{
+  called++;expect(q.op).toBe("issue_conditional_t24_review");expect(q.conditionalT24Review).toEqual(request);expect(q.conditionalSourceProof).toEqual(proof);
+  return {wires:[],committedCount:0,conditionalReviewWire:review};
+ }});
+ try{
+  const port=openP7LocalPrivatePreHandoff({scope,paths,readStored:async()=>new Map(),readConditionalT24ReviewInstructionProof:async()=>proof});
+  const q=makeP7LocalPreRequest(scope,"issue_conditional_t24_review",[],[],proof,request);
+  expect(()=>validateP7LocalPreRequest(q,scope,"proof")).toThrow("ROLE_OPERATION");
+  expect(()=>makeP7LocalPreRequest(scope,"issue_conditional_t24_review",[],[],proof,{...request,flightInstanceIds:[id,id]})).toThrow("CONDITIONAL_REVIEW_REQUEST_SCOPE");
+  expect(()=>makeP7LocalPreRequest(scope,"issue_conditional_t24_review",[],[],proof,{...request,anchor:{...request.anchor,sourceGithubRunId:"999999"}})).toThrow("CONDITIONAL_REVIEW_REQUEST_SCOPE");
+  expect(await port.readConditionalT24Review(request)).toEqual(review);
+  await expect(port.readConditionalT24Review(request)).rejects.toThrow("REMOTE_HOLD_NO_REPLAY");
+  await expect(callP7LocalPreRole(paths.lane,makeP7LocalPreRequest(scope,"issue_conditional_t24_review",[],[],{...proof,extra:true},request))).rejects.toThrow("REMOTE_HOLD_NO_REPLAY");
+  expect(called).toBe(1);
+ }finally{await server.close();rmSync(dir,{recursive:true,force:true});}
+});
+
+it("T064 separate later review socket accepts exact subset or explicit no-review, rejects replay and wrong horizon",async()=>{
+ const dir=mkdtempSync(join(tmpdir(),"p7lr-")),paths={lane:join(dir,"l.sock"),proof:join(dir,"p.sock"),publisher:join(dir,"w.sock")};
+ const ids=["leg:g5a:"+h("a"),"leg:g5a:"+h("b"),"leg:g5a:"+h("c"),"leg:g5a:"+h("d"),"leg:g5a:"+h("e")];
+ const request={anchor:{sourceGithubRunId:scope.runId,populationQueryId:"a23e4567-e89b-42d3-a456-426614174000",responseSha256:h("response")},flightInstanceIds:ids.slice(0,2),horizon:"T-6h" as const};
+ const proof={schema:"synthetic later instruction"},review={page:{schema:"v39.phase5.conditional-pre-external-review-page.v1" as const,reviewedCodeSha:scope.codeSha,
+  manifestSha256:scope.manifestSha256,rightsSha256:scope.rightsSha256,protocolSha256:h("protocol"),externalContentUseReviewSha256:h("contents"),
+  queryDigestSha256:scope.queryDigestSha256,populationQueryId:request.anchor.populationQueryId,responseSha256:request.anchor.responseSha256,
+  runDayIndex:scope.runDayIndex,horizon:"T-6h",sourceGithubRunId:scope.runId,reviews:[{flightInstanceId:ids[0],reviewArtifactBase64:"fixture",reviewArtifactSha256:h("artifact")}]},signatureBase64:Buffer.alloc(64,1).toString("base64")};
+ let called=0;
+ const server=await listenP7LocalPreRole({path:paths.lane,role:"lane",scope,maxLifetimeMs:30000,handler:async q=>{
+  called++;expect(q.op).toBe("issue_conditional_later_review");expect(q.conditionalSourceProof).toEqual(proof);
+  return {wires:[],committedCount:0,conditionalLaterReviewWire:called===1?review:called===2?null:called===4?undefined:{...review,page:{...review.page,horizon:"T-90m",reviews:[{...review.page.reviews[0],flightInstanceId:ids[3]}]}}};
+ }});
+ try{
+  const port=openP7LocalPrivatePreHandoff({scope,paths,readStored:async()=>new Map(),readConditionalLaterReviewInstructionProof:async()=>proof});
+  const q=makeP7LocalPreRequest(scope,"issue_conditional_later_review",[],[],proof,undefined,request);
+  expect(()=>validateP7LocalPreRequest(q,scope,"proof")).toThrow("ROLE_OPERATION");
+  expect(()=>makeP7LocalPreRequest(scope,"issue_conditional_later_review",[],[],proof,undefined,{...request,horizon:"T-24h" as any})).toThrow("CONDITIONAL_REVIEW_REQUEST_SCOPE");
+  expect(await port.readConditionalLaterReview(request)).toEqual(review);
+  await expect(port.readConditionalLaterReview(request)).rejects.toThrow("REMOTE_HOLD_NO_REPLAY");
+  expect(await port.readConditionalLaterReview({...request,flightInstanceIds:[ids[2]]})).toBeNull();
+  await expect(port.readConditionalLaterReview({...request,flightInstanceIds:[ids[3]]})).rejects.toThrow("REMOTE_HOLD_NO_REPLAY");
+  await expect(port.readConditionalLaterReview({...request,flightInstanceIds:[ids[4]]})).rejects.toThrow("REMOTE_HOLD_NO_REPLAY");
+  expect(called).toBe(4);
+ }finally{await server.close();rmSync(dir,{recursive:true,force:true});}
 });

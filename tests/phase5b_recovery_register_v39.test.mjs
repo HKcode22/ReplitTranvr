@@ -27,8 +27,18 @@ function validateRegister(rows){
   for(const [col,prefix] of expected)for(const id of refs(col)){assert.ok(ids.has(id),r[0]+" unknown reference "+id);assert.ok(id.startsWith(prefix),r[0]+" wrong reference family "+id);}
  }
  const by=new Map(rows.map(r=>[r[0],r]));
- const covered=new Set(rows.filter(r=>r[0].startsWith("T")).flatMap(r=>refs(r[3])));
- for(const r of rows.filter(r=>r[0].startsWith("F")))assert.ok(covered.has(r[0]),"failure without regression scenario "+r[0]);
+ const tests=rows.filter(r=>r[0].startsWith("T")),matchedF=new Set(),matchedI=new Set();
+ for(const row of tests){
+  const failures=refs(row[3]);
+  for(const f of failures)assert.ok(refs(row[4]).some(id=>refs(by.get(id)[3]).includes(f)),row[0]+" unrelated failure "+f);
+  for(const id of refs(row[4])){
+   const intersection=refs(by.get(id)[3]).filter(f=>failures.includes(f));
+   assert.ok(intersection.length,row[0]+" unrelated implementation "+id);
+   matchedI.add(id);intersection.forEach(f=>matchedF.add(f));
+  }
+ }
+ for(const r of rows.filter(r=>r[0].startsWith("F")))assert.ok(matchedF.has(r[0]),"failure without matching implementation regression "+r[0]);
+ for(const r of rows.filter(r=>r[0].startsWith("I")))assert.ok(matchedI.has(r[0]),"implementation without matching regression "+r[0]);
  for(const r of rows.filter(r=>/^[FI]/.test(r[0])))for(const id of refs(r[3]))assert.ok(refs(by.get(id)[3]).includes(r[0]),r[0]+" not reciprocated by "+id);
 }
 test("consecutive F/I/C/T identifiers, valid reciprocal references and durable operator entrypoint",()=>{
@@ -61,4 +71,21 @@ test("primary duplicate, missing section, malformed row and wrong reference rema
  assert.throws(()=>parseRegister(minimal.replace("## Implementations","## Other")),/missing register section/);
  assert.throws(()=>parseRegister(minimal.replace("| I001 | Partial | example | F001 |","| I001 | Partial | F001 |")),/wrong column count/);
  assert.throws(()=>validateRegister(parseRegister(minimal.replace("| F001 | Open | example | I001 |","| F001 | Open | example | F001 |"))),/wrong reference family/);
+});
+
+test("T058 every failure and implementation has a corresponding actual regression mapping",()=>{
+ const two=minimal.replace("## Implementations","| F002 | Open | other | I002 |\n## Implementations").replace("## Completion components","| I002 | Partial | other | F002 |\n## Completion components");
+ assert.throws(()=>validateRegister(parseRegister(two)),/failure without matching implementation regression F002/);
+ const wrong=two.replace("F001 | I001 | C001 | tests/example","F001 | I001, I002 | C001 | tests/example");
+ assert.throws(()=>validateRegister(parseRegister(wrong)),/unrelated implementation I002/);
+ const untested=minimal.replace("F001 | Open | example | I001","F001 | Open | example | I001, I002").replace("## Completion components","| I002 | Partial | other | F001 |\n## Completion components");
+ assert.throws(()=>validateRegister(parseRegister(untested)),/implementation without matching regression I002/);
+});
+
+test("T060 each named failure in a multi-failure T must match its own implementation",()=>{
+ const two=minimal.replace("## Implementations","| F002 | Open | other | I002 |\n## Implementations").replace("## Completion components","| I002 | Partial | other | F002 |\n## Completion components");
+ const both=two.replace("## Regression crosswalk","| T002 | Open | actual second regression | F002 | I002 | C001 | tests/example.test.mjs |\n## Regression crosswalk");
+ validateRegister(parseRegister(both));
+ const mislabeled=both.replace("F001 | I001 | C001 | tests/example","F001, F002 | I001 | C001 | tests/example");
+ assert.throws(()=>validateRegister(parseRegister(mislabeled)),/T001 unrelated failure F002/);
 });

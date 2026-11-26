@@ -1,3 +1,4 @@
+import {readP7ResolvedConditionalPageBinding} from "./phase7IndependentPreProofPublication_v39.mjs";
 /** Post-COMMIT, nonpaid existing V0079 source audit from the actual
  * day-index and signed query bytes. Does NOT use the due dispatch route:
  * a source can be audited after its HTTP window, before each own PRE cutoff.
@@ -19,8 +20,8 @@ import {completeP5NativeLaterPrePacketForIndependentSigning,completeP5NativeT24P
 import {attachPhase7SignedProofBeforeRoster} from "./phase7SignedPreFieldProof_v39.ts";
 import {parsePhase7ProtectedPrePolicy} from "./phase7ProtectedPreResolver_v39.ts";
 import {hashPhase7DurableCandidate} from "./phase7DurableDerivedBundleCandidate_v39.ts";
-import {proposeP5ReviewedLaterPacketsAsUnsignedDayShard} from "./phase5ReviewedLaterPacketToUnsignedDayRegistryProposal_v39.ts";
-import {digestP5LaterShardPrivatePacketFileManifest,signedP5ExternalLaterReviewBytes,verifyP5ExternalEd25519ReviewOfLaterShard} from "./phase5ExternalEd25519LaterShardReviewerVerify_v39.ts";
+import {proposeP5ReviewedLaterPacketsAsUnsignedDayShard,proposeP5ConditionalLaterPacketsAsUnsignedDayShard} from "./phase5ReviewedLaterPacketToUnsignedDayRegistryProposal_v39.ts";
+import {digestP5LaterShardPrivatePacketFileManifest,signedP5ExternalLaterReviewBytes,verifyP5ExternalEd25519ReviewOfLaterShard,sameP5ConditionalLaterReviewerScope} from "./phase5ExternalEd25519LaterShardReviewerVerify_v39.ts";
 const SHA=/^[a-f0-9]{64}$/;
 const REG=/^data-collection\/phase5\/frozen\/source_[A-Za-z0-9_.-]{8,125}\.json$/;
 const QUERY=/^data-collection\/phase5\/frozen\/sourceq_[A-Za-z0-9_.-]{8,110}\.json$/;
@@ -166,13 +167,12 @@ function proofBytes(x,max){
  if(b.length>max||b.toString("base64")!==x)fail("CONDITIONAL_PROOF_BYTES");
  return b;
 }
-export function verifyP6ConditionalSourceInstructionProof(proof,{trust,selector,policy,permit,observedDbClockUtc,expectedSourceRunId}){
+function verifiedConditionalInstructionQuery(proof,{trust,selector,policy,observedDbClockUtc,expectedSourceRunId}){
  if(!exact(proof,["schema","dayWire","indexBase64","sourceRegistries","queryWire","queryBase64"])||proof.schema!==PROOF_SCHEMA||
     !checkSelector(selector)||trust?.independentStudyTrustPinsApproved!==true||
     trust.dayReviewerFingerprintSha256===trust.queryReviewerFingerprintSha256||
     policy?.existingPaidDispatchApproved!==false||policy.noProviderCredentialsInAudit!==true||
     !iso(observedDbClockUtc)||!/^\d{5,25}$/.test(expectedSourceRunId??"")||
-    permit?.expectedGithubSourceRunId!==expectedSourceRunId||
     !Array.isArray(proof.sourceRegistries)||proof.sourceRegistries.length<1||proof.sourceRegistries.length>1024||
     Buffer.byteLength(JSON.stringify(proof))>4*1024*1024)
   fail("CONDITIONAL_INSTRUCTION_PROOF_SCOPE");
@@ -220,18 +220,49 @@ export function verifyP6ConditionalSourceInstructionProof(proof,{trust,selector,
  if(!live(verified))fail("CONDITIONAL_INSTRUCTION_PROOF_EXPIRED");
  const bytes=proofBytes(proof.queryBase64,200000);
  if(hash(bytes)!==q.expectedPacketSha256)fail("CONDITIONAL_INSTRUCTION_QUERY_HASH");
- return bindP6ConditionalProofScope(deriveP6VerifiedQueryBytes(bytes,selector,trust,policy),trust,policy,permit);
+ return deriveP6VerifiedQueryBytes(bytes,selector,trust,policy);
+}
+export function verifyP6ConditionalSourceInstructionProof(proof,x){
+ if(x.permit?.expectedGithubSourceRunId!==x.expectedSourceRunId)fail("CONDITIONAL_INSTRUCTION_PROOF_SCOPE");
+ return bindP6ConditionalProofScope(verifiedConditionalInstructionQuery(proof,x),x.trust,x.policy,x.permit);
+}
+/** Permit-review ingress has no permit yet. Only immutable SOURCE anchor
+ * references cross the socket; the independent role rereads the actual
+ * bound original and determines the member evidence itself. */
+function verifyConditionalReviewInstructionProof(proof,x,allowedHorizons){
+ const q=verifiedConditionalInstructionQuery(proof,x),m=q.conditionalServiceScope,f=x.policy?.conditionalPreFeatureReview,a=x.anchor;
+ if(!exact(a,["sourceGithubRunId","populationQueryId","responseSha256"])||
+    a.sourceGithubRunId!==x.expectedSourceRunId||!SHA.test(a.responseSha256??"")||
+    !/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i.test(a.populationQueryId??"")||
+    !allowedHorizons.includes(q.horizon)||!m||!f||f.schema!=="v39.phase5.conditional-pre-feature-review-policy.v1"||f.approved!==true||
+    !exact(f,["schema","approved","protocolSha256","rightsSha256","externalContentUseReviewSha256"])||
+    f.protocolSha256!==m.protocolSha256||f.rightsSha256!==x.trust.rightsSha256||!SHA.test(f.externalContentUseReviewSha256??""))
+  fail(allowedHorizons.length===1?"EXACT_CONDITIONAL_T24_REVIEW_INSTRUCTION_SCOPE":"EXACT_CONDITIONAL_LATER_REVIEW_INSTRUCTION_SCOPE");
+ return Object.freeze({source:Object.freeze({...q,expectedSourceGithubRunId:a.sourceGithubRunId}),
+  protocolSha256:m.protocolSha256,ownerProspectiveSeparateTierApproved:true,frozenStudyStartUtc:m.cohortStartUtc,
+  policyEffectiveUtc:m.effectiveUtc,minimumReviewLeadSeconds:900,expectedPopulationQueryId:a.populationQueryId,
+  expectedResponseSha256:a.responseSha256,expectedLocalFrom:m.localFrom,expectedLocalTo:m.localTo,
+  expectedServiceWindowStartUtc:q.expectedServiceWindowStartUtc,expectedServiceWindowEndUtc:q.expectedServiceWindowEndUtc,
+  externalContentUseReviewSha256:f.externalContentUseReviewSha256});
+}
+export function verifyP6ConditionalT24ReviewInstructionProof(proof,x){return verifyConditionalReviewInstructionProof(proof,x,["T-24h"]);}
+export function verifyP6ConditionalLaterReviewInstructionProof(proof,x){
+ if(!["T-6h","T-90m"].includes(x.expectedHorizon))fail("EXACT_CONDITIONAL_LATER_REVIEW_INSTRUCTION_SCOPE");
+ const scope=verifyConditionalReviewInstructionProof(proof,x,["T-6h","T-90m"]);
+ if(scope.source.horizon!==x.expectedHorizon)fail("EXACT_CONDITIONAL_LATER_REVIEW_INSTRUCTION_SCOPE");
+ return scope;
 }
 /** Capture exact originally admitted signed instructions using existing
  * restricted reader. An append may advance the day head but the immutable
  * child revision remains a valid proof of its own SOURCE. The separately
  * authenticated current continuity check is still required before issuance. */
-export async function readP6ConditionalSourceInstructionProof({readerClient,trust,selector,policy,permit}){
+async function readConditionalInstructionProof({readerClient,trust,selector,policy,permit,anchor,expectedSourceRunId,expectedLaterHorizon}){
  if(!checkSelector(selector)||trust?.independentStudyTrustPinsApproved!==true||
     policy?.independentNativeCandidateReadOnlyApproved!==true||policy.existingPaidDispatchApproved!==false||
     policy.noProviderCredentialsInAudit!==true||!policy.conditionalPreFeatureReview||
-    permit?.identityEvidenceTier!=="CONDITIONAL_QUERY_FILTERED_SERVICE"||
-    permit.runDayIndex!==selector.runDayIndex||permit.queryDigestSha256!==selector.queryDigestSha256)
+    (!anchor&&(permit?.identityEvidenceTier!=="CONDITIONAL_QUERY_FILTERED_SERVICE"||
+    permit.runDayIndex!==selector.runDayIndex||permit.queryDigestSha256!==selector.queryDigestSha256))||
+    (anchor&&(permit!==undefined||anchor.sourceGithubRunId!==expectedSourceRunId)))
   fail("NO_EXPLICIT_CONDITIONAL_PROOF_SCOPE");
  await selectP6CurrentCommittedSourceSelector({readerClient,trust,selector});
  const scope={privateStoredReviewReadOnlyApproved:true,existingPaidDispatchApproved:false};
@@ -245,14 +276,22 @@ export async function readP6ConditionalSourceInstructionProof({readerClient,trus
   selector:{kind:"SOURCE_QUERY",runDayIndex:selector.runDayIndex,shardIndex:selected.entry.shardIndex,
    logicalPath:selected.q.filePath,contentSha256:selected.q.expectedPacketSha256}});
  const receipt=await readP6PrivateSourcePostOnce(readerClient,signed.pins,signed.wire,signed.publicKeyPem);
- deriveP6ConditionalProofReadScope(receipt,selected,selector,trust,policy,permit);
+ if(!anchor)deriveP6ConditionalProofReadScope(receipt,selected,selector,trust,policy,permit);
  const proof={schema:PROOF_SCHEMA,dayWire:review.wire,indexBase64:index.privateCurrentIndexBytes.toString("base64"),
   sourceRegistries:index.privateParsedIndex.entries.filter(e=>e.lane==="SOURCE").map(e=>({path:e.filePath,bytesBase64:index.getFrozen(e.filePath).toString("base64")})),
   queryWire:signed.wire,queryBase64:receipt.privateBytes.toString("base64")};
- verifyP6ConditionalSourceInstructionProof(proof,{trust,selector,policy,permit,expectedSourceRunId:permit.expectedGithubSourceRunId,
-  observedDbClockUtc:receipt.redactedSummary.observedDatabaseClockUtc});
+ const at=receipt.redactedSummary.observedDatabaseClockUtc;
+ if(anchor&&expectedLaterHorizon!==undefined)verifyP6ConditionalLaterReviewInstructionProof(proof,{trust,selector,policy,anchor,expectedSourceRunId,observedDbClockUtc:at,expectedHorizon:expectedLaterHorizon});
+ else if(anchor)verifyP6ConditionalT24ReviewInstructionProof(proof,{trust,selector,policy,anchor,expectedSourceRunId,observedDbClockUtc:at});
+ else verifyP6ConditionalSourceInstructionProof(proof,{trust,selector,policy,permit,expectedSourceRunId:permit.expectedGithubSourceRunId,observedDbClockUtc:at});
  return Object.freeze(Object.defineProperty({status:"CONDITIONAL_SIGNED_SOURCE_INSTRUCTIONS_PRIVATE_NO_GO",providerCalls:0,databaseWrites:0,phase6PaidGo:false},
   "privateProof",{value:Object.freeze(proof),enumerable:false}));
+}
+export async function readP6ConditionalSourceInstructionProof(x){return readConditionalInstructionProof(x);}
+export async function readP6ConditionalT24ReviewInstructionProof(x){return readConditionalInstructionProof({...x,expectedLaterHorizon:undefined});}
+export async function readP6ConditionalLaterReviewInstructionProof(x){
+ if(!x.anchor||!["T-6h","T-90m"].includes(x.expectedLaterHorizon))fail("EXACT_CONDITIONAL_LATER_REVIEW_INSTRUCTION_SCOPE");
+ return readConditionalInstructionProof(x);
 }
 /** Shared exact SOURCE identity continuity check for concurrent append-only
  * PRE/POST registry publication. Neither an advanced revision nor an ACK
@@ -345,7 +384,7 @@ export async function auditP6StoredCommittedNativeSource({readerClient,sourcePoo
  const conditional=auditedScope.conditionalServiceScope;
  const featurePolicy=policy.conditionalPreFeatureReview;
  if(conditional&&featurePolicy&&featurePolicy.protocolSha256!==conditional.protocolSha256)fail("CONDITIONAL_FEATURE_PROTOCOL_DRIFT");
- const conditionalReview=conditional?await readP5SignedConditionalServiceReview(sourcePool,{
+ const conditionalScope=conditional?Object.freeze({
   source:{...auditedScope,expectedSourceGithubRunId:audit.sourceGithubRunId},
   protocolSha256:conditional.protocolSha256,ownerProspectiveSeparateTierApproved:true,
   frozenStudyStartUtc:conditional.cohortStartUtc,policyEffectiveUtc:conditional.effectiveUtc,
@@ -354,6 +393,7 @@ export async function auditP6StoredCommittedNativeSource({readerClient,sourcePoo
   expectedLocalTo:conditional.localTo,expectedServiceWindowStartUtc:auditedScope.expectedServiceWindowStartUtc,
   expectedServiceWindowEndUtc:auditedScope.expectedServiceWindowEndUtc,
   ...(featurePolicy?{externalContentUseReviewSha256:featurePolicy.externalContentUseReviewSha256}:{})}):null;
+ const conditionalReview=conditionalScope?await readP5SignedConditionalServiceReview(sourcePool,conditionalScope):null;
  const out={status:"ACTUAL_COMMITTED_SOURCE_CANDIDATES_AWAIT_INDEPENDENT_PRE_REVIEW",
   runDayIndex:selector.runDayIndex,horizon:auditedScope.horizon,
   candidateAuditSha256:digestP5ActualSourceCandidateAudit(audit),observedMemberCount:audit.observedMemberCount,
@@ -364,7 +404,7 @@ export async function auditP6StoredCommittedNativeSource({readerClient,sourcePoo
     counts:conditionalReview.report.counts,stage14MatchedMembershipCount:conditionalReview.memberReview.stage14MatchedMembershipCount,
     observedDbClockUtc:conditionalReview.observedDbClockUtc,featureReview:conditionalReview.conditionalFeatureReview,actualPreIssued:false,providerCalls:0,databaseWrites:0}}:{}),
   actualDbClockUtc:audit.actualDbClockUtc,providerCalls:0,databaseWrites:0,signedPrePacketsIssued:0,phase6PaidGo:false};
- Object.defineProperties(out,{privateConditionalSourceReview:{value:conditionalReview,enumerable:false},privateAuditBytes:{value:Buffer.from(JSON.stringify(audit)),enumerable:false},
+ Object.defineProperties(out,{privateConditionalSourceReview:{value:conditionalReview,enumerable:false},privateConditionalSourceScope:{value:conditionalScope,enumerable:false},privateAuditBytes:{value:Buffer.from(JSON.stringify(audit)),enumerable:false},
   privateSourceScope:{value:Object.freeze({...auditedScope,expectedSourceGithubRunId:audit.sourceGithubRunId}),enumerable:false},
   privateSourceRegistrySha256:{value:selected.entry.fileSha256,enumerable:false},
   privateSourceRegistryPath:{value:selected.entry.filePath,enumerable:false},
@@ -771,4 +811,91 @@ export function signP6DelegatedNativeLaterReviewPage({handoff,featureReview,evid
  return Object.freeze(Object.defineProperties({...result,signatureIssued:true,reviewedRegistrySha256:plan.proposedRegistrySha256},
   {privatePlan:{value:plan,enumerable:false},privateWire:{value:wire,enumerable:false},
    privateReviewerPins:{value:reviewerPins,enumerable:false},privateReviewerPublicKeyPem:{value:reviewerPublicKeyPem,enumerable:false}}));
+}
+
+/** Conditional later shard signature from an actual proof-resolved page.
+ * Runtime supplies current independently authenticated SOURCE registry
+ * bytes and database clock. Reuses the existing external review verifier;
+ * no publication, enrollment, production authority or provider call. */
+export function signP6DelegatedConditionalLaterRegistry({page,sourceRegistryBytes,sourceRegistry,authority,scope}){
+ const b=readP7ResolvedConditionalPageBinding(page),q=b.source,t=authority?.trust,sha=authority?.expectedPolicySha256;
+ if(t?.independentStudyTrustPinsApproved!==true||authority?.independentDelegatedNativeReviewApproved!==true||
+    authority.noProviderCredentialsInReviewer!==true||!Buffer.isBuffer(authority.policyBytes)||
+    authority.policyBytes.length<100||authority.policyBytes.length>35000||!SHA.test(sha??"")||hash(authority.policyBytes)!==sha||
+    !scope||!["T-6h","T-90m"].includes(q.horizon)||b.reviewedCodeSha!==t.reviewedCodeSha||
+    q.manifestSha256!==t.manifestSha256||q.rightsReviewSha256!==t.rightsSha256||q.reviewedReleaseSha256!==t.releaseSha256||
+    !iso(scope.observedDbClockUtc)||!iso(scope.reviewValidUntilUtc)||!iso(scope.retentionNotAfterUtc)||!iso(b.sourceExpiresAtUtc)||
+    !Buffer.isBuffer(sourceRegistryBytes)||hash(sourceRegistryBytes)!==scope.expectedSourceRegistrySha256||
+    !SHA.test(scope.expectedSourceReviewEvidenceSha256??"")||!Array.isArray(page.privateAttachedPackets)||page.privateAttachedPackets.length<1||
+    page.privateAttachedPackets.length>96)
+  fail("DELEGATED_CONDITIONAL_LATER_EXACT_PAGE_OR_POLICY");
+ let p;try{p=JSON.parse(authority.policyBytes.toString("utf8"));}catch{fail("DELEGATED_CONDITIONAL_LATER_POLICY");}
+ const v=p.nativeLaterReview,d=p.conditionalLaterPermitReview,f=p.conditionalPreFeatureReview,day=v?.conditionalLaterDayAppendPolicy;
+ const conditionalPreScope={protocolSha256:b.protocolSha256,externalContentUseReviewSha256:b.externalContentUseReviewSha256,
+  ...(b.standaloneProtocolSha256===undefined?{}:{independentlyApprovedStandaloneProtocolSha256:b.standaloneProtocolSha256})};
+ if(p.schema!=="v39.phase6.delegated-daily-source-review-policy.v1"||p.delegatedDailyPacketProductionApproved!==true||
+    p.approvedCodeSha!==t.reviewedCodeSha||!["manifestSha256","calendarSha256","rightsSha256","releaseSha256"].every(k=>p[k]===t[k])||
+    p.providerContractSha256!==q.providerContractSha256||f?.schema!=="v39.phase5.conditional-pre-feature-review-policy.v1"||f.approved!==true||
+    f.rightsSha256!==t.rightsSha256||f.protocolSha256!==b.protocolSha256||f.externalContentUseReviewSha256!==b.externalContentUseReviewSha256||
+    d?.schema!=="v39.phase5.conditional-later-permit-review-delegation.v1"||d.approved!==true||
+    d.reviewerFingerprintSha256!==b.reviewerFingerprintSha256||d.protocolSha256!==b.protocolSha256||
+    d.externalContentUseReviewSha256!==b.externalContentUseReviewSha256||
+    d.standaloneNoT24ProtocolSha256!==(b.standaloneProtocolSha256??null)||
+    v?.approved!==true||v.privatePublicationApproved!==true||
+    day?.schema!=="v39.phase6.delegated-later-day-append-review-policy.v1"||day.delegatedAutomatedLaterDayAppendApproved!==true||
+    day.approvedCodeSha!==t.reviewedCodeSha||!["manifestSha256","calendarSha256","rightsSha256","releaseSha256"].every(k=>day[k]===t[k])||
+    day.dayReviewerFingerprintSha256!==t.dayReviewerFingerprintSha256||day.queryReviewerFingerprintSha256!==t.queryReviewerFingerprintSha256||
+    day.laterReviewerFingerprintSha256!==v.laterReviewerFingerprintSha256||
+    !sameP5ConditionalLaterReviewerScope(day.conditionalLaterPreScope,conditionalPreScope)||
+    ![b.reviewerFingerprintSha256,b.proofReviewerFingerprintSha256,t.dayReviewerFingerprintSha256,t.queryReviewerFingerprintSha256,v.laterReviewerFingerprintSha256].every(x=>SHA.test(x??""))||
+    new Set([b.reviewerFingerprintSha256,b.proofReviewerFingerprintSha256,t.dayReviewerFingerprintSha256,t.queryReviewerFingerprintSha256,v.laterReviewerFingerprintSha256]).size!==5||
+    !Number.isSafeInteger(v.maximumPrivateRetentionHours)||v.maximumPrivateRetentionHours<1||v.maximumPrivateRetentionHours>168||
+    ![d.validFromUtc,d.validUntilUtc,v.validFromUtc,v.validUntilUtc,day.validFromUtc,day.validUntilUtc].every(iso))
+  fail("DELEGATED_CONDITIONAL_LATER_POLICY_SCOPE");
+ let pub,fp;
+ try{
+  if(authority.laterReviewerKey?.type!=="private"||authority.laterReviewerKey.asymmetricKeyType!=="ed25519")fail("DELEGATED_CONDITIONAL_LATER_KEY");
+  pub=createPublicKey(authority.laterReviewerKey);fp=hash(pub.export({format:"der",type:"spki"}));
+ }catch{fail("DELEGATED_CONDITIONAL_LATER_KEY");}
+ if(fp!==v.laterReviewerFingerprintSha256)fail("DELEGATED_CONDITIONAL_LATER_KEY");
+ const now=Date.parse(scope.observedDbClockUtc),valid=Date.parse(scope.reviewValidUntilUtc),expiry=Date.parse(scope.retentionNotAfterUtc);
+ if(now<Math.max(...[d.validFromUtc,v.validFromUtc,day.validFromUtc].map(Date.parse))||
+    valid<=now||valid>expiry||expiry>Math.min(...[d.validUntilUtc,v.validUntilUtc,day.validUntilUtc,b.sourceExpiresAtUtc].map(Date.parse),now+v.maximumPrivateRetentionHours*3600000))
+  fail("DELEGATED_CONDITIONAL_LATER_CLOCK_OR_RETENTION");
+ const files=page.privateAttachedPackets.map(completed=>{
+  const packet=completed.packet,permit=packet?.prePermit;
+  const cutoff=Date.parse(permit?.selectedTNativeUtc)-({"T-6h":21600000,"T-90m":5400000}[q.horizon]);
+  if(!permit||permit.queryDigestSha256!==q.queryDigestSha256||permit.expectedGithubSourceRunId!==q.expectedSourceGithubRunId||
+     permit.expectedSourcePopulationQueryId!==b.populationQueryId||permit.expectedSourceResponseSha256!==b.responseSha256||
+     permit.horizon!==q.horizon||!Number.isFinite(cutoff)||cutoff<=now+900000||cutoff>valid)
+   fail("DELEGATED_CONDITIONAL_LATER_MEMBER_SCOPE_OR_LEAD");
+  return {proposedFilePath:"data-collection/phase5/frozen/pre_"+completed.packetSha256+".json",
+   expectedExternallyPinnedReviewArtifactSha256:packet.reviewArtifactSha256,completed};
+ });
+ const plan=proposeP5ConditionalLaterPacketsAsUnsignedDayShard(sourceRegistryBytes,sourceRegistry,{
+  expectedExternallyApprovedSourceRegistrySha256:scope.expectedSourceRegistrySha256,sourceRegistryFilePath:scope.sourceRegistryFilePath,
+  proposedLaterRegistryFilePath:scope.proposedLaterRegistryFilePath,reviewedMainCodeSha:t.reviewedCodeSha,expectedManifestSha256:t.manifestSha256,
+  expectedReviewedReleaseSha256:t.releaseSha256,expectedReviewedSourceRightsSha256:t.rightsSha256,runDayIndex:q.runDayIndex,
+  shardIndex:scope.shardIndex,conditionalPreScope,
+  independentlyApprovedStandaloneProtocolSha256:b.standaloneProtocolSha256},files);
+ const evidence=hash(Buffer.from(JSON.stringify({schema:"v39.phase6.delegated-conditional-later-shard-evidence.v1",
+  policySha256:sha,sourceReviewEvidenceSha256:scope.expectedSourceReviewEvidenceSha256,queryDigestSha256:q.queryDigestSha256,
+  registrySha256:plan.proposedRegistrySha256,observedDbClockUtc:scope.observedDbClockUtc,sourceExpiresAtUtc:b.sourceExpiresAtUtc})));
+ const review={schema:"v39.phase5.external-ed25519-later-shard-review.v1",audience:"HKcode22/ReplitTranvr:PHASE6_LATER_PRE_REVIEW_ONLY",
+  reviewerPublicKeyFingerprintSha256:fp,reviewedMainCodeSha:t.reviewedCodeSha,reviewedManifestSha256:t.manifestSha256,
+  reviewedReleaseSha256:t.releaseSha256,reviewedRightsSha256:t.rightsSha256,sourceDayRegistrySha256:plan.sourceRegistrySha256,
+  sourceDayRegistryFilePath:plan.registryProposal.sourceDayRegistryFilePath,proposedRegistrySha256:plan.proposedRegistrySha256,
+  proposedRegistryFilePath:plan.proposedRegistryFilePath,packetFileManifestSha256:digestP5LaterShardPrivatePacketFileManifest(plan),
+  runDayIndex:q.runDayIndex,shardIndex:plan.registryProposal.shardIndex,reviewedAtUtc:scope.observedDbClockUtc,validUntilUtc:scope.reviewValidUntilUtc,
+  independentReviewerEvidenceDigestSha256:evidence,conditionalPreScope};
+ const wire={schema:"v39.phase5.external-ed25519-later-shard-envelope.v1",review,
+  signatureBase64:sign(null,signedP5ExternalLaterReviewBytes(review),authority.laterReviewerKey).toString("base64")};
+ const reviewerPins={expectedReviewerPublicKeyFingerprintSha256:fp,expectedApprovedMainCodeSha:t.reviewedCodeSha,
+  expectedReviewedReleaseSha256:t.releaseSha256,expectedReviewedRightsSha256:t.rightsSha256,
+  expectedIndependentReviewerEvidenceDigestSha256:evidence,conditionalPreScope};
+ const reviewerPublicKeyPem=pub.export({format:"pem",type:"spki"}).toString();
+ verifyP5ExternalEd25519ReviewOfLaterShard(plan,wire,reviewerPublicKeyPem,reviewerPins,scope.observedDbClockUtc);
+ return Object.freeze(Object.defineProperties({status:"DELEGATED_CONDITIONAL_LATER_SHARD_SIGNED_NOT_PUBLISHED",signatureIssued:true,reviewedCount:files.length,
+  providerCalls:0,databaseWrites:0,phase6PaidGo:false},{privatePlan:{value:plan,enumerable:false},privateWire:{value:wire,enumerable:false},
+  privateReviewerPins:{value:reviewerPins,enumerable:false},privateReviewerPublicKeyPem:{value:reviewerPublicKeyPem,enumerable:false}}));
 }

@@ -1,3 +1,8 @@
+import {verifyP5SignedLaterPreDayRegistry,type P5SignedLaterPreDayRegistry} from "../server/lib/disruption/phase5SignedLaterPreDayRegistry_v39";
+import type {P5SignedSourceBatchRegistry} from "../server/lib/disruption/phase5SignedPerDaySourceBatchReadonly_v39";
+import {verifyP5CdFrozenRoster,type P5CdFrozenRoster} from "../server/lib/disruption/phase5CdGithubBoundedPreTick_v39";
+import {verifyPhase7SignedPreFieldProof} from "../server/lib/disruption/phase7SignedPreFieldProof_v39";
+import {executeP6PrivateEnrollmentBatch} from "../scripts/v39_phase6_private_later_restartable_enrollment_v39";
 /**
  * The source fixture below is the same verified synthetic FIDS-original,
  * normalized flight-population and V0079 binding fixture reused from the
@@ -7,7 +12,7 @@
  */
 import {beforeAll,afterAll,describe,it,expect} from "vitest";
 import {Pool} from "pg";
-import {createHash} from "node:crypto";
+import {createHash,generateKeyPairSync,sign} from "node:crypto";
 import {URL as NodeURL} from "node:url";
 import {readFileSync} from "node:fs";
 import {P5_E_ALLOWED_PRE_FEATURES} from "../server/lib/disruption/phase5AmendmentEAsOfFeatureSelectionOffline_v39";
@@ -33,8 +38,9 @@ const active=process.env.V39_P5_CD_V0088_STAGE14_CI==="1"?describe:describe.skip
 const ROLE="phase5_fids_pre_writer_cd_ciuser01";
 const LOGIN_URL=process.env.P5_CD_CI_WRITER_URL??"";
 const h=(c:string)=>c.repeat(64),iso=(n:number)=>new Date(n).toISOString();
-const manifest=P7?sha("synthetic stage14 manifest"):h("a"),query=P7?sha("synthetic stage14 query"):h("b"),reservation=h("c"),
- rights=P7?sha("synthetic stage14 rights"):h("d"),response=h("e"),contract=h("f");
+const CONDITIONAL_QUEUE=process.env.V39_P5B_CONDITIONAL_QUEUE_CI==="1";
+const manifest=P7||CONDITIONAL_QUEUE?sha("synthetic stage14 manifest"):h("a"),query=P7?sha("synthetic stage14 query"):h("b"),reservation=h("c"),
+ rights=P7||CONDITIONAL_QUEUE?sha("synthetic stage14 rights"):h("d"),response=h("e"),contract=h("f");
 const qid="c23e4567-e89b-42d3-a456-426614174013";
 const FLIGHTS=32;
 const RECEIPT=process.env.V39_P5_CD_STAGE14_RECEIPT_DISPOSABLE==="1";
@@ -201,6 +207,7 @@ active("Phase5 C+D actual Stage14 source-bound parallel PRE on disposable PG16",
    "clean.fids_query_response,clean.flight_population,"+
    "clean.flight_snapshots TO "+ROLE);
   await admin.query("GRANT INSERT ON clean.flight_snapshots TO "+ROLE);
+  if(CONDITIONAL_QUEUE)await admin.query("GRANT SELECT ON clean.phase5_t24_postcommit_witness_v39 TO "+ROLE);
   await admin.query("GRANT USAGE ON SEQUENCE clean.flight_snapshots_id_seq TO "+ROLE);
   writer=new Pool({connectionString:LOGIN_URL,max:10});
   if(P7){
@@ -687,4 +694,127 @@ active("Phase5 C+D actual Stage14 source-bound parallel PRE on disposable PG16",
    [permit.flightInstanceId])).rows[0];
   expect(no.n).toBe(1);
  });
+ (CONDITIONAL_QUEUE?it:it.skip).each(["T-6h","T-90m"] as const)("T070 conditional %s exact registry to committed queue PRE",async horizon=>{
+  const dbNow=new Date((await admin.query(
+   "SELECT clock_timestamp() AS at")).rows[0].at).getTime();
+  const ownCutoff=dbNow+150_000, t=new Date(ownCutoff+(horizon==="T-6h"?21600000:5400000));
+  const end=new Date(t.getTime()+4*3600_000);
+  const q2=sha("conditional later query "+horizon),r2=sha("conditional reservation "+horizon),qid2=horizon==="T-6h"?"a23e4567-e89b-42d3-a456-426614174001":"a23e4567-e89b-42d3-a456-426614174002";
+  const stable=sha("conditional service "+horizon),flight="leg:g5a:"+stable,protocol=sha("CI conditional protocol"),standalone=sha("CI-only standalone protocol"),content=sha("CI content review");
+  const payload=Buffer.from(JSON.stringify({departures:[{flight:"CI300",status:"Boarding"}]})),bodyHash=sha(payload.toString("utf8"));
+  const dispatch=new Date(dbNow-15*60_000);
+  await admin.query("INSERT INTO clean.phase5_fids_utc_charge_budget_v39(manifest_sha256,charge_day_utc,daily_api_ceiling,daily_other_reserved_units) VALUES($1,$2,1900,100) ON CONFLICT DO NOTHING",[manifest,dispatch.toISOString().slice(0,10)]);
+  await admin.query(
+   "INSERT INTO clean.phase5_fids_allowed_query_v39"+
+   "(query_digest,manifest_sha256,run_day_index,query_key,slot_id,horizon,"+
+   "airport_icao,early_draw_sha256,reviewed_release_sha256,"+
+   "rights_review_sha256,provider_contract_sha256,github_run_id,"+
+   "service_window_start_utc,service_window_end_utc,from_local,to_local,"+
+   "airport_iana_timezone,provider_api_version,fids_protocol_version,"+
+   "planned_dispatch_utc,planned_charge_utc_date,hard_latest_dispatch_utc,"+
+   "prediction_cutoff_utc,api_units_per_attempt,max_physical_attempts,state)"+
+   " VALUES($1,$2,1,$13,'MID_A',$14,'WSSS',"+
+   "$3,$4,$5,$6,'42363348763',$7,$8,'2027-01-01T00:00',"+
+   "'2027-01-01T04:00','Asia/Singapore','1.15.4','v39',"+
+   "$9,$10::date,$11,$12,2,1,'ACTIVE')",
+   [q2,manifest,h("4"),h("5"),rights,contract,t,end,dispatch,
+    dispatch.toISOString().slice(0,10),
+    new Date(dbNow-10*60_000),new Date(ownCutoff),"ci_later_"+horizon,horizon]);
+  await admin.query(
+   "INSERT INTO clean.phase5_fids_physical_attempt_v39"+
+   "(reservation_sha256,query_digest,manifest_sha256,github_run_id,"+
+   "observed_selected_at_utc,charged_utc_date)"+
+   " VALUES($1,$2,$3,'42363348763',$4,$5::date)",
+   [r2,q2,manifest,new Date(dbNow-48*3600_000),
+    dispatch.toISOString().slice(0,10)]);
+  await admin.query(
+   "WITH t AS (SELECT clock_timestamp() AS at)"+
+   " INSERT INTO clean.fids_query_response"+
+   "(population_query_id,source_airport_icao,query_direction,"+
+   "service_window_start_utc,service_window_end_utc,from_local,to_local,"+
+   "airport_iana_timezone,fids_retrieval_utc,raw_persisted_at_utc,"+
+   "available_at,response_hash,raw_payload,provider_api_version,"+
+   "fids_protocol_version,openapi_sha256)"+
+   " SELECT $1,'WSSS','Departure',$2,$3,"+
+   "'2027-01-01T00:00','2027-01-01T04:00','Asia/Singapore',"+
+   "t.at,t.at,t.at,$4,$5::jsonb,'1.15.4','v39',$6 FROM t",
+   [qid2,t,end,response,JSON.stringify({
+    phase5PopulationIdentityVersion:"P5_CANONICAL_SHA256_V1",fidsRequestContract:{schema:"v39.fids-request-frame.application-intent.v1",endpointKind:"airport_local_fids",direction:"Departure",withLeg:true,withCargo:false,withPrivate:false,withCancelled:true,withCodeshared:true,withLocation:false,airportIcao:"WSSS",openapiSha256:contract,phase5ConditionalService:{protocolSha256:protocol,cohortStartUtc:iso(Math.floor(t.getTime()/60000)*60000)}},
+    originalDecodedEntityBodyPreserved:true,
+    originalHttpWireBytesPreserved:false,
+    originalDecodedEntityBodyEvidence:{
+     representation:"FETCH_DECODED_RESPONSE_BODY_BYTES_NOT_HTTP_WIRE",
+     bodySha256:bodyHash,bodyBase64:payload.toString("base64"),
+     bodyLengthBytes:payload.length}
+   }),contract]);
+  await admin.query(
+   "INSERT INTO clean.flight_population"+
+   "(source_airport_icao,dep_airport_icao,arr_airport_icao,dep_scheduled_utc,"+
+   "window_start_utc,window_end_utc,cutoff_utc,"+
+   "source_type,population_query_id,analytic_identity_id,"+
+   "canonical_flight_instance_id,population_role,scope_classification,"+
+   "available_at,response_hash,flight_number,"+
+   "query_direction,from_local,to_local,airport_iana_timezone,"+
+   "codeshare_resolution_status,fids_retrieval_utc,"+
+   "provider_api_version,fids_protocol_version,openapi_sha256)"+
+   " VALUES('WSSS','WSSS','YSSY',$1,$2,$3,$4,'fids',$5,$6,"+
+   "$6,'requested_airport_primary','unknown',"+
+   "clock_timestamp(),$7,'CI300','Departure',"+
+   "'2027-01-01T00:00','2027-01-01T04:00','Asia/Singapore',"+
+   "'g5a_conditional_operator_composite_no_native_id',clock_timestamp(),'1.15.4','v39',$8)",
+   [t,t,end,new Date(ownCutoff),qid2,flight,response,contract]);
+  await admin.query(
+   "INSERT INTO clean.phase5_fids_original_binding_v39"+
+   "(population_query_id,reservation_sha256,query_digest,manifest_sha256,"+
+   "response_hash,decoded_original_body_sha256,rights_review_sha256,"+
+   "normalized_members_count,source_expires_at_utc)"+
+   " VALUES($1,$2,$3,$4,$5,$6,$7,1,clock_timestamp()+interval '1 hour')",
+   [qid2,r2,q2,manifest,response,bodyHash,rights]);
+
+  const memberAt=(await admin.query("SELECT available_at FROM clean.flight_population WHERE analytic_identity_id=$1",[flight])).rows[0].available_at.toISOString();
+  const observations=[{flightInstanceId:flight,field:"reported_pre_departure_status" as const,value:"Boarding",source:"AERODATABOX_FIDS" as const,sourceRecordId:response,observedAtUtc:memberAt,availableAtUtc:memberAt,rightsDisposition:"EXTERNALLY_REVIEWED_ALLOW" as const}];
+  const {externalNativeTPhysicalLegAndSourceUseReviewed:unused,...base}=permit;
+  const p:P5Stage14SingleFlightPrePermit={...base,horizon,slot:"MID_A",queryDigestSha256:q2,expectedGithubSourceRunId:"42363348763",expectedSourcePopulationQueryId:qid2,flightInstanceId:flight,selectedTNativeUtc:t.toISOString(),
+   identityEvidenceTier:"CONDITIONAL_QUERY_FILTERED_SERVICE",externalConditionalScheduleSourceAndUseReviewed:true,reviewedProtocolAmendmentSha256:protocol,reviewedStableServiceKeySha256:stable,expectedOperatorFlightNumber:"CI300",expectedDestinationIcao:"YSSY",requireProspectiveConditionalSourceMarker:true,
+   reviewedStandaloneLaterNoT24:{schema:"v39.phase5.standalone-later-asof-no-t24.v1",reviewedProtocolSha256:standalone,reviewedOriginalResponseSha256:response,reviewedNativeTSemanticsSha256:base.independentlyReviewedNativeTEvidenceSha256,missingT24Class:"HONEST_T24_UNOBSERVED_NOT_BACKFILLED",independentLaterAsOfAndMissingnessReviewAttested:true},
+   reviewedSupplementalFeatureBundle:{schema:"v39.phase5.e-signed-source-supplement.v1",flightInstanceId:flight,populationQueryId:qid2,originalResponseSha256:response,observationsSha256:sha(JSON.stringify(observations)),externalSourceAndContentsReviewReceiptSha256:content,fields:["reported_pre_departure_status"],observations}};
+  const issued=(await admin.query("SELECT clock_timestamp() AS at")).rows[0].at.toISOString(),code="a".repeat(40),policy=sha("CI proof policy"),proof=generateKeyPairSync("ed25519");
+  const proofRaw=Buffer.from(JSON.stringify({schema:"v39.phase7.separate-pre-field-proof.v1",manifestSha256:manifest,rightsSha256:rights,policySha256:policy,permitSha256:hashPhase7DurableCandidate(p),issuedAtUtc:issued,validUntilUtc:iso(ownCutoff),fields:[]}));
+  const wire={payloadBase64:proofRaw.toString("base64"),signatureBase64:sign(null,proofRaw,proof.privateKey).toString("base64")};
+  expect(verifyPhase7SignedPreFieldProof({P6_PHASE7_PRE_PRESERVATION_POLICY_SHA256:policy,P6_PHASE7_PRE_PROOF_REVIEWER_FINGERPRINT_SHA256:createHash("sha256").update(proof.publicKey.export({type:"spki",format:"der"})).digest("hex"),P6_PHASE7_PRE_PROOF_REVIEWER_PUBLIC_KEY_BASE64:Buffer.from(proof.publicKey.export({type:"spki",format:"pem"})).toString("base64")},p,policy,[],wire).permitSha256).toBe(hashPhase7DurableCandidate(p));
+  const bytes=Buffer.from(JSON.stringify({schema:"v39.phase5.github-conditional-standalone-later-pre-asof-reviewed.v1",reviewedCodeSha:code,reviewArtifactSha256:sha("CI review artifact"),independentlyReviewedConditionalScheduleServiceAndSourceAttested:true,reviewedConditionalProtocolSha256:protocol,prePermit:p,phase7FieldProof:wire})),packetSha=sha(bytes.toString("utf8")),path="data-collection/phase5/frozen/conditional_ci_packet.json",sourcePath="data-collection/phase5/frozen/conditional_ci_source.json",registryPath="data-collection/phase5/frozen/conditional_ci_registry.json";
+  const source:P5SignedSourceBatchRegistry={schema:"v39.phase5.signed-per-day-source-batch-readonly.v1",manifestSha256:manifest,runDayIndex:1,entries:[{filePath:"data-collection/phase5/frozen/conditional_ci_query.json",expectedPacketSha256:sha("CI source packet"),expectedQueryDigestSha256:q2}]};
+  const sourceRaw=Buffer.from(JSON.stringify(source)),sourceSha=sha(sourceRaw.toString("utf8")),reg:P5SignedLaterPreDayRegistry={schema:"v39.phase5.signed-later-pre-day-registry.v1",manifestSha256:manifest,reviewedCodeSha:code,sourceDayRegistryFilePath:sourcePath,sourceDayRegistrySha256:sourceSha,runDayIndex:1,shardIndex:1,entries:[{filePath:path,expectedPacketSha256:packetSha,expectedQueryDigestSha256:q2,expectedFlightInstanceId:flight,expectedHorizon:horizon,expectedSelectedTNativeUtc:p.selectedTNativeUtc,expectedSourcePopulationQueryId:qid2}]};
+  const regRaw=Buffer.from(JSON.stringify(reg)),regSha=sha(regRaw.toString("utf8")),conditionalPreScope={protocolSha256:protocol,externalContentUseReviewSha256:content};
+  const pins={registryFilePath:registryPath,expectedRegistrySha256:regSha,expectedSourceDayRegistrySha256:sourceSha,expectedManifestSha256:manifest,expectedApprovedMainSha:code,expectedRunDayIndex:1,expectedReleaseSha256:h("5"),expectedRightsSha256:rights,conditionalPreScope,independentlyApprovedStandaloneProtocolSha256:standalone};
+  expect(()=>verifyP5SignedLaterPreDayRegistry(regRaw,reg,sourceRaw,source,{...pins,independentlyApprovedStandaloneProtocolSha256:undefined},()=>bytes)).toThrow("MISSING_SIGNED_INDEPENDENT_STANDALONE_REVIEW");
+  const verified=verifyP5SignedLaterPreDayRegistry(regRaw,reg,sourceRaw,source,pins,()=>bytes);
+  const roster:P5CdFrozenRoster={schema:"v39.phase5.cd-existing-signed-pre-packet-roster.v1",reviewedCodeSha:code,manifestSha256:manifest,rightsSha256:rights,entries:verified.entries.map(x=>({filePath:x.filePath,packetSha256:x.packetSha256}))},rr=Buffer.from(JSON.stringify(roster));
+  const packets=verifyP5CdFrozenRoster(rr,roster,verified.entries,{schema:"v39.phase5.cd-gh-pre-explicit-release.v1",releaseMode:"PHASE6_APPROVED",approvedCodeSha:code,rosterSha256:sha(rr.toString("utf8")),manifestSha256:manifest,rightsSha256:rights,conditionalPreScope,independentlyApprovedStandaloneProtocolSha256:standalone,stop:false,providerCalls:0,scientificFreezeEstablishedByThisFunction:false});
+  const entry=packets.get(packetSha)!;expect(entry.permit).toEqual(p);
+  const prep=new Pool({connectionString:"postgresql://phase5_p30_prepare_login_20261107:ci-only@localhost:5432/neondb?sslmode=disable",max:1});
+  try{const c=await prep.connect();try{
+   await c.query("SET ROLE phase5_fids_prepare_prod_20261107");
+   expect((await executeP6PrivateEnrollmentBatch(c,[{entry,cutoff:ownCutoff}])).newlyRegistered).toBe(1);
+   expect((await executeP6PrivateEnrollmentBatch(c,[{entry,cutoff:ownCutoff}])).alreadyRegistered).toBe(1);
+   await expect(executeP6PrivateEnrollmentBatch(c,[{entry:{...entry,packetSha256:sha("different signed packet")},cutoff:ownCutoff}])).rejects.toThrow("P6_V0100_EXISTING_TASK_IDENTITY_OR_PACKET_CONFLICT");
+  }finally{c.release(true);}}finally{await prep.end();}
+  const claimed=(await admin.query("SELECT * FROM clean.phase5_cd_claim_due_v39('ci-conditional-later',1,90)")).rows;
+  expect(claimed).toHaveLength(1);const c=claimed[0];expect(c.packet_sha256).toBe(packetSha);
+  expect((await admin.query("SELECT clean.phase5_cd_mark_write_started_v39($1::bigint,$2,$3::bigint) ok",[c.task_id,c.lease_owner,c.lease_generation])).rows[0].ok).toBe(true);
+  const fence={taskId:String(c.task_id),owner:String(c.lease_owner),generation:String(c.lease_generation),packetSha256:packetSha};
+  process.env.V39_P5_E_SUPPLEMENT_CI="1";
+  try{
+   const options={realV0088QueueFenceCi:fence,amendmentENativeRouteBoundCi:true as const};
+   await expect(persistP5V0079SingleBoundFlightPre(writer,p,options)).rejects.toThrow("MISSING_SIGNED_INDEPENDENT_STANDALONE_REVIEW");
+   const saved=await persistP5V0079SingleBoundFlightPre(writer,entry.permit,{...options,independentlyApprovedStandaloneProtocolSha256:standalone});
+   expect(saved).toMatchObject({horizon,identityEvidenceTier:"CONDITIONAL_QUERY_FILTERED_SERVICE",conditionalServiceCertifiedPhysicalLeg:false,missingT24ExplicitlyRecordedWithoutBackfill:true,postCommitDatabaseReadbackVerified:true,preSnapshotsInserted:1,providerCalls:0});
+   expect((await admin.query("SELECT clean.phase5_cd_ack_verified_v39($1::bigint,$2,$3::bigint,$4::bigint,$5) ok",[c.task_id,c.lease_owner,c.lease_generation,saved.committedSnapshotId,sha("CI conditional ACK "+horizon)])).rows[0].ok).toBe(true);
+   expect((await admin.query("SELECT state,verified_snapshot_id::text AS snapshot FROM clean.phase5_cd_pre_task_v39 WHERE task_id=$1",[c.task_id])).rows[0]).toEqual({state:"VERIFIED_ON_TIME",snapshot:saved.committedSnapshotId});
+   expect((await admin.query("SELECT horizon,features_json FROM clean.flight_snapshots WHERE flight_instance_id=$1",[flight])).rows).toEqual([{horizon,features_json:[{name:"origin_icao",value:"WSSS"},{name:"destination_icao",value:"YSSY"},{name:"reported_pre_departure_status",value:"Boarding"}]}]);
+   expect((await admin.query("SELECT count(*)::int n FROM clean.phase5_t24_postcommit_witness_v39 WHERE flight_instance_id=$1",[flight])).rows[0].n).toBe(0);
+  }finally{delete process.env.V39_P5_E_SUPPLEMENT_CI;}
+  console.log("T070_CONDITIONAL_REGISTRY_V0100_V0087_STAGE14_REAL_PG16_ACK_"+horizon+"_CI_ONLY_NO_PROVIDER");
+ });
+
 });

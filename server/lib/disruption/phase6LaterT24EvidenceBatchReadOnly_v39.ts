@@ -6,6 +6,8 @@
  * A missing separately archived Stage17 receipt is NOT missing T24.
  */
 import type {Pool} from "pg";
+import {readP5SignedConditionalServiceReview,type P5SignedConditionalFeatureReadScope} from "./phase5ConditionalBoundSourceReview_v39";
+import type {P5EReadOnlyPgPool} from "./phase5AmendmentEOriginalFidsReadonlyCompiler_v39";
 import {P5_STAGE28_GROUPS} from "./phase5Stage28DedicatedRolePool_v39";
 import {P5_STAGE24_REVIEWED_WITNESSED_T24_SQL} from "./phase5V0079SingleBoundFlightPreWriter_v39";
 import {digestP5Stage24ReviewedReceipt,verifyP5Stage24WitnessedFrozenT,type P5Stage24ReviewedT24Receipt}
@@ -64,6 +66,28 @@ export const P6_LATER_T24_WITNESSES_BATCH_SQL=P5_STAGE24_REVIEWED_WITNESSED_T24_
 export const P6_LATER_T24_SNAPSHOTS_BATCH_SQL=
  "SELECT flight_instance_id,id::text AS snapshot_id FROM clean.flight_snapshots"+
  " WHERE flight_instance_id=ANY($1::text[]) AND horizon='T-24h' ORDER BY flight_instance_id,id LIMIT $2";
+/** Conditional-only metadata projections. The existing native PRE reader
+ * remains unchanged; no conditional signer receives the PRE writer URL. */
+export const P6_CONDITIONAL_T24_SNAPSHOTS_SQL="SELECT flight_instance_id,snapshot_id FROM phase6_private.conditional_t24_snapshot_meta_v39 WHERE flight_instance_id=ANY($1::text[]) ORDER BY flight_instance_id,snapshot_id LIMIT $2";
+export const P6_CONDITIONAL_T24_WITNESSES_SQL="SELECT snapshot_id,joined_snapshot_id,flight_instance_id,selected_t_version,fids_response_hash,source_query_digest,frame_hash,config_hash,selected_t_native_utc,t24_cutoff_utc,post_pre_commit_db_observed_at_utc,source_t24_population_query_id,snapshot_prediction_state,snapshot_horizon FROM phase6_private.conditional_t24_witness_meta_v39 WHERE flight_instance_id=ANY($1::text[]) ORDER BY flight_instance_id,snapshot_id LIMIT $2";
+export async function assertP6ConditionalT24MetadataReader(c:Pick<import("pg").PoolClient,"query">,expectedLogin:string){
+ if(!/^phase6_private_reader_login_[a-z0-9_]{6,50}$/.test(expectedLogin??""))return hold("CONDITIONAL_METADATA_LOGIN");
+ const z=await c.query("SELECT current_database() db,current_user actor,session_user login,current_setting('server_version_num')::int version,current_setting('transaction_read_only') ro,pg_is_in_recovery() replica,clock_timestamp() now,"+
+  "has_table_privilege(current_user,'phase6_private.conditional_t24_snapshot_meta_v39','SELECT') snap_read,"+
+  "has_table_privilege(current_user,'phase6_private.conditional_t24_witness_meta_v39','SELECT') witness_read,"+
+  "has_table_privilege(current_user,'phase6_private.conditional_t24_snapshot_meta_v39','INSERT,UPDATE,DELETE,TRUNCATE,TRIGGER') snap_write,"+
+  "has_table_privilege(current_user,'phase6_private.conditional_t24_witness_meta_v39','INSERT,UPDATE,DELETE,TRUNCATE,TRIGGER') witness_write,"+
+  "EXISTS(SELECT 1 FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace WHERE n.nspname='clean' AND c.relname IN ('flight_snapshots','phase5_t24_postcommit_witness_v39') AND (has_any_column_privilege(current_user,c.oid,'SELECT,INSERT,UPDATE,REFERENCES') OR has_table_privilege(current_user,c.oid,'DELETE,TRUNCATE,TRIGGER'))) base_access,"+
+  "a.rolcanlogin login_enabled,a.rolsuper login_super,a.rolcreaterole login_admin,a.rolbypassrls login_bypass,g.rolcanlogin group_login,g.rolsuper group_super,g.rolbypassrls group_bypass "+
+  "FROM pg_roles a,pg_roles g WHERE a.rolname=session_user AND g.rolname=current_user");
+ const i=z.rows[0];
+ if(z.rowCount!==1||i?.db!=="neondb"||i.actor!=="phase6_private_frozen_reader_v39"||i.login!==expectedLogin||
+    Number(i.version)<160000||Number(i.version)>=170000||i.ro!=="on"||i.replica!==false||
+    i.snap_read!==true||i.witness_read!==true||i.snap_write!==false||i.witness_write!==false||i.base_access!==false||
+    i.login_enabled!==true||i.login_super!==false||i.login_admin!==false||i.login_bypass!==false||
+    i.group_login!==false||i.group_super!==false||i.group_bypass!==false)return hold("CONDITIONAL_METADATA_ROLE_OR_ACL");
+ return new Date(utc(i.now)).toISOString();
+}
 export async function readP6LaterT24EvidencePage(pool:Pick<Pool,"connect">,dossier:P5UnsignedNativePreDossier,scope:P6LaterT24EvidenceReadScope){
  if(!scope||scope.independentDossierReviewPinned!==true||scope.independentT24EvidenceReadApproved!==true||
     scope.existingPaidDispatchApproved!==false||!pool||typeof pool.connect!=="function"||
@@ -84,7 +108,7 @@ export async function readP6LaterT24EvidencePage(pool:Pick<Pool,"connect">,dossi
   hold("INVALID_SELECTED_PAGE_SUBSET");
  const selected=requested===undefined?page.entries:page.entries.filter(e=>requested.includes(e.source.flightInstanceId));
  if(scope.reviewedReceipts.length>selected.length)hold("UNBOUNDED_OR_EMPTY_PAGE");
- const priorClock=utc(dossier.sourceObservedDbClockUtc),ids=selected.map(e=>e.source.flightInstanceId);
+ const ids=selected.map(e=>e.source.flightInstanceId);
  if(new Set(ids).size!==ids.length||ids.some(id=>!ID.test(id))||
     selected.some(e=>e.source.manifestSha256!==scope.expectedManifestSha256||
      e.source.expectedReviewedReleaseSha256!==scope.expectedReleaseSha256||
@@ -103,11 +127,26 @@ export async function readP6LaterT24EvidencePage(pool:Pick<Pool,"connect">,dossi
    hold("UNPINNED_DUPLICATE_OR_CROSS_PAGE_RECEIPT");
   byReceipt.set(id,r);
  }
+ return readP6ExactSelectedLaterT24Evidence(pool,selected,{...scope,runDayIndex:dossier.runDayIndex,sourceObservedDbClockUtc:dossier.sourceObservedDbClockUtc},byReceipt,unresolved);
+}
+type SelectedEvidence={source:{flightInstanceId:string;selectedTNativeUtc:string;ownPreCutoffUtc:string;horizon:string}};
+type SelectedScope=Pick<P6LaterT24EvidenceReadScope,"expectedDossierSha256"|"expectedFrameSha256"|"expectedConfigSha256"|"expectedSelectedTVersion"|"pageIndex">&{runDayIndex:number;sourceObservedDbClockUtc:string};
+/** Both identity tiers use exactly the same existing persisted witness and
+ * immutable readback rules. The native and conditional admission checks
+ * remain separate; this common reader has no signing or publishing power. */
+async function readP6ExactSelectedLaterT24Evidence(pool:Pick<Pool,"connect">,selected:readonly SelectedEvidence[],
+ scope:SelectedScope,byReceipt:ReadonlyMap<string,ReviewReceipt>,unresolved:readonly string[],conditionalMetadataReaderLogin?:string){
+ const priorClock=utc(scope.sourceObservedDbClockUtc),ids=selected.map(e=>e.source.flightInstanceId);
  const c=await pool.connect();let begun=false;
  try{
   await c.query("BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY");begun=true;
   await c.query("SET LOCAL statement_timeout='10000ms'");
   await c.query("SET LOCAL lock_timeout='2000ms'");
+  let now:number;
+  if(conditionalMetadataReaderLogin!==undefined){
+   if(ids.some(id=>!/^leg:g5a:[a-f0-9]{64}$/.test(id)))return hold("CONDITIONAL_METADATA_IDENTITY_SCOPE");
+   now=utc(await assertP6ConditionalT24MetadataReader(c,conditionalMetadataReaderLogin));
+  }else{
   const ident=await c.query("SELECT current_database() AS db,current_user AS actor,session_user AS login,"+
    "current_setting('server_version_num')::int AS version,current_setting('transaction_read_only') AS ro,"+
    "pg_is_in_recovery() AS replica,clock_timestamp() AS now");
@@ -115,10 +154,13 @@ export async function readP6LaterT24EvidencePage(pool:Pick<Pool,"connect">,dossi
   if(ident.rowCount!==1||i?.db!=="neondb"||i.actor!==P5_STAGE28_GROUPS.pre||
      i.login!=="phase5_p30_pre_login_20261107"||Number(i.version)<160000||Number(i.version)>=170000||
      i.ro!=="on"||i.replica!==false)hold("ACTUAL_COMMISSIONED_PG16_PRE_READ_ROLE_REQUIRED");
-  const now=utc(i.now);
+  now=utc(i.now);
+
+  }
   if(now<priorClock)hold("SOURCE_OR_READ_CLOCK_REGRESSION");
   const limit=2*ids.length+1,args=[ids,limit];
-  const snap=await c.query(P6_LATER_T24_SNAPSHOTS_BATCH_SQL,args),witness=await c.query(P6_LATER_T24_WITNESSES_BATCH_SQL,args);
+  const snap=await c.query(conditionalMetadataReaderLogin===undefined?P6_LATER_T24_SNAPSHOTS_BATCH_SQL:P6_CONDITIONAL_T24_SNAPSHOTS_SQL,args),
+   witness=await c.query(conditionalMetadataReaderLogin===undefined?P6_LATER_T24_WITNESSES_BATCH_SQL:P6_CONDITIONAL_T24_WITNESSES_SQL,args);
   const map=(rows:Record<string,unknown>[])=>{
    if(!Array.isArray(rows)||rows.length>=limit)hold("UNBOUNDED_T24_EVIDENCE_ROWS");
    const by=new Map<string,Record<string,unknown>[]>();
@@ -159,7 +201,7 @@ export async function readP6LaterT24EvidencePage(pool:Pick<Pool,"connect">,dossi
   const counts:Partial<Record<P6LaterT24EvidenceStatus,number>>={};
   for(const d of decisions)counts[d.status]=(counts[d.status]??0)+1;
   const report={status:"ACTUAL_T24_EVIDENCE_PAGE_FOR_SEPARATE_LATER_REVIEW_NO_GO",expectedDossierSha256:scope.expectedDossierSha256,
-   runDayIndex:dossier.runDayIndex,pageIndex:scope.pageIndex,observedDbClockUtc:new Date(now).toISOString(),
+   runDayIndex:scope.runDayIndex,pageIndex:scope.pageIndex,observedDbClockUtc:new Date(now).toISOString(),
    candidateCount:decisions.length,counts,sourceRightsCertified:false,reviewedPacketsIssued:0,providerCalls:0,databaseWrites:0,phase6PaidGo:false};
   return Object.freeze(Object.defineProperty(report,"privateDecisions",{value:Object.freeze(decisions),enumerable:false})) as typeof report&{readonly privateDecisions:readonly Decision[]};
  }finally{
@@ -238,4 +280,62 @@ export async function readP6PendingLaterT24EvidencePage(
  return Object.freeze(Object.defineProperties(out,{privateDecisions:{value:evidence.privateDecisions,enumerable:false},
   privateCustodyReceipts:{value:Object.freeze(receipts),enumerable:false}}));
 
+}
+
+/** Independently read the actual prospective conditional original and
+ * requested members, then original T24 custody and commissioned PRE
+ * witness rows. Never create a fake native dossier. A returned absence
+ * classification is NOT authorization for standalone later PRE. */
+export async function readP6ConditionalLaterT24EvidencePage(
+ sourcePool:P5EReadOnlyPgPool,prePool:Pick<Pool,"connect">,sourceScope:P5SignedConditionalFeatureReadScope,
+ requestedFlightInstanceIds:readonly string[],scope:{
+ independentConditionalLaterEvidenceReadApproved:true;existingPaidDispatchApproved:false;
+ expectedReviewedCodeSha:string;expectedProtocolSha256:string;expectedContentUseReviewSha256:string;
+ expectedFrameSha256:string;expectedConfigSha256:string;expectedSelectedTVersion:string;
+ conditionalMetadataReaderLogin?:string;
+ },custody:PendingStoredT24Custody){
+ const q=sourceScope?.source,t=custody?.trust;
+ if(!q||!scope||scope.independentConditionalLaterEvidenceReadApproved!==true||scope.existingPaidDispatchApproved!==false||
+    !["T-6h","T-90m"].includes(q.horizon)||!/^([a-f0-9]{40})$/.test(scope.expectedReviewedCodeSha??"")||
+    ![scope.expectedProtocolSha256,scope.expectedContentUseReviewSha256,scope.expectedFrameSha256,scope.expectedConfigSha256].every(x=>H.test(x??""))||
+    sourceScope.protocolSha256!==scope.expectedProtocolSha256||sourceScope.externalContentUseReviewSha256!==scope.expectedContentUseReviewSha256||
+    (scope.conditionalMetadataReaderLogin!==undefined&&scope.conditionalMetadataReaderLogin!==custody?.scope?.expectedSessionLogin)||
+    typeof scope.expectedSelectedTVersion!=="string"||scope.expectedSelectedTVersion.length<10||
+    !Array.isArray(requestedFlightInstanceIds)||requestedFlightInstanceIds.length<1||requestedFlightInstanceIds.length>96||
+    new Set(requestedFlightInstanceIds).size!==requestedFlightInstanceIds.length||requestedFlightInstanceIds.some(x=>!/^leg:g5a:[a-f0-9]{64}$/.test(x))||
+    !t||t.independentT24CustodyTrustApproved!==true||t.runDayIndex!==q.runDayIndex||t.reviewedCodeSha!==scope.expectedReviewedCodeSha||
+    t.manifestSha256!==q.manifestSha256||t.rightsSha256!==q.rightsReviewSha256||t.releaseSha256!==q.reviewedReleaseSha256||
+    t.expectedFrameSha256!==scope.expectedFrameSha256||t.expectedConfigSha256!==scope.expectedConfigSha256||t.expectedSelectedTVersion!==scope.expectedSelectedTVersion)
+  return hold("CONDITIONAL_EXACT_SCOPE");
+ const actual=await readP5SignedConditionalServiceReview(sourcePool,sourceScope);
+ const members=new Map(actual.memberReview.privateReviewProposals.map(p=>[p.flightInstanceId,p]));
+ const drafts=new Set(actual.privateFeatureDrafts.map(p=>p.flightInstanceId));
+ if(members.size!==actual.memberReview.privateReviewProposals.length||drafts.size!==actual.privateFeatureDrafts.length||
+    requestedFlightInstanceIds.some(id=>!members.has(id)||!drafts.has(id)))return hold("CONDITIONAL_CURRENT_MEMBER_REQUIRED");
+ const selected=requestedFlightInstanceIds.map(id=>{
+  const p=members.get(id)!;
+  if(p.identityEvidenceTier!=="CONDITIONAL_QUERY_FILTERED_SERVICE"||p.reviewedProtocolAmendmentSha256!==sourceScope.protocolSha256||
+     p.manifestSha256!==q.manifestSha256||p.horizon!==q.horizon||
+     utc(p.selectedTNativeUtc)-utc(p.predictionCutoffUtc)!==(q.horizon==="T-6h"?21600000:5400000))
+   return hold("CONDITIONAL_MEMBER_CUTOFF_DRIFT");
+  return {source:{flightInstanceId:id,selectedTNativeUtc:p.selectedTNativeUtc,ownPreCutoffUtc:p.predictionCutoffUtc,horizon:p.horizon}};
+ });
+ const got=await readP6T24WitnessCustodyBatch({client:custody.readerClient,trusts:requestedFlightInstanceIds.map(flightInstanceId=>({...t,flightInstanceId})),scope:custody.scope});
+ if(utc(got.observedDbClockUtc)<utc(actual.observedDbClockUtc))return hold("CONDITIONAL_CUSTODY_CLOCK_REGRESSION");
+ const byReceipt=new Map<string,ReviewReceipt>(),unresolved:string[]=[];
+ for(const x of got.privateDecisions){
+  if(x.status==="EXACT_CUSTODY_RECEIPT_AWAIT_SCIENTIFIC_REVIEW")byReceipt.set(x.flightInstanceId,{receipt:x.receipt,expectedReceiptSha256:x.receipt.receiptSha256});
+  else if(x.status==="CUSTODY_INVALID_OR_EXPIRED_UNRESOLVED")unresolved.push(x.flightInstanceId);
+ }
+ const evidence=await readP6ExactSelectedLaterT24Evidence(prePool,selected,{
+  expectedDossierSha256:q.queryDigestSha256,expectedFrameSha256:scope.expectedFrameSha256,expectedConfigSha256:scope.expectedConfigSha256,
+  expectedSelectedTVersion:scope.expectedSelectedTVersion,pageIndex:1,runDayIndex:q.runDayIndex,sourceObservedDbClockUtc:actual.observedDbClockUtc},byReceipt,unresolved,scope.conditionalMetadataReaderLogin);
+ if(utc(evidence.observedDbClockUtc)<utc(got.observedDbClockUtc))return hold("CONDITIONAL_CUSTODY_TO_PRE_CLOCK_REGRESSION");
+ const {expectedDossierSha256:unused,...redacted}=evidence;
+ const summary={...redacted,status:"ACTUAL_CONDITIONAL_T24_EVIDENCE_PAGE_FOR_SEPARATE_LATER_REVIEW_NO_GO",
+  identityEvidenceTier:"CONDITIONAL_QUERY_FILTERED_SERVICE",expectedSourceQueryDigestSha256:q.queryDigestSha256,
+  privateCustodyVerifiedCount:got.verifiedCount,privateCustodyAbsentCount:got.absentCount,
+  privateCustodyUnresolvedCount:got.unresolvedCount,scientificReviewStillRequired:true,standaloneLaterAuthorized:false};
+ return Object.freeze(Object.defineProperties(summary,{privateDecisions:{value:evidence.privateDecisions,enumerable:false},
+  privateCustodyReceipts:{value:Object.freeze([...byReceipt.values()]),enumerable:false}})) as typeof summary&{readonly privateDecisions:readonly Decision[];readonly privateCustodyReceipts:readonly ReviewReceipt[]};
 }

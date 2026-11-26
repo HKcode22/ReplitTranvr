@@ -11,6 +11,8 @@ import {inspectP6DayEpochExistingShardSemanticsNoGo} from "./phase6DayEpochOrigi
 import {verifyP5CdFrozenRoster} from "./phase5CdGithubBoundedPreTick_v39.ts";
 import {preflightP5Stage14ReviewedPermitV39} from "./phase5V0079SingleBoundFlightPreWriter_v39.ts";
 import {completeP6PostcommitReviewedPreBatch} from "./phase6StoredSourceNativeCandidateAudit_v39.mjs";
+import {sameP5ConditionalLaterReviewerScope} from "./phase5ExternalEd25519LaterShardReviewerVerify_v39.ts";
+import {assertP5ProofAttachedConditionalPacket} from "./phase5ConditionalPrePermitPreparation_v39.ts";
 const TABLE="phase6_private.frozen_native_packet_v39";
 const H=/^[a-f0-9]{64}$/,CODE=/^[a-f0-9]{40}$/;
 const REG=/^data-collection\/phase5\/frozen\/t24r_[A-Za-z0-9_-]{8,100}\.json$/;
@@ -19,6 +21,19 @@ const SRC=/^data-collection\/phase5\/frozen\/source_[A-Za-z0-9_.-]{8,125}\.json$
 const ID=/^leg:[a-zA-Z0-9:|._-]{5,196}$/;
 const schema="v39.phase6.native-t24-private-registry.v1",reviewSchema="v39.phase6.native-t24-registry-ed25519.v1";
 const AUD="HKcode22/ReplitTranvr:PHASE6_T24_NATIVE_PRE_REGISTRY_ONLY";
+const conditionalSchema="v39.phase6.conditional-t24-private-registry.v1",
+ conditionalReviewSchema="v39.phase6.conditional-t24-registry-ed25519.v1",
+ conditionalAudience="HKcode22/ReplitTranvr:PHASE6_T24_CONDITIONAL_PRE_REGISTRY_ONLY";
+export function deriveP6ConditionalT24Scope(policy){
+ const c=policy?.nativeLaterReview?.conditionalT24Scope;
+ if(c===undefined)return undefined;
+ const f=policy?.conditionalPreFeatureReview;
+ if(!sameP5ConditionalLaterReviewerScope(c,c)||Object.keys(c).length!==2||
+    f?.schema!=="v39.phase5.conditional-pre-feature-review-policy.v1"||f.approved!==true||f.rightsSha256!==policy.rightsSha256||
+    f.protocolSha256!==c.protocolSha256||f.externalContentUseReviewSha256!==c.externalContentUseReviewSha256)
+  hold("CONDITIONAL_T24_SCOPE_NOT_SEPARATELY_APPROVED");
+ return Object.freeze({...c});
+}
 const hold=s=>{throw Error("HOLD_P6_PRIVATE_T24_REGISTRY_"+s);};
 const hash=b=>createHash("sha256").update(b).digest("hex");
 const bytes=o=>Buffer.from(JSON.stringify(o),"utf8");
@@ -46,7 +61,9 @@ function trustCheck(t){
   hold("BAD_T24_REVIEWER_PUBLIC_KEY");
  return pub;
 }
-const preimage=r=>Buffer.concat([Buffer.from("HKcode22/ReplitTranvr:PHASE6_T24_NATIVE_PRE_REGISTRY:v1\n"),bytes(r)]);
+export const p6T24RegistryReviewPreimage=r=>Buffer.concat([Buffer.from(r?.schema===conditionalReviewSchema?
+ "HKcode22/ReplitTranvr:PHASE6_T24_CONDITIONAL_PRE_REGISTRY:v1\n":"HKcode22/ReplitTranvr:PHASE6_T24_NATIVE_PRE_REGISTRY:v1\n"),bytes(r)]);
+const preimage=p6T24RegistryReviewPreimage;
 /** The source is never an arbitrary passed file. Require exact verified
  * current index bytes and its SOURCE registry entry/byte digest. */
 function sourceFromIndex(index,t,registry){
@@ -70,14 +87,24 @@ function sourceFromIndex(index,t,registry){
 }
 export function verifyP6T24PrivateRegistry({trust:t,index,registryBytes,wire,observedDbClockUtc,files}){
  const pub=trustCheck(t),r=wire?.review,reg=parse(registryBytes,250000),now=utc(observedDbClockUtc);
+ const conditional=reg.schema===conditionalSchema;
+ // Metadata-only registry enumeration must enforce the identity tier
+ // before it can exclude/route a member, even without packet hydration.
+ const conditionalId=id=>typeof id==="string"&&/^leg:g5a:[a-f0-9]{64}$/.test(id);
+ if(conditional&&!keys(reg,["schema","runDayIndex","shardIndex","reviewedCodeSha","manifestSha256","rightsSha256","releaseSha256","sourceRegistryPath","sourceRegistrySha256","sourceReviewEvidenceSha256","conditionalT24Scope","sourceExpiresAtUtc","entries"])||
+    !conditional&&Object.hasOwn(reg,"sourceExpiresAtUtc"))hold("REGISTRY_TIER_FIELDS");
+ if(conditional?(!t.conditionalT24Scope||!sameP5ConditionalLaterReviewerScope(t.conditionalT24Scope,reg.conditionalT24Scope)||
+    !sameP5ConditionalLaterReviewerScope(t.conditionalT24Scope,r?.conditionalT24Scope)||Object.keys(t.conditionalT24Scope).length!==2):
+    (Object.hasOwn(reg,"conditionalT24Scope")||Object.hasOwn(r??{},"conditionalT24Scope")))
+  hold("CONDITIONAL_T24_SCOPE_NOT_SEPARATELY_APPROVED");
  if(!keys(wire,["review","signatureBase64"])||!keys(r,["schema","audience","logicalPath","runDayIndex","shardIndex","registrySha256",
-  "reviewedCodeSha","manifestSha256","rightsSha256","releaseSha256","policySha256","reviewedAtUtc","validUntilUtc","retentionNotAfterUtc","reviewerFingerprintSha256"])||
-    r.schema!==reviewSchema||r.audience!==AUD||!REG.test(r.logicalPath??"")||r.registrySha256!==hash(registryBytes)||
+  "reviewedCodeSha","manifestSha256","rightsSha256","releaseSha256","policySha256","reviewedAtUtc","validUntilUtc","retentionNotAfterUtc","reviewerFingerprintSha256",...(conditional?["conditionalT24Scope"]:[])])||
+    r.schema!==(conditional?conditionalReviewSchema:reviewSchema)||r.audience!==(conditional?conditionalAudience:AUD)||!REG.test(r.logicalPath??"")||r.registrySha256!==hash(registryBytes)||
     r.reviewedCodeSha!==t.reviewedCodeSha||r.manifestSha256!==t.manifestSha256||r.rightsSha256!==t.rightsSha256||r.releaseSha256!==t.releaseSha256||
     r.policySha256!==t.expectedT24PolicySha256||r.reviewerFingerprintSha256!==t.expectedT24ReviewerFingerprintSha256||
     !Number.isSafeInteger(r.runDayIndex)||r.runDayIndex<1||r.runDayIndex>31||
     !Number.isSafeInteger(r.shardIndex)||r.shardIndex<1||r.shardIndex>100000||
-    reg.schema!==schema||reg.runDayIndex!==r.runDayIndex||reg.shardIndex!==r.shardIndex||
+    reg.schema!==(conditional?conditionalSchema:schema)||reg.runDayIndex!==r.runDayIndex||reg.shardIndex!==r.shardIndex||
     reg.reviewedCodeSha!==r.reviewedCodeSha||reg.manifestSha256!==r.manifestSha256||
     reg.rightsSha256!==r.rightsSha256||reg.releaseSha256!==r.releaseSha256||
     !SRC.test(reg.sourceRegistryPath??"")||!H.test(reg.sourceRegistrySha256??"")||!H.test(reg.sourceReviewEvidenceSha256??"")||
@@ -85,7 +112,8 @@ export function verifyP6T24PrivateRegistry({trust:t,index,registryBytes,wire,obs
   hold("REGISTRY_WIRE_OR_STUDY_SCOPE_DRIFT");
  const reviewAt=utc(r.reviewedAtUtc),valid=utc(r.validUntilUtc),expiry=utc(r.retentionNotAfterUtc);
  if(reviewAt<utc(t.policyValidFromUtc)||reviewAt>now||now>=valid||valid>expiry||expiry>utc(t.policyValidUntilUtc)||
-    expiry-reviewAt>t.maximumPrivateRetentionHours*3600000)
+    expiry-reviewAt>t.maximumPrivateRetentionHours*3600000||
+    (conditional&&(!reg.sourceExpiresAtUtc||expiry>utc(reg.sourceExpiresAtUtc))))
   hold("REGISTRY_SIGNATURE_EXPIRED_OR_FUTURE");
  try{
   const s=Buffer.from(wire.signatureBase64??"","base64");
@@ -95,6 +123,7 @@ export function verifyP6T24PrivateRegistry({trust:t,index,registryBytes,wire,obs
  for(const e of reg.entries){
   if(!keys(e,["filePath","packetSha256","flightInstanceId","queryDigestSha256","selectedTNativeUtc","cutoffUtc"])||
      !PACK.test(e.filePath??"")||!H.test(e.packetSha256??"")||!ID.test(e.flightInstanceId??"")||
+     (conditional?!conditionalId(e.flightInstanceId):e.flightInstanceId.startsWith("leg:g5a:"))||
      !source.has(e.queryDigestSha256)||seen.has(e.flightInstanceId)||paths.has(e.filePath)||digests.has(e.packetSha256)||
      utc(e.selectedTNativeUtc)-utc(e.cutoffUtc)!==86400000||utc(e.cutoffUtc)<=reviewAt+900000||utc(e.cutoffUtc)>=valid)
    hold("CROSS_SOURCE_DUPLICATE_OR_UNSAFE_T24_ENTRY");
@@ -105,10 +134,10 @@ export function verifyP6T24PrivateRegistry({trust:t,index,registryBytes,wire,obs
   const roster={schema:"v39.phase5.cd-existing-signed-pre-packet-roster.v1",reviewedCodeSha:t.reviewedCodeSha,
    manifestSha256:t.manifestSha256,rightsSha256:t.rightsSha256,entries:reg.entries.map(e=>({filePath:e.filePath,packetSha256:e.packetSha256}))};
   const raw=bytes(roster),verified=verifyP5CdFrozenRoster(raw,roster,files,{approvedCodeSha:t.reviewedCodeSha,
-   manifestSha256:t.manifestSha256,rightsSha256:t.rightsSha256,rosterSha256:hash(raw)},"T24_WITH_SEPARATE_WITNESS");
+   manifestSha256:t.manifestSha256,rightsSha256:t.rightsSha256,rosterSha256:hash(raw),...(conditional?{releaseMode:"PHASE6_APPROVED",conditionalPreScope:t.conditionalT24Scope}:{})},"T24_WITH_SEPARATE_WITNESS");
   for(const e of reg.entries){
    const q=verified.get(e.packetSha256),p=q?.permit;
-   if(!p||p.runDayIndex!==r.runDayIndex||p.horizon!=="T-24h"||p.flightInstanceId!==e.flightInstanceId||
+   if(!p||conditional!==(p.identityEvidenceTier==="CONDITIONAL_QUERY_FILTERED_SERVICE")||p.runDayIndex!==r.runDayIndex||p.horizon!=="T-24h"||p.flightInstanceId!==e.flightInstanceId||
       p.queryDigestSha256!==e.queryDigestSha256||p.selectedTNativeUtc!==e.selectedTNativeUtc||p.expectedReviewedReleaseSha256!==t.releaseSha256||
       p.reviewedFrameSha256!==t.expectedFrameSha256||p.reviewedConfigSha256!==t.expectedConfigSha256||
       q.witnessReview?.expectedSelectedTVersion!==t.expectedSelectedTVersion||
@@ -259,10 +288,11 @@ export function buildP6DelegatedT24PrivateRegistry({handoff,features,authority,c
  * retried write. The original V0091 queue still owns registration. */
 export async function publishP6T24PrivateRegistryOnce({readerClient,publisherClient,trust:t,proposal,expectedPublisherSessionLogin}){
  if(readerClient===publisherClient||!/^phase6_private_publisher_login_[a-z0-9_]{6,50}$/.test(expectedPublisherSessionLogin??"")||
-    expectedPublisherSessionLogin===t.expectedReaderSessionLogin||proposal?.status!=="SIGNED_NATIVE_T24_REGISTRY_AWAIT_PRIVATE_PUBLICATION"||
+    expectedPublisherSessionLogin===t.expectedReaderSessionLogin||!["SIGNED_NATIVE_T24_REGISTRY_AWAIT_PRIVATE_PUBLICATION","SIGNED_CONDITIONAL_T24_REGISTRY_AWAIT_PRIVATE_PUBLICATION"].includes(proposal?.status)||
     !seal(proposal,"privateRegistryBytes")||!seal(proposal,"privateWire")||!seal(proposal,"privateFiles"))
   hold("UNAPPROVED_PRIVATE_REGISTRY_PUBLICATION");
  const wire=proposal.privateWire,r=wire.review,regBytes=proposal.privateRegistryBytes,files=proposal.privateFiles;
+ if((proposal.status==="SIGNED_CONDITIONAL_T24_REGISTRY_AWAIT_PRIVATE_PUBLICATION")!==(r.schema===conditionalReviewSchema))hold("REGISTRY_PUBLICATION_TIER_DRIFT");
  const current=await readP6T24CurrentRegistrySet({client:readerClient,trust:t,runDayIndex:r.runDayIndex});
  let tx=false,attempt=false;
  try{
@@ -319,8 +349,81 @@ export async function readP6T24PrivateRegistryPackets({client,trust:t,runDayInde
   });
   verifyP6T24PrivateRegistry({trust:t,index:current.privateIndex,registryBytes,wire,observedDbClockUtc:now,files});
   await client.query("ROLLBACK");tx=false;
-  return Object.freeze(Object.defineProperties({status:"EXACT_PRIVATE_NATIVE_T24_PACKETS_READONLY_NO_GO",runDayIndex,registrySha256,
+  return Object.freeze(Object.defineProperties({status:reg.schema===conditionalSchema?"EXACT_PRIVATE_CONDITIONAL_T24_PACKETS_READONLY_NO_GO":"EXACT_PRIVATE_NATIVE_T24_PACKETS_READONLY_NO_GO",runDayIndex,registrySha256,
    observedDbClockUtc:now,packetCount:files.length,providerCalls:0,databaseWrites:0,phase6PaidGo:false},
    {privateRegistry:{value:reg,enumerable:false},privateFiles:{value:files,enumerable:false}}));
  }finally{if(tx)await client.query("ROLLBACK").catch(()=>{});}
+}
+
+/** Genuine attached T24 packets -> separate unsigned registry; existing
+ * private table, fresh current index, same prospective cutoff and expiry.
+ * Caller must obtain the external review signature before publication. */
+export function buildP6ConditionalT24RegistryProposal({trust:t,current,sourceRegistryPath,sourceRegistrySha256,packets,sourceExpiresAtUtc}){
+ trustCheck(t);
+ if(!t.conditionalT24Scope||!sameP5ConditionalLaterReviewerScope(t.conditionalT24Scope,t.conditionalT24Scope)||
+    Object.keys(t.conditionalT24Scope).length!==2||current?.status!=="CURRENT_PRIVATE_T24_REGISTRY_SET_NO_GO"||
+    !seal(current,"privateIndex")||!seal(current,"privateExistingFlightIds")||
+    !Number.isSafeInteger(current.nextShardIndex)||current.nextShardIndex<1||current.nextShardIndex>100000||
+    !Array.isArray(packets)||packets.length<1||packets.length>96)hold("NO_EXACT_CONDITIONAL_T24_PROPOSAL_SCOPE");
+ const now=utc(current.observedDbClockUtc),until=Math.min(now+t.maximumPrivateRetentionHours*3600000,utc(t.policyValidUntilUtc),utc(sourceExpiresAtUtc));
+ const source=current.privateIndex.privateParsedIndex.entries.filter(e=>e.lane==="SOURCE"&&e.filePath===sourceRegistryPath&&e.fileSha256===sourceRegistrySha256);
+ if(source.length!==1||now<utc(t.policyValidFromUtc)||until<=now)hold("NO_EXACT_CONDITIONAL_T24_SOURCE");
+ const ids=new Set(),digests=new Set(),files=[],entries=[];
+ for(const x of packets){
+  assertP5ProofAttachedConditionalPacket(x);
+  const p=x.packet.prePermit,cutoff=utc(p.selectedTNativeUtc)-86400000;
+  if(p.identityEvidenceTier!=="CONDITIONAL_QUERY_FILTERED_SERVICE"||p.horizon!=="T-24h"||
+    p.runDayIndex!==current.runDayIndex||cutoff<=now+900000||cutoff>=until||cutoff>now+10800000||
+    current.privateExistingFlightIds.has(p.flightInstanceId)||ids.has(p.flightInstanceId)||digests.has(x.packetSha256))
+   hold("CONDITIONAL_T24_DUPLICATE_OR_WINDOW");
+  const filePath="data-collection/phase5/frozen/t24p_"+x.packetSha256+".json";
+  files.push({filePath,packetSha256:x.packetSha256,bytes:Buffer.from(x.packetBytes)});
+  entries.push({filePath,packetSha256:x.packetSha256,flightInstanceId:p.flightInstanceId,queryDigestSha256:p.queryDigestSha256,
+   selectedTNativeUtc:p.selectedTNativeUtc,cutoffUtc:new Date(cutoff).toISOString()});
+  ids.add(p.flightInstanceId);digests.add(x.packetSha256);
+ }
+ const reg={schema:conditionalSchema,runDayIndex:current.runDayIndex,shardIndex:current.nextShardIndex,reviewedCodeSha:t.reviewedCodeSha,
+  manifestSha256:t.manifestSha256,rightsSha256:t.rightsSha256,releaseSha256:t.releaseSha256,sourceRegistryPath,sourceRegistrySha256,
+  sourceReviewEvidenceSha256:source[0].reviewEvidenceSha256,conditionalT24Scope:t.conditionalT24Scope,sourceExpiresAtUtc,entries};
+ sourceFromIndex(current.privateIndex,t,reg);
+ const registryBytes=bytes(reg),registrySha256=hash(registryBytes);
+ const review={schema:conditionalReviewSchema,audience:conditionalAudience,logicalPath:"data-collection/phase5/frozen/t24r_"+registrySha256+".json",
+  runDayIndex:reg.runDayIndex,shardIndex:reg.shardIndex,registrySha256,reviewedCodeSha:t.reviewedCodeSha,manifestSha256:t.manifestSha256,
+  rightsSha256:t.rightsSha256,releaseSha256:t.releaseSha256,policySha256:t.expectedT24PolicySha256,reviewedAtUtc:current.observedDbClockUtc,
+  validUntilUtc:new Date(until).toISOString(),retentionNotAfterUtc:new Date(until).toISOString(),reviewerFingerprintSha256:t.expectedT24ReviewerFingerprintSha256,
+  conditionalT24Scope:t.conditionalT24Scope};
+ return Object.freeze(Object.defineProperties({status:"CONDITIONAL_T24_REGISTRY_AWAIT_INDEPENDENT_SIGNATURE",packetCount:files.length,
+  registrySha256,providerCalls:0,databaseWrites:0,phase6PaidGo:false},
+  {privateRegistryBytes:{value:registryBytes,enumerable:false},privateReview:{value:review,enumerable:false},privateFiles:{value:files,enumerable:false}}));
+}
+export function attachP6ConditionalT24RegistrySignature({trust,current,proposal,wire}){
+ if(proposal?.status!=="CONDITIONAL_T24_REGISTRY_AWAIT_INDEPENDENT_SIGNATURE"||!seal(proposal,"privateRegistryBytes")||
+    !seal(proposal,"privateReview")||!seal(proposal,"privateFiles")||
+    !bytes(proposal.privateReview).equals(bytes(wire?.review??null)))hold("CONDITIONAL_T24_EXTERNAL_REVIEW_CHANGED");
+ const verified=verifyP6T24PrivateRegistry({trust,index:current.privateIndex,registryBytes:proposal.privateRegistryBytes,
+  wire,observedDbClockUtc:current.observedDbClockUtc,files:proposal.privateFiles});
+ return Object.freeze(Object.defineProperties({status:"SIGNED_CONDITIONAL_T24_REGISTRY_AWAIT_PRIVATE_PUBLICATION",packetCount:verified.reg.entries.length,
+  registrySha256:verified.review.registrySha256,providerCalls:0,databaseWrites:0,phase6PaidGo:false},
+  {privateRegistryBytes:{value:proposal.privateRegistryBytes,enumerable:false},privateWire:{value:wire,enumerable:false},privateFiles:{value:proposal.privateFiles,enumerable:false}}));
+}
+
+/** The same explicitly protected delegated registry signer as native T24,
+ * but a distinct conditional signature domain and policy scope. */
+export function signP6DelegatedConditionalT24Registry({trust:t,current,proposal,authority}){
+ const b=authority?.policyBytes;
+ if(!Buffer.isBuffer(b)||hash(b)!==t.expectedT24PolicySha256||authority.expectedPolicySha256!==t.expectedT24PolicySha256||
+  authority.independentDelegatedNativeReviewApproved!==true||authority.noProviderCredentialsInReviewer!==true||
+  authority.laterReviewerKey?.type!=="private"||authority.laterReviewerKey.asymmetricKeyType!=="ed25519"||
+  hash(createPublicKey(authority.laterReviewerKey).export({format:"der",type:"spki"}))!==t.expectedT24ReviewerFingerprintSha256)
+  hold("CONDITIONAL_T24_REGISTRY_DELEGATION");
+ const p=JSON.parse(b.toString("utf8")),v=p.nativeLaterReview;
+ if(p.schema!=="v39.phase6.delegated-daily-source-review-policy.v1"||p.delegatedDailyPacketProductionApproved!==true||
+  p.approvedCodeSha!==t.reviewedCodeSha||!["manifestSha256","rightsSha256","releaseSha256","calendarSha256"].every(k=>p[k]===t[k])||
+  v?.approved!==true||v.privatePublicationApproved!==true||v.nativeT24ReviewApproved!==true||
+  v.laterReviewerFingerprintSha256!==t.expectedT24ReviewerFingerprintSha256||
+  !sameP5ConditionalLaterReviewerScope(deriveP6ConditionalT24Scope(p),t.conditionalT24Scope)||
+  proposal?.status!=="CONDITIONAL_T24_REGISTRY_AWAIT_INDEPENDENT_SIGNATURE"||!seal(proposal,"privateReview"))
+  hold("CONDITIONAL_T24_REGISTRY_DELEGATION");
+ const review=proposal.privateReview,wire={review,signatureBase64:sign(null,preimage(review),authority.laterReviewerKey).toString("base64")};
+ return attachP6ConditionalT24RegistrySignature({trust:t,current,proposal,wire});
 }

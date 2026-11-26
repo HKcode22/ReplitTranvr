@@ -131,6 +131,11 @@ export function assessP5AmendmentEGateOutDelayCandidate(
   status="OUTCOME_NOT_ACTUAL_GATE_OUT";
  else if(!input.outcome.externallyVerifiedActualOnly||
     !input.outcome.evidenceSha256||
+    // An earlier frozen source or the scheduled observation itself cannot
+    // independently attest the later actual event. Match the Packet-B
+    // continuous target's distinct-observation boundary; no truth inferred.
+    input.outcome.evidenceSha256===input.scheduled.evidenceSha256||
+    input.outcome.evidenceSha256===input.frozenSourceOriginalSha256||
     input.outcome.operation!=="OPERATED")
   status="ACTUAL_GATE_OUT_SEMANTICS_UNVERIFIED";
  else if(actual<=issued)

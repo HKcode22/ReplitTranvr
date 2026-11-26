@@ -159,3 +159,21 @@ test("approved executable successor preserves all 31 old linked policy digests a
  assert.deepEqual(loadP6ReviewedDayPlans(next,f.read),loadP6ReviewedDayPlans(prior,f.read));
  assert.throws(()=>admitP6NonpaidSourceDayGithub({...f.env,GITHUB_SHA:head}),/HOLD_P6_NONPAID_SOURCE_DAY_GITHUB_/);
 });
+
+test("T055 reports nearest future preparation opening/deadline and exact draw/genesis state without changing eligibility",()=>{
+ const f=fixture(),ctx=admitP6NonpaidSourceDayGithub(f.env),plans=loadP6ReviewedDayPlans(ctx,f.read);
+ const at=iso(now);
+ f.indexes[0].claim_n=1;f.indexes[0].index_n=1;
+ const p=plans.filter(x=>Date.parse(x.firstRequestUtc)>now+ctx.reviewed.maximumPreparationLookaheadMinutes*60000)[0];
+ assert(p);
+ f.indexes[p.runDayIndex-1].claim_n=1;
+ const a=selectP6NonpaidSourceDay(ctx,plans,f.calendar,f.indexes,at);
+ assert.equal(a.nextFuturePreparation.runDayIndex,p.runDayIndex);
+ assert.equal(a.nextFuturePreparation.genesisState,"PARTIAL_REQUIRES_REVIEW");
+ assert.equal(a.nextFuturePreparation.drawCount,f.calendar[p.runDayIndex-1].draw_n);
+ assert.equal(a.nextFuturePreparation.preparationOpensUtc,iso(Date.parse(p.firstRequestUtc)-ctx.reviewed.maximumPreparationLookaheadMinutes*60000));
+ assert.equal(a.nextFuturePreparation.preparationDeadlineUtc,iso(Date.parse(p.firstRequestUtc)-ctx.reviewed.minimumPreparationLeadMinutes*60000));
+ assert(a.futureOutsideLookaheadCount>0);
+ assert.equal(a.missedUnpublishedDays.length,0);
+ assert.equal(a.selected.runDayIndex,2);
+});

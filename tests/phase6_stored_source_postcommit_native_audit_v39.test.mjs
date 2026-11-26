@@ -1,3 +1,4 @@
+import {readFileSync as readWorkflowFile} from "node:fs";
 import {test} from "node:test";
 import assert from "node:assert/strict";
 import {createHash,generateKeyPairSync} from "node:crypto";
@@ -68,7 +69,7 @@ test("feature readback is not called without approved purpose; mismatched privat
 });
 
 
-import {admitP6NativeLaterRuntime,planP6NativeLaterAppendScope,p6NativeLaterReadbackDiagnostics} from "../scripts/v39_phase6_stored_source_postcommit_native_later_v39.mjs";
+import {admitP6NativeLaterRuntime,planP6NativeLaterAppendScope,p6NativeLaterReadbackDiagnostics,selectP6ConditionalT24ReviewPage,admitP6ConditionalT24Reviewer,selectP6ConditionalLaterPage,planP6ConditionalLaterAppendScope,admitP6ConditionalLaterReviewer} from "../scripts/v39_phase6_stored_source_postcommit_native_later_v39.mjs";
 function runtimeFixture(){
  const dayKey=generateKeyPairSync("ed25519"),queryKey=generateKeyPairSync("ed25519"),laterKey=generateKeyPairSync("ed25519"),custodyKey=generateKeyPairSync("ed25519");
  const fp=k=>sha(k.publicKey.export({type:"spki",format:"der"})),pem=k=>k.publicKey.export({type:"spki",format:"pem"}).toString(),
@@ -150,8 +151,102 @@ test("same-child later PRE reports count-only funnel and lead sensitivity even w
  assert.equal(x.classifications.CENSORED_NO_PROSPECTIVE_PRE_LEAD,10);
  assert.deepEqual(x.timingSensitivityOnly.map(y=>y.eligible),[0,7,10]);
  assert.equal(x.policyChanged,false);
+ assert.equal(x.conditionalPublicationStatus,"NOT_MEASURED");
+ const separate=p6NativeLaterReadbackDiagnostics({...a,conditionalSourceReview:{
+  stage14MatchedMembershipCount:4,featureReview:{featureDraftCount:3},privateIdentity:"SECRET"
+ }},{reviewEntryCount:0,horizon:"T-6h"},null,true);
+ assert.equal(separate.sourceAuditOnlyReason,"NO_ELIGIBLE_NATIVE_CANDIDATES");
+ assert.equal(separate.conditionalMatchedMembershipCount,4);
+ assert.equal(separate.conditionalFeatureDraftCount,3);
+ assert.equal(separate.conditionalPublicationStatus,"CONDITIONAL_DRAFTS_AWAIT_INDEPENDENT_PERMIT_REVIEW_AND_REGISTRY");
+ assert.equal(separate.conditionalRegistryPublicationAttempted,false);
+ assert(!JSON.stringify(separate).includes("SECRET"));
+ assert.equal(p6NativeLaterReadbackDiagnostics({...a,conditionalSourceReview:{featureReview:{featureDraftCount:0}}},{reviewEntryCount:0},null,true).conditionalPublicationStatus,"NO_CONDITIONAL_FEATURE_DRAFTS");
  assert(!JSON.stringify(x).includes("SECRET"));
  assert.equal(p6NativeLaterReadbackDiagnostics({observedMemberCount:0,candidateCount:0},{reviewEntryCount:0},null,true).sourceAuditOnlyReason,"NO_OBSERVED_MEMBERS");
  assert.equal(p6NativeLaterReadbackDiagnostics({observedMemberCount:4,candidateCount:2},{reviewEntryCount:0},null,true).sourceAuditOnlyReason,"NO_PENDING_REVIEW_ENTRIES");
  assert.equal(p6NativeLaterReadbackDiagnostics({observedMemberCount:4,candidateCount:2},{reviewEntryCount:2},{matchedCount:0},true).sourceAuditOnlyReason,"NO_MATCHED_NATIVE_FEATURES");
+});
+
+test("T050 selects still-live unindexed conditional T24 independently of native count",()=>{
+ const ids=[0,1,2,3].map(i=>"leg:g5a:"+String(i+1).repeat(64)),now="2035-11-25T05:00:00.000Z";
+ const actual={privateConditionalSourceScope:{source:{horizon:"T-24h",runDayIndex:2}},privateConditionalSourceReview:{
+  privateFeatureDrafts:ids.map(flightInstanceId=>({flightInstanceId})),memberReview:{privateReviewProposals:ids.map((flightInstanceId,i)=>({flightInstanceId,predictionCutoffUtc:["2035-11-25T05:25:00.000Z","2035-11-25T05:15:00.000Z","2035-11-25T05:30:00.000Z","2035-11-25T08:01:00.000Z"][i]}))}}};
+ const current={status:"CURRENT_PRIVATE_T24_REGISTRY_SET_NO_GO",runDayIndex:2,observedDbClockUtc:now,privateExistingFlightIds:new Set([ids[2]])};
+ assert.deepEqual(selectP6ConditionalT24ReviewPage(actual,current),[ids[0]]);
+ assert.deepEqual(selectP6ConditionalT24ReviewPage(actual,{...current,privateExistingFlightIds:new Set([ids[0],ids[2]])}),[]);
+ assert.throws(()=>selectP6ConditionalT24ReviewPage(actual,{...current,runDayIndex:3}),/CONDITIONAL_T24_PAGE_SCOPE/);
+ assert.throws(()=>selectP6ConditionalT24ReviewPage({...actual,privateConditionalSourceReview:{...actual.privateConditionalSourceReview,privateFeatureDrafts:[{flightInstanceId:ids[0]},{flightInstanceId:ids[0]}]}},current),/CONDITIONAL_T24_PAGE_SCOPE/);
+});
+
+test("T051 pre-SOURCE conditional T24 readiness requires an explicit distinct public verifier and scoped delegation",()=>{
+ const f=runtimeFixture(),native=admitP6NativeLaterRuntime(f.withPolicy(),()=>plan),t=native.c.trust;
+ assert.equal(admitP6ConditionalT24Reviewer({},f.p,t),null);
+ const key=generateKeyPairSync("ed25519"),fp=sha(key.publicKey.export({type:"spki",format:"der"})),proof=sha(Buffer.from("synthetic separate proof"));
+ const scope={protocolSha256:sha(Buffer.from("protocol")),externalContentUseReviewSha256:sha(Buffer.from("conditional content"))};
+ const p={...f.p,conditionalPreFeatureReview:{schema:"v39.phase5.conditional-pre-feature-review-policy.v1",approved:true,rightsSha256:t.rightsSha256,...scope},
+  conditionalT24PermitReview:{schema:"v39.phase5.conditional-t24-permit-review-delegation.v1",approved:true,...scope,reviewerFingerprintSha256:fp,
+   reportedScheduleSemanticsSha256:hash,validFromUtc:f.p.nativeLaterReview.validFromUtc,validUntilUtc:f.p.nativeLaterReview.validUntilUtc},
+  nativeLaterReview:{...f.p.nativeLaterReview,conditionalT24Scope:scope,nativeT24ReviewApproved:true,independentT24WitnessProtocolReviewed:true,
+   reviewedWitnessOnlyRole:"phase5_fids_t24_witness_prod_20261107",selectedTConfig:{...f.p.nativeLaterReview.selectedTConfig,semanticsEvidenceSha256:hash}}};
+ const e={P6_PHASE7_PRE_LANE_EVIDENCE_AUTHORITY_FINGERPRINT_SHA256:fp,P6_PHASE7_PRE_LANE_EVIDENCE_AUTHORITY_PUBLIC_KEY_BASE64:Buffer.from(key.publicKey.export({type:"spki",format:"pem"})).toString("base64"),P6_PHASE7_PRE_PROOF_REVIEWER_FINGERPRINT_SHA256:proof};
+ assert.deepEqual(admitP6ConditionalT24Reviewer(e,p,t).scope,scope);
+ assert.throws(()=>admitP6ConditionalT24Reviewer({...e,P6_PHASE7_PRE_LANE_EVIDENCE_AUTHORITY_PUBLIC_KEY_BASE64:""},p,t),/NOT_READY/);
+ assert.throws(()=>admitP6ConditionalT24Reviewer({...e,P6_PHASE7_PRE_PROOF_REVIEWER_FINGERPRINT_SHA256:fp},p,t),/NOT_READY/);
+ assert.throws(()=>admitP6ConditionalT24Reviewer(e,{...p,conditionalT24PermitReview:undefined},t),/NOT_READY/);
+});
+
+test("T059 actual protected SOURCE workflow projects conditional public verifier into both nonpaid runtime steps only",()=>{
+ const workflow=readWorkflowFile(new URL("../.github/workflows/phase5-one-signed-day-source-child-dispatch.yml",import.meta.url),"utf8");
+ const step=name=>{
+  const start=workflow.indexOf("      - name: "+name+"\n");
+  assert.ok(start>=0,"missing workflow step "+name);
+  const end=workflow.indexOf("\n      - name:",start+1);
+  return workflow.slice(start,end<0?undefined:end);
+ };
+ const keys=["P6_PHASE7_PRE_LANE_EVIDENCE_AUTHORITY_FINGERPRINT_SHA256","P6_PHASE7_PRE_LANE_EVIDENCE_AUTHORITY_PUBLIC_KEY_BASE64"];
+ for(const name of ["Validate native PRE publication readiness BEFORE SOURCE (NONPAID)","Review and publish later PRE using existing private registry (NONPAID, separately approved)"]){
+  const s=step(name);
+  for(const k of keys)assert.ok(s.includes("          "+k+": ${{ secrets."+k+" }}"),name+" missing "+k);
+  assert.match(s,/AERODATABOX_API_KEY: ''/);
+  assert.match(s,/V39_PHASE6_PROCESS_ARMED: '0'/);
+  assert.doesNotMatch(s,/P6_PHASE7_PRE_(?:LANE_EVIDENCE_AUTHORITY|PROOF_REVIEWER)_PRIVATE_KEY_BASE64:/);
+ }
+ const paid=step("Authenticate real private PG16 signed index and query, then ORIGINAL one-physical-GET child");
+ for(const k of keys)assert.ok(!paid.includes(k+":"));
+ assert.doesNotMatch(paid,/P6_PHASE7_PRE_(?:LANE_EVIDENCE_AUTHORITY|PROOF_REVIEWER)_PRIVATE_KEY_BASE64:|P6_PRIVATE_PUBLISHER_DATABASE_URL:/);
+ assert.match(paid,/success\(\) && inputs\.confirm == 'ONE_SIGNED_SOURCE_CHILD_MAX_ONE_PAID_GET'/);
+});
+
+test("T069 conditional later uses separate day policy and exact current member denominator, native path preserved",()=>{
+ const f=runtimeFixture(),x=admitP6NativeLaterRuntime(f.withPolicy(),()=>plan),v=f.p.nativeLaterReview,trust=x.c.trust;
+ const k=generateKeyPairSync("ed25519"),fp=sha(k.publicKey.export({type:"spki",format:"der"})),pf=sha(Buffer.from("other proof"));
+ const cs={protocolSha256:"1".repeat(64),externalContentUseReviewSha256:"2".repeat(64)};
+ const p={...f.p,conditionalPreFeatureReview:{schema:"v39.phase5.conditional-pre-feature-review-policy.v1",approved:true,rightsSha256:trust.rightsSha256,...cs},
+  conditionalLaterPermitReview:{schema:"v39.phase5.conditional-later-permit-review-delegation.v1",approved:true,...cs,reviewerFingerprintSha256:fp,reportedScheduleSemanticsSha256:hash,validFromUtc:v.validFromUtc,validUntilUtc:v.validUntilUtc,standaloneNoT24ProtocolSha256:null},
+  nativeLaterReview:{...v,selectedTConfig:{...v.selectedTConfig,semanticsEvidenceSha256:hash},conditionalLaterDayAppendPolicy:{...v.dayAppendPolicy,conditionalLaterPreScope:cs}}};
+ const env={P6_CONDITIONAL_LATER_METADATA_READ_ENABLED:"1",P6_PHASE7_PRE_LANE_EVIDENCE_AUTHORITY_FINGERPRINT_SHA256:fp,
+  P6_PHASE7_PRE_LANE_EVIDENCE_AUTHORITY_PUBLIC_KEY_BASE64:Buffer.from(k.publicKey.export({type:"spki",format:"pem"})).toString("base64"),P6_PHASE7_PRE_PROOF_REVIEWER_FINGERPRINT_SHA256:pf};
+ assert.equal(admitP6ConditionalLaterReviewer({},p,trust),null);
+ const reviewer=admitP6ConditionalLaterReviewer(env,p,trust);
+ assert.deepEqual(reviewer.scope,cs);
+ assert.throws(()=>admitP6ConditionalLaterReviewer(env,{...p,nativeLaterReview:{...p.nativeLaterReview,dayAppendPolicy:{...v.dayAppendPolicy,conditionalLaterPreScope:cs}}},trust),/NOT_READY/);
+ assert.throws(()=>admitP6ConditionalLaterReviewer(env,{...p,conditionalLaterPermitReview:{...p.conditionalLaterPermitReview,standaloneNoT24ProtocolSha256:"3".repeat(64)}},trust),/NOT_READY/);
+ const ids=[1,2,3,4,5].map(i=>"leg:g5a:"+String(i).repeat(64)),clock="2026-11-22T05:00:00.000Z",
+  sourcePath="data-collection/phase5/frozen/source_ci_original.json",raw=Buffer.from(JSON.stringify({entries:[{expectedQueryDigestSha256:hash}]})),
+  reg=Buffer.from(JSON.stringify({entries:[{expectedFlightInstanceId:ids[1],expectedHorizon:"T-6h"},{expectedFlightInstanceId:ids[0],expectedHorizon:"T-90m"}]}));
+ const scope={source:{horizon:"T-6h",runDayIndex:1,manifestSha256:hash,queryDigestSha256:hash}},actual={privateConditionalSourceScope:scope,
+  privateConditionalSourceReview:{privateFeatureDrafts:ids.map(flightInstanceId=>({flightInstanceId})),
+  memberReview:{privateReviewProposals:ids.map((flightInstanceId,i)=>({flightInstanceId,predictionCutoffUtc:["2026-11-22T05:25:00.000Z","2026-11-22T05:30:00.000Z","2026-11-22T05:15:00.000Z","2026-11-22T08:01:00.000Z","2026-11-22T05:40:00.000Z"][i]}))}}};
+ const source={lane:"SOURCE",fileSha256:sha(raw),filePath:sourcePath,reviewEvidenceSha256:hash,hardLatestUtc:"2026-11-22T06:00:00.000Z",shardIndex:1};
+ const later={lane:"LATER_PRE",filePath:"later",fileSha256:sha(reg),shardIndex:3,hardLatestUtc:"2026-11-22T06:10:00.000Z"};
+ const current={day:{wire:{review:{retentionNotAfterUtc:"2026-11-23T00:00:00.000Z",validUntilUtc:"2026-11-22T12:00:00.000Z"}}},
+  index:{redactedSummary:{runDayIndex:1,observedDbClockUtc:clock},privateParsedIndex:{runDayIndex:1,manifestSha256:hash,revision:2,entries:[source,later]},
+   getFrozen:path=>path===sourcePath?raw:reg}};
+ assert.deepEqual(selectP6ConditionalLaterPage(actual,current,new Set([ids[4]])),[ids[0]]);
+ const handoff={privateOriginalDossier:{runDayIndex:1,horizon:"T-6h",manifestSha256:hash,sourceDayRegistrySha256:sha(raw),entries:[]},privateSourceRegistryPath:sourcePath,privateSourceRegistryBytes:raw};
+ const planned=planP6ConditionalLaterAppendScope(handoff,scope,current,{...x,conditionalLaterReviewer:reviewer},1,"2026-11-22T09:00:00.000Z");
+ assert.equal(planned.scope.shardIndex,4);assert.equal(planned.scope.retentionNotAfterUtc,"2026-11-22T09:00:00.000Z");
+ assert.equal(planP6ConditionalLaterAppendScope(handoff,scope,current,{...x,conditionalLaterReviewer:reviewer},1,"2026-11-22T06:00:00.000Z"),null);
+ assert.throws(()=>planP6ConditionalLaterAppendScope({...handoff,privateSourceRegistryBytes:Buffer.from("changed")},scope,current,{...x,conditionalLaterReviewer:reviewer},1,"2026-11-22T09:00:00.000Z"),/SOURCE_REGISTRY_DRIFT/);
 });

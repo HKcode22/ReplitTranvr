@@ -61,6 +61,7 @@ export interface P5PrivateFrozenHydrationOutput{
   runDayIndex:number;
   shardIndex:number;
   signedNativeFlightHorizons:number;
+  signedConditionalServiceHorizons?:number;
   dueForRealReadback:number;
   genuinelyMissedOrTooClose:number;
   deferredWithinWindow:number;
@@ -259,7 +260,8 @@ export async function hydrateP5PrivateLaterPreFromPg16ReadOnly(
    redactedSummary:{
     runDayIndex:verified.runDayIndex,
     shardIndex:verified.shardIndex,
-    signedNativeFlightHorizons:verified.entries.length,
+    signedNativeFlightHorizons:verified.entries.filter(e=>e.packet.prePermit.identityEvidenceTier!=="CONDITIONAL_QUERY_FILTERED_SERVICE").length,
+    signedConditionalServiceHorizons:verified.entries.filter(e=>e.packet.prePermit.identityEvidenceTier==="CONDITIONAL_QUERY_FILTERED_SERVICE").length,
     dueForRealReadback:due.dueForActualPgReadback,
     genuinelyMissedOrTooClose:
      due.statuses.filter(x=>x.state==="MISSED_OR_TOO_CLOSE_CENSOR").length,

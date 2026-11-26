@@ -1,0 +1,16 @@
+# Nov26 11:49 PST — SOURCE resumed; permanent priority crosswalk
+
+Owner command observed DB 19:47:58.582Z; exact main f4fe806d/relay 91888916, retention/pins pass; active authorization; zero unresolved incident stops; 7 categories/37 UTC dates/36,740 planned/184 reserved/1,900 cap/1,000 floor. 92 reservations and 52 historical original bindings (8 D2 T24, 44 D2 T6); D1 no bindings, D3 T24 64 elapsed; D3 T6 64 and T90 64 remaining prospective. Zero queue tasks. SOURCE route enabled and POST remains paused. First actual stored SOURCE parent 45886377755 job 140138004876 executed NO_DUE_SOURCE_NO_DISPATCH, no new paid receipt. Full retention 45886489109 passed. Manual heartbeat 45886325626 failed F041 on the preceding still-paused worker; current independent SOURCE execution later verified. Native cron remains degraded, primary backstop remains live. Since 19Z two target failure runs: this heartbeat and F032 register recurrence 45880797152, repaired exact d39097d2 all 20/20 green; zero relay failures returned.
+
+| Priority | Existing C | F | I | T | Status / acceptance still required |
+| --- | --- | --- | --- | --- | --- | --- |
+| 1 SOURCE route restoration | C006, C007 | F016, F017, F026 | I012, I013, I043, I057 | T052 plus existing SOURCE diagnostic tests | Owner enabled; actual first parent no due. Await timely original binding and body custody; no replay. |
+| 2 heartbeat / retention | C009, C010 | F034, F041 | I032, I049, I057 | T044, T052 | Exact branch CI passed; deployed heartbeat native gap remains, independent backup executed. |
+| 3 new SOURCE original | C006 | F016, F017, F026 | I012, I013, I030 | T024 and existing SOURCE tests | Not yet verified. |
+| 4 conditional T24 | C001, C002 | F018, F027 | I050–I056 | T045–T051 | Exact d39097d2 CI passed; protected workflow public verifier projection still not applied; real positive DB path and commissioning open. |
+| 5 V0111/V0112 | C005 | F018 | I015, I016 | Existing real PG16 registration/witness tests | Staged, production not installed. |
+| 6 conditional T6/T90 | C001, C002 | F027 | I047, I048, I058 | T042, T043, T053 | Separate restricted custody/actual witness reader staged; standalone approval not inferred, runtime signer/publication open. |
+| 7 conditional POST / physical outcome | C003, C004 | F005, F029 | I005 | Existing conditional signed schedule pair and actual POST observability tests | Existing distinct endpoint; genuine producer-to-pair receipts and actual physical evidence unverified. No paid POST window observed. |
+| 8 scientific split/missingness | C008 | F005, F026, F029 | I018, I020 | Existing scientific audit tests | Freeze days 1–20 train, 21–25 validation, 26–31 test by flight_instance_id. No target fallback, no retrospective fill. Actual count/split validation outstanding. |
+
+No new F IDs for old recurrences. Keep SOURCE enabled within original signed authorization; do not enable legacy, widen paid budget, replay or change calendar. User explicitly authorizes ongoing prospective collection despite downstream failure; no fabricated PRE/POST. I058 uses actual marked original, current member selection, private custody and existing restricted PRE witness read; missing/expired/conflicting custody remains distinct, no standalone approval. Tests are admission regressions only; do not label live later publication repaired.

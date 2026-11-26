@@ -139,6 +139,7 @@ jobs:
       P6_PRIVATE_LATER_ENROLL_SCHEDULE_ENABLED: ${{ ((github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.private_transport == 'PRIVATE_CURRENT_SCHEDULE' && inputs.current_dispatch_confirm == 'RUN_CURRENT_SIGNED_PRE_TICK_NO_PROVIDER')) && vars.P6_PRIVATE_CURRENT_PRE_SCHEDULE_ENABLED == '1') && vars.P6_PRIVATE_LATER_ENROLL_SCHEDULE_ENABLED || '' }}
       P6_NONPAID_DAILY_POLICY_BASE64: ${{ ((github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.private_transport == 'PRIVATE_CURRENT_SCHEDULE' && inputs.current_dispatch_confirm == 'RUN_CURRENT_SIGNED_PRE_TICK_NO_PROVIDER')) && vars.P6_PRIVATE_CURRENT_PRE_SCHEDULE_ENABLED == '1') && secrets.P6_NONPAID_DAILY_POLICY_BASE64 || '' }}
       P6_NONPAID_DAILY_POLICY_SHA256: ${{ ((github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.private_transport == 'PRIVATE_CURRENT_SCHEDULE' && inputs.current_dispatch_confirm == 'RUN_CURRENT_SIGNED_PRE_TICK_NO_PROVIDER')) && vars.P6_PRIVATE_CURRENT_PRE_SCHEDULE_ENABLED == '1') && secrets.P6_NONPAID_DAILY_POLICY_SHA256 || '' }}
+      P6_CONDITIONAL_SERVICE_PROTOCOL_SHA256: ${{ vars.P6_CONDITIONAL_SERVICE_PROTOCOL_SHA256 }}
       RAPIDAPI_KEY: ''
       P6_PRIVATE_PUBLISHER_DATABASE_URL: ''
       P5_CD_GH_PRIVATE_LATER_APPROVED: ${{ inputs.private_transport == 'PRIVATE_EXACT_SHARD' && secrets.P5_CD_GH_PRIVATE_LATER_APPROVED || '' }}

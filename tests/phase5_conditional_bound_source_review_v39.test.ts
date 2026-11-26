@@ -1,10 +1,22 @@
+import {digestP5Stage24ReviewedReceipt} from "../server/lib/disruption/phase5T24WitnessedLaterHorizonGuard_v39";
+import {P6_T24_CUSTODY_SCHEMA,p6T24WitnessCustodyPath,p6T24WitnessCustodyPreimage} from "../server/lib/disruption/phase6PrivateT24WitnessReceiptTransport_v39.mjs";
+import {signP6DelegatedConditionalLaterRegistry} from "../server/lib/disruption/phase6StoredSourceNativeCandidateAudit_v39.mjs";
+import {readP6ConditionalLaterT24EvidencePage} from "../server/lib/disruption/phase6LaterT24EvidenceBatchReadOnly_v39";
+import {deriveP6ConditionalT24Scope,verifyP6T24PrivateRegistry,p6T24RegistryReviewPreimage} from "../server/lib/disruption/phase6PrivateT24RegistryTransport_v39.mjs";
+import {projectP6T24QueuePackets} from "../server/lib/disruption/phase6PrivateT24QueueRouting_v39.mjs";
+import {resolveP7ConditionalPublicationPage} from "../server/lib/disruption/phase7IndependentPreProofPublication_v39.mjs";
+import type {Phase7CanonicalFieldDisposition} from "../server/lib/disruption/phase7CanonicalFieldParity_v39";
+import {verifyP5SignedLaterPreDayRegistry,type P5SignedLaterPreDayRegistry,type P5SignedLaterPreDayRegistryPins} from "../server/lib/disruption/phase5SignedLaterPreDayRegistry_v39";
+import type {P5SignedSourceBatchRegistry} from "../server/lib/disruption/phase5SignedPerDaySourceBatchReadonly_v39";
 import {createHash} from "node:crypto";
 import {describe,it,expect} from "vitest";
 import {addCanonicalFidsEnvelopeHashV39} from "../server/lib/disruption/fidsEnvelopeCanonical_v39";
 import {readP7ExactConditionalSelectedFeaturesPage,readP7ReviewedTierSelectedFeaturesPage,requireP7ActualSourceReadback} from "../server/lib/disruption/phase7IndependentPreSourceReader_v39";
-import {digestP5ConditionalPermitEvidence,prepareP5ConditionalPrePermitForIndependentSigning,prepareP5ConditionalPrePermitPageForIndependentSigning,buildP5ConditionalPrePacketPreview,attachP5ConditionalPreFieldProof} from "../server/lib/disruption/phase5ConditionalPrePermitPreparation_v39";
+import {digestP5ConditionalPermitEvidence,prepareP5ConditionalPrePermitForIndependentSigning,prepareP5ConditionalPrePermitPageForIndependentSigning,buildP5ConditionalPrePacketPreview,buildP5ConditionalPreProofPage,completeP5ConditionalPreProofPage,attachP5ConditionalPreFieldProof,prepareP5ConditionalPrePermitPageFromSignedReviews,p5ConditionalReviewPagePreimage,issueP5ConditionalT24SignedReviewPage,issueP5ConditionalLaterSignedReviewPage,type P5ConditionalReviewPage} from "../server/lib/disruption/phase5ConditionalPrePermitPreparation_v39";
 import {generateKeyPairSync,sign} from "node:crypto";
 import {hashPhase7DurableCandidate} from "../server/lib/disruption/phase7DurableDerivedBundleCandidate_v39";
+import {digestP5LaterShardPrivatePacketFileManifest,signedP5ExternalLaterReviewBytes,verifyP5ExternalEd25519ReviewOfLaterShard,type P5Ed25519ExternalLaterShardReview,type P5Ed25519ReviewWireEnvelope} from "../server/lib/disruption/phase5ExternalEd25519LaterShardReviewerVerify_v39";
+import {proposeP5ConditionalLaterPacketsAsUnsignedDayShard} from "../server/lib/disruption/phase5ReviewedLaterPacketToUnsignedDayRegistryProposal_v39";
 import {verifyP5ConditionalQueuePacket} from "../server/lib/disruption/phase5ConditionalPreQueuePacket_v39";
 import {verifyP5CdFrozenRoster,type P5CdFrozenRoster} from "../server/lib/disruption/phase5CdGithubBoundedPreTick_v39";
 import {readP5CdConditionalPreScope} from "../server/lib/disruption/phase5CdGithubPreReleaseGate_v39";
@@ -165,6 +177,143 @@ describe("source-bound conditional service preparation",()=>{
    expectedOperatorFlightNumber:"SQ78",expectedDestinationIcao:"YSSY",reviewedSupplementalFeatureBundle:draft.compiled.bundle
   } as P5Stage14SingleFlightPrePermit;
   const proofScope={...input,externalContentUseReviewSha256:h("8")};
+  // T053: conditional later uses the same actual PRE/witness lookup and
+  // independent private custody read, without manufacturing a native dossier.
+  const witnessPolicy={independentT24CustodyTrustApproved:true as const,runDayIndex:2,reviewedCodeSha:"a".repeat(40),
+   manifestSha256:scope.source.manifestSha256,rightsSha256:scope.source.rightsReviewSha256,releaseSha256:scope.source.reviewedReleaseSha256,
+   policySha256:h("7"),reviewerFingerprintSha256:h("6"),reviewerPublicKeyPem:"synthetic unused on absent receipt",
+   expectedFrameSha256:h("4"),expectedConfigSha256:h("5"),expectedSelectedTVersion:"departure.scheduledTime.utc:v1:"+h("e"),
+   maximumRetentionHours:24,policyValidFromUtc:t("00:00"),policyValidUntilUtc:t("23:00")};
+  const custody={trust:witnessPolicy,scope:{privateT24CustodyApproved:true as const,existingPaidDispatchApproved:false as const,adbAutoCollect:"0" as const,phase6ProcessArmed:"0" as const,expectedSessionLogin:"phase6_private_reader_login_ci_later"},
+   readerClient:{query:async(sql:string)=>{
+    if(sql.includes("clock_timestamp()"))return {rowCount:1,rows:[{db:"neondb",actor:"phase6_private_frozen_reader_v39",login:"phase6_private_reader_login_ci_later",ro:"on",replica:false,version:160010,db_now:t("05:04"),index_select:true,index_insert:false,index_update:false,index_delete:false,packet_select:true,packet_insert:false,packet_update:false,packet_delete:false,login_enabled:true,login_superuser:false,login_createrole:false,login_bypassrls:false,group_login:false,group_superuser:false,group_bypassrls:false}]};
+    return {rowCount:0,rows:[]};
+   }}};
+  const preRead=(partial=false)=>({connect:async()=>({release(){},query:async(sql:string)=>{
+   if(sql.includes("current_database()"))return {rowCount:1,rows:[{db:"neondb",actor:"phase5_fids_pre_writer_prod_20261107",login:"phase5_p30_pre_login_20261107",ro:"on",replica:false,version:160010,now:t("05:04")}]};
+   if(sql.includes("SELECT flight_instance_id,id::text")&&partial)return {rowCount:1,rows:[{flight_instance_id:id,snapshot_id:"1"}]};
+   return {rowCount:0,rows:[]};
+  }})}) as any;
+  const laterScope={independentConditionalLaterEvidenceReadApproved:true as const,existingPaidDispatchApproved:false as const,
+   expectedReviewedCodeSha:"a".repeat(40),expectedProtocolSha256:scope.protocolSha256,expectedContentUseReviewSha256:h("8"),
+   expectedFrameSha256:h("4"),expectedConfigSha256:h("5"),expectedSelectedTVersion:witnessPolicy.expectedSelectedTVersion};
+  // Exact scope rejection must occur before any custody or PRE read.
+  await expect(readP6ConditionalLaterT24EvidencePage(actual.pool,preRead(),proofScope,[id,id],laterScope,custody)).rejects.toThrow(/CONDITIONAL_EXACT_SCOPE/);
+  await expect(readP6ConditionalLaterT24EvidencePage(actual.pool,preRead(),proofScope,[id],{...laterScope,expectedProtocolSha256:h("9")},custody)).rejects.toThrow(/CONDITIONAL_EXACT_SCOPE/);
+  const absent=await readP6ConditionalLaterT24EvidencePage(actual.pool,preRead(),proofScope,[id],laterScope,custody);
+  expect(absent.privateDecisions[0].status).toBe("T24_ABSENT_AFTER_CUTOFF_SEPARATE_MISSINGNESS_REVIEW_REQUIRED");
+  expect(absent.standaloneLaterAuthorized).toBe(false);
+  expect(absent.privateCustodyAbsentCount).toBe(1);
+  expect(JSON.stringify(absent)).not.toContain(id);
+  const partial=await readP6ConditionalLaterT24EvidencePage(actual.pool,preRead(true),proofScope,[id],laterScope,custody);
+  expect(partial.privateDecisions[0].status).toBe("T24_PARTIAL_OR_AMBIGUOUS_NO_REPLAY");
+  expect(partial.standaloneLaterAuthorized).toBe(false);
+
+  // T061: actual restricted source/custody/PRE reads drive independent
+  // later review. Explicit separate delegation; absent is not partial.
+  const laterKeys=generateKeyPairSync("ed25519"),laterHash=(x:string|Buffer)=>createHash("sha256").update(x).digest("hex");
+  const laterFp=laterHash(laterKeys.publicKey.export({format:"der",type:"spki"})),laterCode="a".repeat(40);
+  const conditionalScope={protocolSha256:scope.protocolSha256,externalContentUseReviewSha256:h("8")};
+  const custodyKeys=generateKeyPairSync("ed25519"),custodyPem=custodyKeys.publicKey.export({format:"pem",type:"spki"}).toString();
+  const protectedCustody={independentT24CustodyTrustApproved:true as const,policySha256:witnessPolicy.policySha256,
+   reviewerFingerprintSha256:laterHash(custodyKeys.publicKey.export({format:"der",type:"spki"})),reviewerPublicKeyPem:custodyPem,
+   maximumRetentionHours:witnessPolicy.maximumRetentionHours,policyValidFromUtc:witnessPolicy.policyValidFromUtc,policyValidUntilUtc:witnessPolicy.policyValidUntilUtc};
+  const exactCustody={...custody,trust:{...custody.trust,...protectedCustody}};
+  const laterPolicy={schema:"v39.phase6.delegated-daily-source-review-policy.v1",delegatedDailyPacketProductionApproved:true,approvedCodeSha:laterCode,
+   manifestSha256:scope.source.manifestSha256,rightsSha256:scope.source.rightsReviewSha256,releaseSha256:scope.source.reviewedReleaseSha256,
+   providerContractSha256:scope.source.providerContractSha256,frameSha256:h("4"),configSha256:h("5"),
+   conditionalPreFeatureReview:{schema:"v39.phase5.conditional-pre-feature-review-policy.v1",approved:true,rightsSha256:scope.source.rightsReviewSha256,...conditionalScope},
+   conditionalLaterPermitReview:{schema:"v39.phase5.conditional-later-permit-review-delegation.v1",approved:true,...conditionalScope,reviewerFingerprintSha256:laterFp,
+    reportedScheduleSemanticsSha256:h("7"),validFromUtc:t("04:00"),validUntilUtc:t("23:00"),standaloneNoT24ProtocolSha256:h("b")},
+   nativeLaterReview:{approved:true,t24Custody:protectedCustody,frameSha256:h("4"),configSha256:h("5"),builderSha256:h("9"),builderFrozenAtUtc:t("04:00"),
+    runAndRetentionEvidenceSha256:h("8"),laterReviewerFingerprintSha256:h("c"),validFromUtc:t("00:00"),validUntilUtc:t("23:00"),
+    selectedTConfig:{milestone:"departure.scheduledTime.utc",version:"v1",artifactHash:h("e"),verifiedProviderNativeSchedule:true,semanticsEvidenceSha256:h("7")},
+    conditionalLaterDayAppendPolicy:{schema:"v39.phase6.delegated-later-day-append-review-policy.v1",delegatedAutomatedLaterDayAppendApproved:true,approvedCodeSha:laterCode,
+     manifestSha256:scope.source.manifestSha256,rightsSha256:scope.source.rightsReviewSha256,releaseSha256:scope.source.reviewedReleaseSha256,
+     laterReviewerFingerprintSha256:h("c"),dayReviewerFingerprintSha256:h("d"),queryReviewerFingerprintSha256:h("f"),validFromUtc:t("00:00"),validUntilUtc:t("23:00"),
+     conditionalLaterPreScope:{...conditionalScope,independentlyApprovedStandaloneProtocolSha256:h("b")}}}};
+  const issueLater=(policy:unknown,partial=false,actualCustody=exactCustody,sourcePool=actual.pool,metadataPool=preRead(partial),metadataEnabled=false)=>{
+   const bytes=Buffer.from(JSON.stringify(policy)),sha=laterHash(bytes);
+   return issueP5ConditionalLaterSignedReviewPage(sourcePool,metadataPool,proofScope,[id],actualCustody,{policyBytes:bytes,expectedPolicySha256:sha,
+    expectedReviewedCodeSha:laterCode,expectedReviewerFingerprintSha256:laterFp,forbiddenSignerFingerprints:[h("c"),h("d"),h("f")],signer:laterKeys.privateKey,
+    env:{P6_PHASE7_PRE_LANE_EVIDENCE_AUTHORITY_APPROVED:"1",P6_PHASE7_PRE_LANE_EVIDENCE_AUTHORITY_FINGERPRINT_SHA256:laterFp,P6_NONPAID_DAILY_POLICY_SHA256:sha,
+     V39_P5_MANIFEST_SHA256:scope.source.manifestSha256,V39_P5_RIGHTS_SHA256:scope.source.rightsReviewSha256,
+     P6_PHASE7_PRIVATE_REVIEW_READER_LOGIN:custody.scope.expectedSessionLogin,...(metadataEnabled?{P6_CONDITIONAL_LATER_METADATA_READ_ENABLED:"1"}:{})}});
+  };
+  const issued=await issueLater(laterPolicy);
+  expect(issued).toMatchObject({reviewedCount:1,heldCount:0,providerCalls:0,databaseWrites:0});
+  expect(JSON.stringify(issued)).not.toContain(id);
+  const verified=await prepareP5ConditionalPrePermitPageFromSignedReviews(actual.pool,proofScope,[id],issued.privateWire!,{
+   expectedReviewerFingerprintSha256:laterFp,reviewerPublicKeyPem:laterKeys.publicKey.export({format:"pem",type:"spki"}).toString(),
+   expectedReviewedCodeSha:laterCode,forbiddenSignerFingerprints:[h("c")],independentlyApprovedStandaloneProtocolSha256:h("b")});
+  expect(verified.privatePrepared[0].privatePermit.reviewedStandaloneLaterNoT24?.missingT24Class).toBe("HONEST_T24_UNOBSERVED_NOT_BACKFILLED");
+  expect((await issueLater(laterPolicy,true)).privateWire).toBeNull();
+  const witnessedOnly={...laterPolicy,conditionalLaterPermitReview:{...laterPolicy.conditionalLaterPermitReview,standaloneNoT24ProtocolSha256:null},
+   nativeLaterReview:{...laterPolicy.nativeLaterReview,conditionalLaterDayAppendPolicy:{...laterPolicy.nativeLaterReview.conditionalLaterDayAppendPolicy,conditionalLaterPreScope:conditionalScope}}};
+  expect((await issueLater(witnessedOnly)).privateWire).toBeNull();
+  // T072: witnessed-only policy; synthetic signed custody and matching
+  // narrow metadata read, not a production observation or standalone GO.
+  const witnessNative=t("12:00"),witnessCutoff=Date.parse(witnessNative)-86400000,
+   before=(ms:number)=>new Date(witnessCutoff-ms).toISOString();
+  const fields={schema:"v39.phase5.stage24.externally-reviewed-stage17-receipt.v1" as const,snapshotId:"17",
+   flightInstanceId:id,selectedTNativeUtc:witnessNative,frozenT24CutoffUtc:before(0),
+   expectedSelectedTVersion:witnessPolicy.expectedSelectedTVersion,t24OriginalFidsSha256:h("1"),t24SourceQueryDigestSha256:h("2"),
+   t24FrameSha256:h("4"),t24ConfigSha256:h("5"),witnessDbObservedAtUtc:before(20000),stage17PostCommitReadbackAtUtc:before(10000)};
+  const witnessReceipt={...fields,receiptSha256:digestP5Stage24ReviewedReceipt(fields)};
+  const packetBytes=Buffer.from(JSON.stringify({schema:"v39.phase6.private-t24-witness-candidate.v1",runDayIndex:2,
+   manifestSha256:scope.source.manifestSha256,candidate:{schema:"v39.phase5.unsigned-t24-stage24-handoff.v1",
+    status:"DURABLE_T24_RECEIPT_CANDIDATE_AWAITING_INDEPENDENT_REVIEW",receipt:witnessReceipt,
+    reviewedByIndependentAuthority:false,mayLaunchLaterPreAutomatically:false,providerCalls:0}}));
+  const custodyReview={schema:P6_T24_CUSTODY_SCHEMA,audience:"HKcode22/ReplitTranvr:PHASE6_T24_WITNESS_CUSTODY_ONLY",
+   logicalPath:p6T24WitnessCustodyPath({...exactCustody.trust,flightInstanceId:id}),runDayIndex:2,
+   packetSha256:laterHash(packetBytes),receiptSha256:witnessReceipt.receiptSha256,reviewedCodeSha:laterCode,
+   manifestSha256:scope.source.manifestSha256,rightsSha256:scope.source.rightsReviewSha256,releaseSha256:scope.source.reviewedReleaseSha256,
+   policySha256:protectedCustody.policySha256,reviewedAtUtc:t("04:00"),validUntilUtc:t("08:00"),retentionNotAfterUtc:t("08:00"),
+   reviewerPublicKeyFingerprintSha256:protectedCustody.reviewerFingerprintSha256};
+  const custodyWire={review:custodyReview,signatureBase64:sign(null,p6T24WitnessCustodyPreimage(custodyReview),custodyKeys.privateKey).toString("base64")};
+  const wireBytes=Buffer.from(JSON.stringify(custodyWire)),custodyRow={kind:"T24_WITNESS_RECEIPT_CANDIDATE",logical_path:custodyReview.logicalPath,
+   run_day_index:2,shard_index:1,content_sha256:custodyReview.packetSha256,reviewed_code_sha:laterCode,
+   manifest_sha256:custodyReview.manifestSha256,rights_sha256:custodyReview.rightsSha256,external_review_sha256:laterHash(wireBytes),
+   externally_reviewed_at_utc:custodyReview.reviewedAtUtc,retention_not_after_utc:custodyReview.retentionNotAfterUtc,committed_at_utc:t("04:01"),
+   payload_bytes:packetBytes,review_wire_bytes:wireBytes};
+  const signedCustody={...exactCustody,readerClient:{query:async(sql:string)=>{
+   if(sql.includes("logical_path=ANY"))return {rowCount:1,rows:[custodyRow]};
+   return exactCustody.readerClient.query(sql);
+  }}};
+  const narrow=(patch:Record<string,unknown>={},acl=true)=>({connect:async()=>({release(){},query:async(sql:string)=>{
+   if(sql.includes("current_database()"))return {rowCount:1,rows:[{db:"neondb",actor:"phase6_private_frozen_reader_v39",login:custody.scope.expectedSessionLogin,
+    ro:"on",replica:false,version:160010,now:t("05:04"),snap_read:acl,witness_read:acl,snap_write:false,witness_write:false,base_access:false,
+    login_enabled:true,login_super:false,login_admin:false,login_bypass:false,group_login:false,group_super:false,group_bypass:false}]};
+   if(sql.includes("SELECT flight_instance_id"))return {rowCount:1,rows:[{flight_instance_id:id,snapshot_id:"17"}]};
+   if(sql.includes("SELECT")&&sql.includes("witness"))return {rowCount:1,rows:[{snapshot_id:"17",joined_snapshot_id:"17",flight_instance_id:id,
+    selected_t_version:witnessReceipt.expectedSelectedTVersion,fids_response_hash:witnessReceipt.t24OriginalFidsSha256,source_query_digest:witnessReceipt.t24SourceQueryDigestSha256,
+    frame_hash:witnessReceipt.t24FrameSha256,config_hash:witnessReceipt.t24ConfigSha256,source_t24_population_query_id:scope.expectedPopulationQueryId,
+    snapshot_prediction_state:"PRE_DEPARTURE",snapshot_horizon:"T-24h",selected_t_native_utc:witnessNative,t24_cutoff_utc:witnessReceipt.frozenT24CutoffUtc,
+    post_pre_commit_db_observed_at_utc:witnessReceipt.witnessDbObservedAtUtc,...patch}]};
+   return {rowCount:0,rows:[]};
+  }})}) as any;
+  const witnessed=await issueLater(witnessedOnly,false,signedCustody,actual.pool,narrow(),true);
+  expect(witnessed).toMatchObject({reviewedCount:1,heldCount:0,providerCalls:0,databaseWrites:0});
+  const verifiedWitness=await prepareP5ConditionalPrePermitPageFromSignedReviews(actual.pool,proofScope,[id],witnessed.privateWire!,{
+   expectedReviewerFingerprintSha256:laterFp,reviewerPublicKeyPem:laterKeys.publicKey.export({format:"pem",type:"spki"}).toString(),expectedReviewedCodeSha:laterCode,forbiddenSignerFingerprints:[h("c")]});
+  expect(verifiedWitness.privatePrepared[0].privatePermit.reviewedT24WitnessReceipt).toEqual(witnessReceipt);
+  expect(verifiedWitness.privatePrepared[0].privatePermit.reviewedStandaloneLaterNoT24).toBeUndefined();
+  expect((await issueLater(witnessedOnly,false,signedCustody,actual.pool,narrow({fids_response_hash:h("0")}),true)).privateWire).toBeNull();
+  await expect(issueLater(witnessedOnly,false,signedCustody,actual.pool,narrow({},false),true)).rejects.toThrow(/CONDITIONAL_METADATA_ROLE_OR_ACL/);
+
+  await expect(issueLater({...laterPolicy,conditionalLaterPermitReview:undefined})).rejects.toThrow(/EXACT_CONDITIONAL_LATER_DELEGATION_REQUIRED/);
+  await expect(issueLater({...laterPolicy,conditionalLaterPermitReview:{...laterPolicy.conditionalLaterPermitReview,standaloneNoT24ProtocolSha256:h("a")}})).rejects.toThrow(/EXACT_CONDITIONAL_LATER_DELEGATION_REQUIRED/);
+  // T062 rejects trust substitution before SOURCE, custody or PRE SQL.
+  const noRead=make(scope.protocolSha256,expectedDecodedBodySha256,marked,[m]);
+  for(const patch of [{policySha256:h("0")},{reviewerFingerprintSha256:h("0")},{maximumRetentionHours:168},{policyValidUntilUtc:t("22:00")}])
+   await expect(issueLater(laterPolicy,false,{...exactCustody,trust:{...exactCustody.trust,...patch}},noRead.pool)).rejects.toThrow(/CUSTODY_POLICY_DRIFT/);
+  await expect(issueLater(laterPolicy,false,{...exactCustody,scope:{...exactCustody.scope,expectedSessionLogin:"phase6_private_reader_login_wrong_role"}},noRead.pool)).rejects.toThrow(/CUSTODY_POLICY_DRIFT/);
+  const wrongKey={...protectedCustody,reviewerPublicKeyPem:laterKeys.publicKey.export({format:"pem",type:"spki"}).toString()};
+  await expect(issueLater({...laterPolicy,nativeLaterReview:{...laterPolicy.nativeLaterReview,t24Custody:wrongKey}},false,
+   {...exactCustody,trust:{...exactCustody.trust,...wrongKey}},noRead.pool)).rejects.toThrow(/CUSTODY_KEY_DRIFT/);
+  expect(noRead.queries).toHaveLength(0);
+  // These are synthetic restricted-role/SQL fixtures, not live evidence.
+
   // T029: actual restricted source reread + separate reviewed bytes construct
   // the existing Stage14 permit, not an invented native identity or T24.
   const review={schema:"v39.phase5.external-conditional-pre-permit-review.v1",reviewedCodeSha:"a".repeat(40),
@@ -189,6 +338,32 @@ describe("source-bound conditional service preparation",()=>{
   expect(page).toMatchObject({preparedCount:1,originalBodyReadCount:1,signedPrePacketsIssued:0,providerCalls:0,databaseWrites:0});
   expect(page.privatePrepared[0].privatePermit).toEqual(built.privatePermit);
   expect(pageDb.queries.filter(x=>x.includes("SELECT r.raw_payload"))).toHaveLength(1);
+  // T045: a protected independent reviewer signs exact dynamic artifact pins,
+  // not a publisher-selected digest. Authenticate before touching SQL.
+  const permitReviewer=generateKeyPairSync("ed25519");
+  const permitAuthority={expectedReviewerFingerprintSha256:createHash("sha256").update(permitReviewer.publicKey.export({format:"der",type:"spki"})).digest("hex"),
+   reviewerPublicKeyPem:permitReviewer.publicKey.export({type:"spki",format:"pem"}).toString(),expectedReviewedCodeSha:review.reviewedCodeSha,
+   forbiddenSignerFingerprints:[h("f")],independentlyApprovedStandaloneProtocolSha256:h("b")};
+  const reviewPage:P5ConditionalReviewPage={schema:"v39.phase5.conditional-pre-external-review-page.v1",reviewedCodeSha:review.reviewedCodeSha,
+   manifestSha256:proofScope.source.manifestSha256,rightsSha256:proofScope.source.rightsReviewSha256,protocolSha256:proofScope.protocolSha256,
+   externalContentUseReviewSha256:proofScope.externalContentUseReviewSha256,queryDigestSha256:proofScope.source.queryDigestSha256,
+   populationQueryId:proofScope.expectedPopulationQueryId,responseSha256:proofScope.expectedResponseSha256,runDayIndex:proofScope.source.runDayIndex,
+   horizon:proofScope.source.horizon,sourceGithubRunId:proofScope.source.expectedSourceGithubRunId,
+   reviews:[{flightInstanceId:id,reviewArtifactBase64:pageInput.reviewBytes.toString("base64"),reviewArtifactSha256:pageInput.pins.expectedReviewArtifactSha256,separatelyApprovedStandaloneProtocolSha256:h("b")}]};
+  const reviewWire=(x=reviewPage)=>({page:x,signatureBase64:sign(null,p5ConditionalReviewPagePreimage(x),permitReviewer.privateKey).toString("base64")});
+  const wireDb=make(scope.protocolSha256,expectedDecodedBodySha256,marked,[m]);
+  const signedPage=await prepareP5ConditionalPrePermitPageFromSignedReviews(wireDb.pool,proofScope,[id],reviewWire(),permitAuthority);
+  expect(signedPage.privatePrepared[0].privatePermit).toEqual(built.privatePermit);
+  expect(wireDb.queries.filter(x=>x.includes("SELECT r.raw_payload"))).toHaveLength(1);
+  const rejectDb=make(scope.protocolSha256,expectedDecodedBodySha256,marked,[m]);
+  const tryReview=(w=reviewWire(),a=permitAuthority,ids=[id])=>prepareP5ConditionalPrePermitPageFromSignedReviews(rejectDb.pool,proofScope,ids,w,a);
+  await expect(tryReview({...reviewWire(),signatureBase64:Buffer.alloc(64).toString("base64")})).rejects.toThrow("SIGNED_REVIEW_PAGE_SIGNATURE");
+  await expect(tryReview(reviewWire({...reviewPage,queryDigestSha256:h("0")}))).rejects.toThrow("EXACT_SIGNED_REVIEW_PAGE_SCOPE");
+  await expect(tryReview(reviewWire({...reviewPage,reviews:[{...reviewPage.reviews[0],reviewArtifactSha256:h("0")}]}))).rejects.toThrow("EXACT_SIGNED_REVIEW_ARTIFACT_BYTES");
+  await expect(tryReview(reviewWire(),{...permitAuthority,independentlyApprovedStandaloneProtocolSha256:h("0")})).rejects.toThrow("EXACT_SIGNED_REVIEW_ARTIFACT_SET");
+  await expect(tryReview(reviewWire(),{...permitAuthority,forbiddenSignerFingerprints:[permitAuthority.expectedReviewerFingerprintSha256]})).rejects.toThrow("EXACT_SIGNED_REVIEW_PAGE_SCOPE");
+  await expect(tryReview(reviewWire(),permitAuthority,[id,id])).rejects.toThrow("EXACT_SIGNED_REVIEW_PAGE_SCOPE");
+  expect(rejectDb.queries).toHaveLength(0);
   expect(JSON.stringify(page)).not.toMatch(/SQ78|privatePrepared|SIA/);
   const badPage=make(scope.protocolSha256,expectedDecodedBodySha256,marked,[m]);
   await expect(prepareP5ConditionalPrePermitPageForIndependentSigning(badPage.pool,proofScope,[pageInput,pageInput])).rejects.toThrow("EXACT_PAGE_SCOPE");
@@ -207,7 +382,57 @@ describe("source-bound conditional service preparation",()=>{
    P6_PHASE7_PRE_PRESERVATION_POLICY_SHA256:policySha,P6_PHASE7_PRE_PROOF_REVIEWER_FINGERPRINT_SHA256:hd(keys.publicKey.export({type:"spki",format:"der"})),P6_PHASE7_PRE_PROOF_REVIEWER_PUBLIC_KEY_BASE64:Buffer.from(keys.publicKey.export({type:"spki",format:"pem"})).toString("base64")};
   const meta=Buffer.from(JSON.stringify({schema:"v39.phase7.separate-pre-field-proof.v1",manifestSha256:p.manifestSha256,rightsSha256:p.expectedReviewedSourceRightsSha256,policySha256:policySha,permitSha256:hashPhase7DurableCandidate(preview.packet.prePermit),issuedAtUtc:t("05:04"),validUntilUtc:t("06:00"),fields:[]}));
   const wire={payloadBase64:meta.toString("base64"),signatureBase64:sign(null,meta,keys.privateKey).toString("base64")};
-  const packet=attachP5ConditionalPreFieldProof(preview,env,policySha,[],wire);
+  // T041: same actual independently prepared member enters the shared
+  // bounded proof interface; never expose the private packet in JSON.
+  const proofPage=buildP5ConditionalPreProofPage(page.privatePrepared);
+  expect(proofPage).toMatchObject({phase7ProofPreviewOnly:true,signatureIssued:false,packetCount:1,providerCalls:0,databaseWrites:0,phase6PaidGo:false});
+  expect(proofPage.privateCompletedPackets[0].completed.packet.prePermit).toEqual(built.privatePermit);
+  expect(Object.getOwnPropertyDescriptor(proofPage,"privateCompletedPackets")?.enumerable).toBe(false);
+  expect(JSON.stringify(proofPage)).not.toMatch(/SQ78|privateCompletedPackets|SIA/);
+  expect(()=>buildP5ConditionalPreProofPage([])).toThrow("EXACT_PROOF_PAGE_SCOPE");
+  expect(()=>buildP5ConditionalPreProofPage([built,built])).toThrow("EXACT_PROOF_PAGE_SCOPE");
+  expect(()=>buildP5ConditionalPreProofPage(Array(97).fill(built))).toThrow("EXACT_PROOF_PAGE_SCOPE");
+  expect(()=>buildP5ConditionalPreProofPage([{...built}])).toThrow("ACTUAL_PREPARED_PERMIT_REQUIRED");
+  const proofKey=hashPhase7DurableCandidate(preview.packet.prePermit),proofs=new Map([[proofKey,wire]]);
+  const attachedPage=completeP5ConditionalPreProofPage(proofPage,env,policySha,[],proofs);
+  expect(attachedPage).toMatchObject({packetCount:1,signatureIssued:false,databaseWrites:0});
+  expect(JSON.stringify(attachedPage)).not.toMatch(/SQ78|privateAttachedPackets|payloadBase64/);
+  expect(()=>completeP5ConditionalPreProofPage(proofPage,env,policySha,[],new Map())).toThrow("EXACT_CONDITIONAL_PROOF_SET");
+  expect(()=>completeP5ConditionalPreProofPage(proofPage,env,policySha,[],new Map([...proofs,["extra",wire]]))).toThrow("EXACT_CONDITIONAL_PROOF_SET");
+  expect(()=>completeP5ConditionalPreProofPage({...proofPage},env,policySha,[],proofs)).toThrow("ACTUAL_CONDITIONAL_PROOF_PAGE_REQUIRED");
+  // T046: actual shared policy/proof resolver. The empty-disposition
+  // policy is a synthetic wire/clock fixture, not production field approval.
+  const contract={sourceToReleaseMappingExpiryHours:24,researchExpiryUtc:"2036-01-01T00:00:00.000Z"},profile={mappingExpiryHours:24},dispositions:Phase7CanonicalFieldDisposition[]=[];
+  const staticReview={schema:"v39.phase7.prospective-pre-preservation-review.v1",manifestSha256:p.manifestSha256,
+   rightsSha256:p.expectedReviewedSourceRightsSha256,contractSha256:hashPhase7DurableCandidate(contract),profileSha256:hashPhase7DurableCandidate(profile),
+   dispositionsSha256:hashPhase7DurableCandidate(dispositions),mappingHours:24,researchExpiryUtc:contract.researchExpiryUtc,
+   approvedForPreDurableStorage:true,boundedSameLegLinkApproved:true};
+  const staticSha=hashPhase7DurableCandidate(staticReview);
+  const protectedEnv={...env,V39_P5_MANIFEST_SHA256:p.manifestSha256,V39_P5_RIGHTS_SHA256:p.expectedReviewedSourceRightsSha256,
+   P6_PHASE7_PRE_PRESERVATION_POLICY_SHA256:staticSha,
+   P6_PHASE7_PRE_POLICY_BASE64:Buffer.from(JSON.stringify({contract,profile,dispositions,review:staticReview,reviewSha256:staticSha})).toString("base64")};
+  const sharedWire=(permit:P5Stage14SingleFlightPrePermit)=>{
+   const raw=Buffer.from(JSON.stringify({...JSON.parse(meta.toString("utf8")),policySha256:staticSha,permitSha256:hashPhase7DurableCandidate(permit)}));
+   return {payloadBase64:raw.toString("base64"),signatureBase64:sign(null,raw,keys.privateKey).toString("base64")};
+  };
+  let portCalls=0;
+  const sharedPort={readExactPermitProofs:async(permits:readonly P5Stage14SingleFlightPrePermit[])=>{
+   portCalls++;return new Map(permits.map(x=>[hashPhase7DurableCandidate(x),sharedWire(x)]));
+  }};
+  const sharedDb=make(scope.protocolSha256,expectedDecodedBodySha256,marked,[m]);
+  const sharedArgs={pool:sharedDb.pool,scope:proofScope,requestedFlightIds:[id],reviewWire:reviewWire(),reviewAuthority:permitAuthority,
+   env:protectedEnv,port:sharedPort,readClock:async()=>t("05:05"),forbiddenSignerFingerprints:[h("e")]};
+  const shared=await resolveP7ConditionalPublicationPage(sharedArgs);
+  expect(shared.privateAttachedPackets[0].packet.prePermit).toEqual(built.privatePermit);
+  expect(shared.packetCount).toBe(1);expect(portCalls).toBe(1);
+  expect(JSON.stringify(shared)).not.toMatch(/SQ78|privateAttachedPackets|payloadBase64/);
+  await expect(resolveP7ConditionalPublicationPage({...sharedArgs,readClock:async()=>t("05:45")})).rejects.toThrow("STALE_OR_LATE_PROOF");
+  await expect(resolveP7ConditionalPublicationPage({...sharedArgs,port:{readExactPermitProofs:async()=>new Map()}})).rejects.toThrow("EXACT_PROOF_SET_MISSING");
+  const aliasDb=make(scope.protocolSha256,expectedDecodedBodySha256,marked,[m]);
+  await expect(resolveP7ConditionalPublicationPage({...sharedArgs,pool:aliasDb.pool,
+   forbiddenSignerFingerprints:[permitAuthority.expectedReviewerFingerprintSha256]})).rejects.toThrow("CONDITIONAL_PROTECTED_SCOPE_OR_SIGNER_ALIAS");
+  expect(aliasDb.queries).toHaveLength(0);
+  const packet=attachedPage.privateAttachedPackets[0];
   expect(packet.packetSha256).toBe(hd(packet.packetBytes));
   expect(JSON.stringify(packet)).not.toMatch(/SQ78|payloadBase64|privatePermit/);
   const release={schema:"v39.phase5.cd-gh-pre-explicit-release.v1" as const,releaseMode:"PHASE6_APPROVED" as const,approvedCodeSha:review.reviewedCodeSha,
@@ -216,6 +441,156 @@ describe("source-bound conditional service preparation",()=>{
   const path="data-collection/phase5/frozen/conditional_ci_packet.json",roster:P5CdFrozenRoster={schema:"v39.phase5.cd-existing-signed-pre-packet-roster.v1",reviewedCodeSha:release.approvedCodeSha,manifestSha256:release.manifestSha256,rightsSha256:release.rightsSha256,entries:[{filePath:path,packetSha256:packet.packetSha256}]};
   const rosterBytes=Buffer.from(JSON.stringify(roster)),gate={...release,rosterSha256:hd(rosterBytes)},files=[{filePath:path,packetSha256:packet.packetSha256,bytes:packet.packetBytes}];
   expect(verifyP5CdFrozenRoster(rosterBytes,roster,files,gate).get(packet.packetSha256)?.permit).toEqual(built.privatePermit);
+  // T039: actual same fixture independent proof and packet through existing
+  // signed later-day registry. No extra writer or approval inferred.
+  const src:P5SignedSourceBatchRegistry={schema:"v39.phase5.signed-per-day-source-batch-readonly.v1",manifestSha256:gate.manifestSha256,runDayIndex:p.runDayIndex,entries:[{filePath:"data-collection/phase5/frozen/source_ci_query_packet.json",expectedPacketSha256:h("2"),expectedQueryDigestSha256:p.queryDigestSha256}]};
+  const srcBytes=Buffer.from(JSON.stringify(src)),reg:P5SignedLaterPreDayRegistry={schema:"v39.phase5.signed-later-pre-day-registry.v1",manifestSha256:gate.manifestSha256,reviewedCodeSha:gate.approvedCodeSha,runDayIndex:p.runDayIndex,shardIndex:1,sourceDayRegistrySha256:hd(srcBytes),sourceDayRegistryFilePath:"data-collection/phase5/frozen/source_ci_registry.json",entries:[{filePath:path,expectedPacketSha256:packet.packetSha256,expectedQueryDigestSha256:p.queryDigestSha256,expectedFlightInstanceId:p.flightInstanceId,expectedHorizon:"T-6h",expectedSelectedTNativeUtc:p.selectedTNativeUtc,expectedSourcePopulationQueryId:p.expectedSourcePopulationQueryId}]};
+  const regBytes=Buffer.from(JSON.stringify(reg)),rp:P5SignedLaterPreDayRegistryPins={registryFilePath:"data-collection/phase5/frozen/later_ci_registry.json",expectedRegistrySha256:hd(regBytes),expectedSourceDayRegistrySha256:hd(srcBytes),expectedManifestSha256:gate.manifestSha256,expectedApprovedMainSha:gate.approvedCodeSha,expectedRunDayIndex:p.runDayIndex,expectedReleaseSha256:p.expectedReviewedReleaseSha256,expectedRightsSha256:gate.rightsSha256,conditionalPreScope:gate.conditionalPreScope,independentlyApprovedStandaloneProtocolSha256:gate.independentlyApprovedStandaloneProtocolSha256};
+  // T042: real proof-attached page -> unsigned conditional registry producer
+  // -> exact existing consumer, with no native attestation or signed publish.
+  const proposalScope={expectedExternallyApprovedSourceRegistrySha256:hd(srcBytes),sourceRegistryFilePath:reg.sourceDayRegistryFilePath,
+   proposedLaterRegistryFilePath:rp.registryFilePath,reviewedMainCodeSha:gate.approvedCodeSha,expectedManifestSha256:gate.manifestSha256,
+   expectedReviewedReleaseSha256:p.expectedReviewedReleaseSha256,expectedReviewedSourceRightsSha256:gate.rightsSha256,
+   runDayIndex:p.runDayIndex,shardIndex:1,conditionalPreScope:gate.conditionalPreScope,independentlyApprovedStandaloneProtocolSha256:h("b")};
+  const proposalFile={proposedFilePath:path,expectedExternallyPinnedReviewArtifactSha256:packet.packet.reviewArtifactSha256,completed:packet};
+  const plan=proposeP5ConditionalLaterPacketsAsUnsignedDayShard(srcBytes,src,proposalScope,[proposalFile]);
+  expect(plan).toMatchObject({independentlySignedRegistry:false,flightFilesPublished:0,registeredV0091Tasks:0,providerCalls:0,databaseWrites:0});
+  expect(verifyP5SignedLaterPreDayRegistry(plan.registryProposalBytes,plan.registryProposal,srcBytes,src,{...rp,expectedRegistrySha256:plan.proposedRegistrySha256},()=>packet.packetBytes).entries[0].packet.prePermit).toEqual(built.privatePermit);
+  expect(()=>proposeP5ConditionalLaterPacketsAsUnsignedDayShard(srcBytes,src,proposalScope,[proposalFile,{...proposalFile,proposedFilePath:"data-collection/phase5/frozen/conditional_duplicate.json"}])).toThrow();
+  expect(()=>proposeP5ConditionalLaterPacketsAsUnsignedDayShard(srcBytes,src,{...proposalScope,conditionalPreScope:{...proposalScope.conditionalPreScope,protocolSha256:h("0")}},[proposalFile])).toThrow();
+  expect(()=>proposeP5ConditionalLaterPacketsAsUnsignedDayShard(srcBytes,src,proposalScope,[{...proposalFile,completed:{...packet}}])).toThrow("ACTUAL_PROOF_ATTACHED_PACKET_REQUIRED");
+  expect(()=>proposeP5ConditionalLaterPacketsAsUnsignedDayShard(srcBytes,{...src,runDayIndex:3},proposalScope,[proposalFile])).toThrow("SOURCE_REGISTRY_SCOPE_OR_EXACT_BYTES_CHANGED");
+  // T043: a distinct conditional reviewer scope is signed along with exact
+  // source/registry/packet manifest; native reviewer wires cannot authorize it.
+  const reviewer=generateKeyPairSync("ed25519"),reviewerPem=reviewer.publicKey.export({type:"spki",format:"pem"}).toString(),
+   reviewerFp=hd(reviewer.publicKey.export({type:"spki",format:"der"}));
+  const conditionalPreScope={...proposalScope.conditionalPreScope,independentlyApprovedStandaloneProtocolSha256:h("b")};
+  const reviewerPins={expectedReviewerPublicKeyFingerprintSha256:reviewerFp,expectedApprovedMainCodeSha:gate.approvedCodeSha,
+   expectedReviewedReleaseSha256:p.expectedReviewedReleaseSha256,expectedReviewedRightsSha256:gate.rightsSha256,
+   expectedIndependentReviewerEvidenceDigestSha256:hd("conditional reviewer fixture"),conditionalPreScope};
+  const externalReview:P5Ed25519ExternalLaterShardReview={schema:"v39.phase5.external-ed25519-later-shard-review.v1",
+   audience:"HKcode22/ReplitTranvr:PHASE6_LATER_PRE_REVIEW_ONLY",reviewerPublicKeyFingerprintSha256:reviewerFp,
+   reviewedMainCodeSha:gate.approvedCodeSha,reviewedManifestSha256:gate.manifestSha256,reviewedReleaseSha256:p.expectedReviewedReleaseSha256,
+   reviewedRightsSha256:gate.rightsSha256,sourceDayRegistrySha256:plan.sourceRegistrySha256,sourceDayRegistryFilePath:reg.sourceDayRegistryFilePath,
+   proposedRegistrySha256:plan.proposedRegistrySha256,proposedRegistryFilePath:plan.proposedRegistryFilePath,
+   packetFileManifestSha256:digestP5LaterShardPrivatePacketFileManifest(plan),runDayIndex:p.runDayIndex,shardIndex:1,
+   reviewedAtUtc:t("05:04"),validUntilUtc:t("05:59"),independentReviewerEvidenceDigestSha256:reviewerPins.expectedIndependentReviewerEvidenceDigestSha256,conditionalPreScope};
+  const wireFor=(review:P5Ed25519ExternalLaterShardReview):P5Ed25519ReviewWireEnvelope=>({schema:"v39.phase5.external-ed25519-later-shard-envelope.v1",
+   review,signatureBase64:sign(null,signedP5ExternalLaterReviewBytes(review),reviewer.privateKey).toString("base64")});
+  const signed=wireFor(externalReview),check=(w=signed,pins=reviewerPins,clock=t("05:05"))=>verifyP5ExternalEd25519ReviewOfLaterShard(plan,w,reviewerPem,pins,clock);
+  expect(check()).toMatchObject({signatureCryptographicallyVerified:true,privatePacketOrRegistryFilesPublished:0,phase6PaidGoGranted:false});
+  expect(()=>verifyP5ExternalEd25519ReviewOfLaterShard(plan,signed,reviewerPem,{...reviewerPins,conditionalPreScope:undefined},t("05:05"))).toThrow();
+  expect(()=>check(wireFor({...externalReview,conditionalPreScope:{...conditionalPreScope,protocolSha256:h("0")}}))).toThrow();
+  expect(()=>check(wireFor({...externalReview,conditionalPreScope:undefined}))).toThrow();
+  expect(()=>check(signed,reviewerPins,t("06:00"))).toThrow("REVIEW_SIGNATURE_PREMATURE_EXPIRED_OR_REPLAYED");
+  // T066: actual shared proof resolver output -> delegated conditional
+  // shard signature -> existing external verifier. No live publication.
+  const signingTrust={independentStudyTrustPinsApproved:true,reviewedCodeSha:gate.approvedCodeSha,
+   manifestSha256:gate.manifestSha256,rightsSha256:gate.rightsSha256,releaseSha256:p.expectedReviewedReleaseSha256,
+   calendarSha256:h("a"),dayReviewerFingerprintSha256:h("d"),queryReviewerFingerprintSha256:h("f")};
+  const signingPolicy={...laterPolicy,calendarSha256:signingTrust.calendarSha256,
+   conditionalLaterPermitReview:{...laterPolicy.conditionalLaterPermitReview,reviewerFingerprintSha256:permitAuthority.expectedReviewerFingerprintSha256},
+   nativeLaterReview:{...laterPolicy.nativeLaterReview,privatePublicationApproved:true,maximumPrivateRetentionHours:24,
+    laterReviewerFingerprintSha256:reviewerFp,conditionalLaterDayAppendPolicy:{...laterPolicy.nativeLaterReview.conditionalLaterDayAppendPolicy,
+     calendarSha256:signingTrust.calendarSha256,laterReviewerFingerprintSha256:reviewerFp}}};
+  const signingScope={expectedSourceRegistrySha256:hd(srcBytes),sourceRegistryFilePath:reg.sourceDayRegistryFilePath,
+   expectedSourceReviewEvidenceSha256:h("5"),proposedLaterRegistryFilePath:rp.registryFilePath,shardIndex:1,
+   observedDbClockUtc:t("05:05"),reviewValidUntilUtc:t("07:00"),retentionNotAfterUtc:t("08:00")};
+  const issueRegistry=(policy:unknown=signingPolicy,patch:Record<string,unknown>={},actualPage:unknown=shared)=>{
+   const bytes=Buffer.from(JSON.stringify(policy));
+   return signP6DelegatedConditionalLaterRegistry({page:actualPage,sourceRegistryBytes:srcBytes,sourceRegistry:src,
+    authority:{trust:signingTrust,policyBytes:bytes,expectedPolicySha256:hd(bytes),independentDelegatedNativeReviewApproved:true,
+     noProviderCredentialsInReviewer:true,laterReviewerKey:reviewer.privateKey},scope:{...signingScope,...patch}});
+  };
+  const issuedRegistry=issueRegistry();
+  expect(issuedRegistry).toMatchObject({signatureIssued:true,reviewedCount:1,databaseWrites:0,providerCalls:0});
+  expect(JSON.stringify(issuedRegistry)).not.toContain(id);
+  expect(verifyP5ExternalEd25519ReviewOfLaterShard(issuedRegistry.privatePlan,issuedRegistry.privateWire,
+   issuedRegistry.privateReviewerPublicKeyPem,issuedRegistry.privateReviewerPins,t("05:05"))).toMatchObject({signatureCryptographicallyVerified:true});
+  expect(()=>issueRegistry(signingPolicy,{}, {...shared})).toThrow("ACTUAL_RESOLVED_CONDITIONAL_PAGE_REQUIRED");
+  expect(()=>issueRegistry(signingPolicy,{retentionNotAfterUtc:"2035-11-26T00:00:00.000Z"})).toThrow("CLOCK_OR_RETENTION");
+  expect(()=>issueRegistry(signingPolicy,{observedDbClockUtc:t("05:46")})).toThrow("MEMBER_SCOPE_OR_LEAD");
+  expect(()=>issueRegistry({...signingPolicy,nativeLaterReview:{...signingPolicy.nativeLaterReview,conditionalLaterDayAppendPolicy:{...signingPolicy.nativeLaterReview.conditionalLaterDayAppendPolicy,conditionalLaterPreScope:undefined}}})).toThrow("POLICY_SCOPE");
+  const {conditionalPreScope:_scope,...legacyReview}=externalReview;
+  expect(()=>check({...signed,signatureBase64:wireFor(legacyReview).signatureBase64})).toThrow("EXTERNAL_REVIEW_SIGNATURE_INVALID");
+  // T047 synthetic T24 signed transport/witness metadata, not a real PRE.
+  // Use a separate conditional registry domain and the existing singleton
+  // roster. No standalone later approval is allowed in a T24 packet.
+  const {reviewedStandaloneLaterNoT24:_laterOnly,...t24Base}=built.privatePermit;
+  const t24Permit={...t24Base,horizon:"T-24h" as const,selectedTNativeUtc:"2035-11-26T06:00:00.000Z"};
+  const witnessReview={flightInstanceId:t24Permit.flightInstanceId,sourcePopulationQueryId:t24Permit.expectedSourcePopulationQueryId,
+   expectedSourceResponseSha256:t24Permit.expectedSourceResponseSha256,expectedSourceQueryDigestSha256:t24Permit.queryDigestSha256,
+   expectedFrameSha256:t24Permit.reviewedFrameSha256,expectedConfigSha256:t24Permit.reviewedConfigSha256,selectedTNativeUtc:t24Permit.selectedTNativeUtc,
+   expectedT24CutoffUtc:t("06:00"),expectedSelectedTVersion:t24Permit.selectedTConfig.milestone+":"+t24Permit.selectedTConfig.version+":"+t24Permit.selectedTConfig.artifactHash,
+   expectedWitnessOnlyRole:"phase5_fids_t24_witness_prod_20261107",reviewedConditionalProtocolSha256:scope.protocolSha256};
+  const t24Packet={...packet.packet,schema:"v39.phase5.github-conditional-t24-pre-witness-reviewed.v1",prePermit:t24Permit,
+   witnessReview,phase7FieldProof:sharedWire(t24Permit)};
+  const t24Bytes=Buffer.from(JSON.stringify(t24Packet)),t24Digest=hd(t24Bytes),t24Path="data-collection/phase5/frozen/t24p_"+t24Digest+".json",
+   sourcePath=reg.sourceDayRegistryFilePath,sourceEvidence=h("d");
+  const t24Trust={independentStudyTrustPinsApproved:true,independentNativeT24RegistryApproved:true,reviewedCodeSha:gate.approvedCodeSha,
+   manifestSha256:gate.manifestSha256,calendarSha256:h("a"),rightsSha256:gate.rightsSha256,releaseSha256:p.expectedReviewedReleaseSha256,
+   expectedT24ReviewerFingerprintSha256:reviewerFp,expectedT24PolicySha256:h("e"),expectedFrameSha256:t24Permit.reviewedFrameSha256,
+   expectedConfigSha256:t24Permit.reviewedConfigSha256,maximumPrivateRetentionHours:48,policyValidFromUtc:t("00:00"),policyValidUntilUtc:t("23:00"),
+   expectedSelectedTVersion:witnessReview.expectedSelectedTVersion,dayReviewerFingerprintSha256:h("4"),queryReviewerFingerprintSha256:h("5"),
+   t24ReviewerPublicKeyPem:reviewerPem,conditionalT24Scope:gate.conditionalPreScope};
+  const t24Reg={schema:"v39.phase6.conditional-t24-private-registry.v1",runDayIndex:p.runDayIndex,shardIndex:1,reviewedCodeSha:gate.approvedCodeSha,
+   manifestSha256:gate.manifestSha256,rightsSha256:gate.rightsSha256,releaseSha256:p.expectedReviewedReleaseSha256,
+   sourceRegistryPath:sourcePath,sourceRegistrySha256:hd(srcBytes),sourceReviewEvidenceSha256:sourceEvidence,conditionalT24Scope:gate.conditionalPreScope,sourceExpiresAtUtc:t("23:00"),
+   entries:[{filePath:t24Path,packetSha256:t24Digest,flightInstanceId:p.flightInstanceId,queryDigestSha256:p.queryDigestSha256,
+    selectedTNativeUtc:t24Permit.selectedTNativeUtc,cutoffUtc:t("06:00")}]};
+  const idx={runDayIndex:p.runDayIndex,manifestSha256:gate.manifestSha256,reviewedCodeSha:gate.approvedCodeSha,
+   reviewedRightsSha256:gate.rightsSha256,reviewedReleaseSha256:p.expectedReviewedReleaseSha256,calendarSha256:t24Trust.calendarSha256,
+   entries:[{lane:"SOURCE",filePath:sourcePath,fileSha256:hd(srcBytes),reviewEvidenceSha256:sourceEvidence}]};
+  const idxBytes=Buffer.from(JSON.stringify(idx)),index=Object.defineProperties({redactedSummary:{status:"SIGNED_DAY_EPOCH_FULL_REGISTRY_READONLY_NO_DISPATCH",
+   externalEd25519ReviewerVerified:true,restrictedPrivatePg16ReaderVerified:true,providerCalls:0,databaseWrites:0,phase6PaidGo:false,runDayIndex:p.runDayIndex,indexSha256:hd(idxBytes)}},
+   {privateCurrentIndexBytes:{value:idxBytes},privateParsedIndex:{value:idx},getFrozen:{value:()=>srcBytes}});
+  const t24RegBytes=Buffer.from(JSON.stringify(t24Reg)),t24RegSha=hd(t24RegBytes);
+  const t24Review={schema:"v39.phase6.conditional-t24-registry-ed25519.v1",audience:"HKcode22/ReplitTranvr:PHASE6_T24_CONDITIONAL_PRE_REGISTRY_ONLY",
+   logicalPath:"data-collection/phase5/frozen/t24r_"+t24RegSha+".json",runDayIndex:p.runDayIndex,shardIndex:1,registrySha256:t24RegSha,
+   reviewedCodeSha:gate.approvedCodeSha,manifestSha256:gate.manifestSha256,rightsSha256:gate.rightsSha256,releaseSha256:p.expectedReviewedReleaseSha256,
+   policySha256:t24Trust.expectedT24PolicySha256,reviewedAtUtc:t("05:04"),validUntilUtc:t("07:00"),retentionNotAfterUtc:t("08:00"),
+   reviewerFingerprintSha256:reviewerFp,conditionalT24Scope:gate.conditionalPreScope};
+  const t24Wire={review:t24Review,signatureBase64:sign(null,p6T24RegistryReviewPreimage(t24Review),reviewer.privateKey).toString("base64")};
+  const t24Files=[{filePath:t24Path,packetSha256:t24Digest,bytes:t24Bytes}],t24Args={trust:t24Trust,index,registryBytes:t24RegBytes,wire:t24Wire,observedDbClockUtc:t("05:05"),files:t24Files};
+  expect(verifyP6T24PrivateRegistry(t24Args).reg).toEqual(t24Reg);
+  // T056: even the metadata-only read must reject a freshly signed
+  // wrong-tier identity or schema fields; packet hydration is not needed.
+  const metadata=(registry:Record<string,unknown>,reviewPatch:Record<string,unknown>={})=>{
+   const registryBytes=Buffer.from(JSON.stringify(registry)),registrySha256=hd(registryBytes);
+   const review={...t24Review,...reviewPatch,registrySha256,logicalPath:"data-collection/phase5/frozen/t24r_"+registrySha256+".json"};
+   return verifyP6T24PrivateRegistry({...t24Args,registryBytes,files:undefined,
+    wire:{review,signatureBase64:sign(null,p6T24RegistryReviewPreimage(review),reviewer.privateKey).toString("base64")}});
+  };
+  expect(metadata(t24Reg).reg).toEqual(t24Reg);
+  expect(()=>metadata({...t24Reg,entries:[{...t24Reg.entries[0],flightInstanceId:"leg:p5v1:"+h("7")}]})).toThrow("CROSS_SOURCE_DUPLICATE_OR_UNSAFE_T24_ENTRY");
+  expect(()=>metadata({...t24Reg,unknownField:true})).toThrow("REGISTRY_TIER_FIELDS");
+  expect(()=>metadata({...t24Reg,sourceExpiresAtUtc:t("07:30")})).toThrow("REGISTRY_SIGNATURE_EXPIRED_OR_FUTURE");
+  const {conditionalT24Scope:unusedScope,sourceExpiresAtUtc:unusedExpiry,...nativeFields}=t24Reg;
+  const nativeReview={...t24Review,schema:"v39.phase6.native-t24-registry-ed25519.v1",audience:"HKcode22/ReplitTranvr:PHASE6_T24_NATIVE_PRE_REGISTRY_ONLY"} as Record<string,unknown>;
+  delete nativeReview.conditionalT24Scope;
+  const nativeReg={...nativeFields,schema:"v39.phase6.native-t24-private-registry.v1"};
+  const nativeBytes=Buffer.from(JSON.stringify(nativeReg)),nativeSha=hd(nativeBytes);
+  const nativeWireReview={...nativeReview,registrySha256:nativeSha,logicalPath:"data-collection/phase5/frozen/t24r_"+nativeSha+".json"};
+  expect(()=>verifyP6T24PrivateRegistry({...t24Args,registryBytes:nativeBytes,files:undefined,
+   wire:{review:nativeWireReview,signatureBase64:sign(null,p6T24RegistryReviewPreimage(nativeWireReview),reviewer.privateKey).toString("base64")}})).toThrow("CROSS_SOURCE_DUPLICATE_OR_UNSAFE_T24_ENTRY");
+  expect(()=>verifyP6T24PrivateRegistry({...t24Args,trust:{...t24Trust,conditionalT24Scope:undefined}})).toThrow("CONDITIONAL_T24_SCOPE");
+  expect(()=>verifyP6T24PrivateRegistry({...t24Args,wire:{...t24Wire,signatureBase64:sign(null,p6T24RegistryReviewPreimage({...t24Review,schema:"v39.phase6.native-t24-registry-ed25519.v1"}),reviewer.privateKey).toString("base64")}})).toThrow("REGISTRY_SIGNATURE_INVALID");
+  const gotT24=Object.defineProperties({status:"EXACT_PRIVATE_CONDITIONAL_T24_PACKETS_READONLY_NO_GO",registrySha256:t24RegSha,
+   runDayIndex:p.runDayIndex,observedDbClockUtc:t("05:05"),packetCount:1,providerCalls:0,databaseWrites:0,phase6PaidGo:false},
+   {privateRegistry:{value:t24Reg},privateFiles:{value:t24Files}});
+  expect(projectP6T24QueuePackets(gotT24,t24Trust,"ENROLLMENT")[0].entry.permit).toEqual(t24Permit);
+  expect(projectP6T24QueuePackets(gotT24,t24Trust,"PRE_EXECUTION")).toHaveLength(0);
+  expect(()=>projectP6T24QueuePackets(gotT24,{...t24Trust,conditionalT24Scope:undefined},"ENROLLMENT")).toThrow("CONDITIONAL_T24_SCOPE");
+  const t24Policy={rightsSha256:gate.rightsSha256,nativeLaterReview:{conditionalT24Scope:gate.conditionalPreScope},
+   conditionalPreFeatureReview:{schema:"v39.phase5.conditional-pre-feature-review-policy.v1",approved:true,rightsSha256:gate.rightsSha256,...gate.conditionalPreScope}};
+  expect(deriveP6ConditionalT24Scope(t24Policy)).toEqual(gate.conditionalPreScope);
+  expect(()=>deriveP6ConditionalT24Scope({...t24Policy,conditionalPreFeatureReview:undefined})).toThrow("CONDITIONAL_T24_SCOPE");
+  const readReg=(pins=rp,r=reg,s=src)=>verifyP5SignedLaterPreDayRegistry(regBytes,r,srcBytes,s,pins,()=>packet.packetBytes);
+  expect(readReg().entries[0].packet.prePermit).toEqual(built.privatePermit);
+  expect(()=>readReg({...rp,conditionalPreScope:undefined})).toThrow("SEPARATE_PROSPECTIVE_SCOPE");
+  expect(()=>readReg({...rp,conditionalPreScope:{...rp.conditionalPreScope!,protocolSha256:h("0")}})).toThrow("SEPARATE_PROSPECTIVE_SCOPE");
+  expect(()=>readReg(rp,{...reg,shardIndex:2})).toThrow("PARSED_REGISTRY_BYTES_DRIFT");
+  expect(()=>readReg(rp,reg,{...src,entries:[{...src.entries[0],expectedPacketSha256:h("0")}]})).toThrow("PARSED_REGISTRY_BYTES_DRIFT");
   expect(()=>verifyP5CdFrozenRoster(rosterBytes,roster,files,{...gate,conditionalPreScope:undefined})).toThrow("SEPARATE_PROSPECTIVE_SCOPE");
   expect(()=>verifyP5CdFrozenRoster(rosterBytes,roster,files,{...gate,releaseMode:"PHASE5_CANARY"})).toThrow("SEPARATE_PROSPECTIVE_SCOPE");
   expect(()=>verifyP5ConditionalQueuePacket({...packet.packet,phase7FieldProof:wire,independentLaterHorizonAndT24ReviewAttested:true},gate,"LATER_ONLY")).toThrow("PACKET_SCHEMA_OR_HORIZON");
@@ -282,4 +657,55 @@ it("T025 independent conditional authority routing refuses absent scope and mixe
  await expect(readP7ReviewedTierSelectedFeaturesPage(pool,[p,n],h("8"))).rejects.toThrow("MIXED_IDENTITY_TIERS");
  await expect(readP7ReviewedTierSelectedFeaturesPage(pool,[n,p],h("8"))).rejects.toThrow("MIXED_IDENTITY_TIERS");
  expect(calls).toBe(0);
+});
+
+it("T048 independent conditional T24 issuer reads one genuine marked original, signs exact review page, and refuses uncommissioned scope",async()=>{
+ const {scope,o,r}=fixture(),selected="2035-11-26T05:45:00.000Z",windowStart="2035-11-26T05:00:00.000Z",windowEnd="2035-11-26T06:00:00.000Z";
+ const raw=r.raw_payload as any,{canonicalEnvelopeHashSchema,canonicalEnvelopeSha256,...bare}=raw;
+ const departures=[{...bare.departures[0],departure:{scheduledTime:{utc:selected},revisedTime:{utc:"2035-11-26T06:00:00.000Z"}},arrival:{...bare.departures[0].arrival,scheduledTime:{utc:"2035-11-26T13:00:00.000Z"}}}];
+ const hash=(x:string|Buffer)=>createHash("sha256").update(x).digest("hex"),body=Buffer.from(JSON.stringify({departures,arrivals:[]}));
+ const from="2035-11-26T13:00",to="2035-11-26T14:00",frozen=windowStart;
+ const marked=addCanonicalFidsEnvelopeHashV39({...bare,departures,fidsRequestContract:{...bare.fidsRequestContract,fromLocal:from,toLocal:to,phase5ConditionalService:{protocolSha256:scope.protocolSha256,cohortStartUtc:frozen}},
+  originalDecodedEntityBodyEvidence:{...bare.originalDecodedEntityBodyEvidence,bodySha256:hash(body),bodyLengthBytes:body.length,bodyBase64:body.toString("base64")}});
+ const proofScope={...scope,source:{...scope.source,horizon:"T-24h" as const},frozenStudyStartUtc:frozen,expectedLocalFrom:from,expectedLocalTo:to,
+  expectedServiceWindowStartUtc:windowStart,expectedServiceWindowEndUtc:windowEnd,externalContentUseReviewSha256:h("8"),expectedDecodedBodySha256:hash(body)};
+ const original={...r,raw_payload:marked,decoded_original_body_sha256:hash(body)},bound={...o,horizon:"T-24h",service_window_start_utc:windowStart,service_window_end_utc:windowEnd,
+  decoded_original_body_sha256:hash(body),conditional_source_protocol_sha256:scope.protocolSha256,normalized_members_count:1};
+ const id=prepare(proofScope,[bound],[original],t("05:04")).privateCandidates[0].stage14ConditionalFlightInstanceId!;
+ const member={population_query_id:scope.expectedPopulationQueryId,response_hash:scope.expectedResponseSha256,provider_content_expired_at_utc:null,population_member_id:"member-t24",analytic_identity_id:id,canonical_flight_instance_id:id,source_airport_icao:"WSSS",dep_airport_icao:"WSSS",arr_airport_icao:"YSSY",flight_number:"SQ78",scope_classification:"unknown",codeshare_resolution_status:"g5a_conditional_operator_composite_no_native_id",source_type:"fids",population_role:"requested_airport_primary",query_direction:"Departure",dep_scheduled_utc:selected,available_at:t("05:02")};
+ const make=()=>{const queries:string[]=[];return {queries,pool:{connect:async()=>({release(){},query:async(sql:string)=>{
+  queries.push(sql);
+  if(sql.startsWith("SELECT session_user"))return {rows:[{login:"phase5_p5_source_login_20261108",actor:"phase5_fids_source_prod_20261107",db:"neondb",version:160010,ro:"on",primary:true}]};
+  if(sql.includes("FROM clean.phase5_fids_allowed_query_v39"))return {rows:[bound]};
+  if(sql.includes("SELECT r.raw_payload"))return {rows:[original]};
+  if(sql.includes("FROM clean.flight_population"))return {rows:[member]};
+  if(sql.startsWith("SELECT clock_timestamp()"))return {rows:[{at:t("05:04")}]};
+  return {rows:[]};
+ }})}}};
+ const keys=generateKeyPairSync("ed25519"),fp=hash(keys.publicKey.export({format:"der",type:"spki"})),code="a".repeat(40);
+ const conditional={protocolSha256:scope.protocolSha256,externalContentUseReviewSha256:proofScope.externalContentUseReviewSha256};
+ const policy={schema:"v39.phase6.delegated-daily-source-review-policy.v1",delegatedDailyPacketProductionApproved:true,approvedCodeSha:code,
+  manifestSha256:scope.source.manifestSha256,rightsSha256:scope.source.rightsReviewSha256,releaseSha256:scope.source.reviewedReleaseSha256,
+  providerContractSha256:scope.source.providerContractSha256,frameSha256:h("4"),configSha256:h("5"),
+  conditionalPreFeatureReview:{schema:"v39.phase5.conditional-pre-feature-review-policy.v1",approved:true,rightsSha256:scope.source.rightsReviewSha256,...conditional},
+  conditionalT24PermitReview:{schema:"v39.phase5.conditional-t24-permit-review-delegation.v1",approved:true,...conditional,reviewerFingerprintSha256:fp,
+   reportedScheduleSemanticsSha256:h("7"),validFromUtc:t("04:00"),validUntilUtc:t("23:00")},
+  nativeLaterReview:{approved:true,nativeT24ReviewApproved:true,independentT24WitnessProtocolReviewed:true,reviewedWitnessOnlyRole:"phase5_fids_t24_witness_prod_20261107",
+   conditionalT24Scope:conditional,frameSha256:h("4"),configSha256:h("5"),builderSha256:h("9"),builderFrozenAtUtc:t("04:00"),
+   runAndRetentionEvidenceSha256:h("8"),laterReviewerFingerprintSha256:h("c"),validFromUtc:t("00:00"),validUntilUtc:t("23:00"),
+   selectedTConfig:{milestone:"departure.scheduledTime.utc",version:"v1",artifactHash:h("a"),verifiedProviderNativeSchedule:true,semanticsEvidenceSha256:h("7")}}};
+ const b=Buffer.from(JSON.stringify(policy)),sha=hash(b),input={policyBytes:b,expectedPolicySha256:sha,expectedReviewedCodeSha:code,
+  expectedReviewerFingerprintSha256:fp,forbiddenSignerFingerprints:[h("c")],signer:keys.privateKey,env:{P6_PHASE7_PRE_LANE_EVIDENCE_AUTHORITY_APPROVED:"1",
+   P6_PHASE7_PRE_LANE_EVIDENCE_AUTHORITY_FINGERPRINT_SHA256:fp,P6_NONPAID_DAILY_POLICY_SHA256:sha,
+   V39_P5_MANIFEST_SHA256:scope.source.manifestSha256,V39_P5_RIGHTS_SHA256:scope.source.rightsReviewSha256}};
+ const db=make(),wire=await issueP5ConditionalT24SignedReviewPage(db.pool,proofScope,[id],input);
+ expect(db.queries.filter(x=>x.includes("SELECT r.raw_payload"))).toHaveLength(1);
+ const next=make(),prepared=await prepareP5ConditionalPrePermitPageFromSignedReviews(next.pool,proofScope,[id],wire,
+  {expectedReviewerFingerprintSha256:fp,reviewerPublicKeyPem:keys.publicKey.export({format:"pem",type:"spki"}).toString(),expectedReviewedCodeSha:code,forbiddenSignerFingerprints:[h("c")]});
+ expect(prepared.privatePrepared[0].privatePermit).toMatchObject({flightInstanceId:id,horizon:"T-24h",identityEvidenceTier:"CONDITIONAL_QUERY_FILTERED_SERVICE"});
+ expect(prepared.privatePrepared[0].privateWitnessReview).toMatchObject({reviewedConditionalProtocolSha256:scope.protocolSha256,expectedT24CutoffUtc:t("05:45")});
+ const deny=make(),bad=Buffer.from(JSON.stringify({...policy,conditionalT24PermitReview:undefined}));
+ await expect(issueP5ConditionalT24SignedReviewPage(deny.pool,proofScope,[id],{...input,policyBytes:bad,expectedPolicySha256:hash(bad),env:{...input.env,P6_NONPAID_DAILY_POLICY_SHA256:hash(bad)}})).rejects.toThrow("EXACT_CONDITIONAL_T24_DELEGATION_REQUIRED");
+ await expect(issueP5ConditionalT24SignedReviewPage(deny.pool,proofScope,[id],{...input,forbiddenSignerFingerprints:[fp]})).rejects.toThrow("INDEPENDENT_T24_ISSUER_SCOPE");
+ expect(deny.queries).toHaveLength(0);
 });
