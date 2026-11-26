@@ -36,10 +36,20 @@ export function verifyP5T24PreWitnessCrossReview(
  pre:P5Stage14SingleFlightPrePermit,
  witness:P5IndependentT24WitnessReview
 ):void{
- if(!pre||!witness||pre.horizon!=="T-24h"||
-    (pre.identityEvidenceTier??"PROVIDER_NATIVE_OPERATING_LEG")!==
-     "PROVIDER_NATIVE_OPERATING_LEG"||
-    pre.externalNativeTPhysicalLegAndSourceUseReviewed!==true)
+ if(!pre||!witness||pre.horizon!=="T-24h")
+   HOLD("ONLY_REVIEWED_NATIVE_T24_PERMITTED");
+ const tier=pre.identityEvidenceTier??"PROVIDER_NATIVE_OPERATING_LEG";
+ if(tier==="CONDITIONAL_QUERY_FILTERED_SERVICE"){
+  if(pre.externalNativeTPhysicalLegAndSourceUseReviewed===true||
+     pre.externalConditionalScheduleSourceAndUseReviewed!==true||
+     pre.requireProspectiveConditionalSourceMarker!==true||
+     !/^[a-f0-9]{64}$/.test(pre.reviewedProtocolAmendmentSha256??"")||
+     witness.reviewedConditionalProtocolSha256!==pre.reviewedProtocolAmendmentSha256||
+     pre.flightInstanceId!=="leg:g5a:"+pre.reviewedStableServiceKeySha256)
+   HOLD("ONLY_REVIEWED_NATIVE_T24_PERMITTED");
+ }else if(tier!=="PROVIDER_NATIVE_OPERATING_LEG"||
+    pre.externalNativeTPhysicalLegAndSourceUseReviewed!==true||
+    witness.reviewedConditionalProtocolSha256!==undefined)
    HOLD("ONLY_REVIEWED_NATIVE_T24_PERMITTED");
  const cutoff=Date.parse(pre.selectedTNativeUtc)-86_400_000;
  const preVersion=pre.selectedTConfig?.milestone+":"+
