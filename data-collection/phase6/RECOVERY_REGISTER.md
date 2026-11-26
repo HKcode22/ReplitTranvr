@@ -4,6 +4,8 @@ Working branch: phase5b/20261125-1610-custody-identity-reconciliation, [PR #976]
 
 F = failure family or evidenced defect; I = corrective implementation; C = incomplete component, not a new gate. IDs permanent, consecutive, never renumber or delete. Recurrence updates existing F; new distinct cause gets next ID. Link actual checkpoint, commit, job and production evidence. Historical loss is irreversible. Tested is not deployed; deployed is not end-to-end proven. No new branches or closed gates without substantive evidence.
 
+**Experiment Day 1 is November 23, 2026 (Pacific owner correction, Nov26).** November 3–22 failures are prelaunch historical regression evidence, not losses of the one-month paid experiment. Keep their stable IDs and distinguish any recurrence on or after Nov23. Do not rewrite the signed calendar or historical outcomes.
+
 ## Failures
 
 | ID | Status | Observed defect and evidence | Implementations |
@@ -32,13 +34,14 @@ F = failure family or evidenced defect; I = corrective implementation; C = incom
 | F022 | Tested branch | Audit incorrectly classified eight expired original hashes as mismatches. [Checkpoint](checkpoints/2026-11-26_0152_PST_PHASE5B_OWNER_CENSUS_AND_QUEUE_REPAIR.md) | I020 |
 | F023 | Tested branch | Idle native follow-on acquired publisher lock before zero candidate check. [Checkpoint](checkpoints/2026-11-26_0152_PST_PHASE5B_OWNER_CENSUS_AND_QUEUE_REPAIR.md) | I021 |
 | F024 | Tested branch | Optional weather archive read for FIDS-only permit. [Commit](https://github.com/HKcode22/ReplitTranvr/commit/3327ff5d84d9d0aa0478a34bb41e44e788cd3a9a) | I022 |
-| F025 | CI recurrence, successor pending | Prior TS2322 and V0112 predecessor errors corrected 42/42; new 6572192 TS18048 at conditional draft ([45799354670](https://github.com/HKcode22/ReplitTranvr/actions/runs/45799354670)) corrected by explicit never-return narrowing; verify successor. [PG16](https://github.com/HKcode22/ReplitTranvr/actions/runs/45796775104) | I023, I026 |
+| F025 | Prior compile correction tested; focused workflow blocked by F032 | Prior TS2322 and V0112 predecessor errors corrected 42/42; new 6572192 TS18048 at conditional draft ([45799354670](https://github.com/HKcode22/ReplitTranvr/actions/runs/45799354670)) corrected by explicit never-return narrowing; successor full offline suite passed; focused diagnostics skipped by F032. [PG16](https://github.com/HKcode22/ReplitTranvr/actions/runs/45796775104) | I023, I026 |
 | F026 | Historical loss | Day1 zero bindings; Day2 52 bindings zero PRE; pause missed T90 and elapsed Day3 T24. [Owner census](checkpoints/2026-11-26_0152_PST_PHASE5B_OWNER_CENSUS_AND_QUEUE_REPAIR.md) | I008, I012, I013, I014, I016 |
 | F027 | Open | Native-only feature proof and signed packet issuance even though conditional writer exists. [Prior decision](../phase5/2026-11-09_REUSE_PHASE4_CONDITIONAL_SERVICE_PRE_IN_PHASE5_WITHOUT_NEW_PILOT.md) | I005, I014, I016, I025 |
 | F028 | Superseded CI failure | Stacked PR excluded full offline CI; trigger fixed. [Checkpoint](checkpoints/2026-11-25_1730_PST_PHASE5B_DRAIN_AND_STACKED_CI_COVERAGE.md) | I023 |
 | F029 | Open | Actual physical gate-out source not certified; schedule revision is not substitute. [Adopted runtime scope](../phase5/evidence/2026-11-22_PHASE6_RUNTIME_BINDING_OWNER_DELEGATED_SCOPE_REVIEW.md) | I005 |
 | F030 | Focused tested, full pending | Conditional raw/normalized matcher parity corrected in c66f6307; [focused run](https://github.com/HKcode22/ReplitTranvr/actions/runs/45799119831) passed. Not a demonstrated live cause. | I024 |
-| F031 | Code finding, not live cause | Provider timestamp precision/UTC representation mismatch can discard otherwise identical observations; reject unzoned or impossible dates rather than assume timezone. | I026 |
+| F031 | Code finding, not live cause | Provider timestamp precision/UTC representation mismatch can discard otherwise identical observations; reject unzoned or impossible dates rather than assume timezone. | I026 | 
+| F032 | Code correction committed; CI pending | Recovery-register parser wrongly reads a single-ID regression-crosswalk row as a duplicate primary F025, causing two test failures and skipping downstream diagnostics. [Job](https://github.com/HKcode22/ReplitTranvr/actions/runs/45800099500/job/139840779912) | I027 |
 
 ## Implementations
 
@@ -69,7 +72,8 @@ F = failure family or evidenced defect; I = corrective implementation; C = incom
 | I023 | Tested branch | Exact-head CI coverage, compile/SQL fixes | F025, F028 |
 | I024 | Focused tested | Shared conditional route/key/positive-operator ambiguity between normalizer and raw review; real normalizer and reader regressions; run 45799119831 passed | F030 |
 | I025 | Implemented, CI pending | Shared existing four-field FIDS feature draft from authenticated marked conditional raw member, exact protected content-use/protocol, private output and fresh cutoff; no signed issuance | F027 |
-| I026 | Implemented, CI pending | Fix explicit never-return narrowing; shared explicit UTC parsing for conditional identity and native feature extraction; linear lookup and avoid needless clock read on empty draft | F025, F031 |
+| I026 | Implemented, CI pending | Fix explicit never-return narrowing; shared explicit UTC parsing for conditional identity and native feature extraction; linear lookup and avoid needless clock read on empty draft | F025, F031 | 
+| I027 | Implemented; exact CI pending | Scope primary identifier parsing to three canonical sections; reject duplicates, malformed rows, wrong family and missing sections; regress repeated crosswalk IDs. [Commit](https://github.com/HKcode22/ReplitTranvr/commit/4d00959c389dfd08fafc0bf2050525ed75c34837) | F032 |
 
 ## Completion components (not gates)
 
@@ -105,3 +109,8 @@ Owner 01:52 PST: 92 reservations, 184 reserved units (not billing), 52 bindings 
 | F025 | TypeScript check, full offline suite and real PostgreSQL migrations at exact head; no relying on superseded green SHA | Exact tested release and owner-protected installation/readback |
 | F030, F031 | Duplicate positive operators (including outside service window), marketing aliases, malformed identifiers, explicit UTC precision and invalid dates | Same source member selected consistently without hindsight; no fabricated timestamps |
 | F026 and collection gaps | Per-day signed denominators, bound originals, eligible observations, PRE/POST counts, missingness and fixed chronological split | Retain only lawful cutoff-safe observations; no backfill or claim of unbiased coverage |
+
+## Nov26 02:26 PST onward — exact-head audit
+
+- PR #976 head 7c607d6: 41 success / 1 failure of 42 completed PR workflows; full offline safety 45800099520 passed. Failed 45800099500 job 139840779912: register test interpreted crosswalk F025 as a duplicate primary ID (66 distinct / 67 parsed rows) and then failed reciprocal validation; downstream focused tests skipped. This is F032, not evidence of a fresh production SOURCE failure. I027 committed 4d00959c; successor exact CI remains required.
+- Owner clarified Day 1 Nov23. C001–C003 remain incomplete: private conditional drafts are not signed PREs, and native runtime currently publishes only native candidates; independent proof must be separately authorized and verified before release. No provider calls, production database changes, or main/relay changes in this audit. Keep existing scientific/retention scopes.
