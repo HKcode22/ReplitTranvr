@@ -1,3 +1,7 @@
+import {readP6PrivateLaterQueueRoster} from "../server/lib/disruption/phase6PrivateLaterQueueRosterReadOnce_v39.mjs";
+import {hashPhase7DurableCandidate} from "../server/lib/disruption/phase7DurableDerivedBundleCandidate_v39";
+import {verifyPhase7SignedPreFieldProof} from "../server/lib/disruption/phase7SignedPreFieldProof_v39";
+import type {P5Stage14SingleFlightPrePermit} from "../server/lib/disruption/phase5V0079SingleBoundFlightPreWriter_v39";
 import {Client} from "pg";
 import {createHash,generateKeyPairSync,sign} from "node:crypto";
 import assert from "node:assert/strict";
@@ -130,6 +134,43 @@ function reviewedShard(suffix:string,shardIndex=1){
  return{plan,wire,pins,publicPem,scope,packetPath,registryPath};
 }
 
+// Synthetic conditional packet, with separate test-only approvals and
+// actual cryptographic proof. No physical-leg or production approval.
+function conditionalShard(){
+ const f=reviewedShard("conditional017",3),native=format(clock+7*3600_000),stable=H("c"),protocol=H("d"),content=H("e"),standalone=H("f");
+ const p:P5Stage14SingleFlightPrePermit={manifestSha256:H("1"),queryDigestSha256:H("2"),
+  expectedSourcePopulationQueryId:"a23e4567-e89b-42d3-a456-426614174000",expectedSourceResponseSha256:H("a"),
+  runDayIndex:17,slot:"HUB",horizon:"T-6h",airportIcao:"WSSS",flightInstanceId:"leg:g5a:"+stable,
+  expectedGithubSourceRunId:"42899999999",expectedReviewedReleaseSha256:H("3"),expectedReviewedSourceRightsSha256:H("4"),
+  expectedProviderContractSha256:H("5"),expectedEarlyDrawSha256:H("6"),reviewedFrameSha256:H("7"),reviewedConfigSha256:H("8"),
+  independentlyReviewedOperatingLegEvidenceSha256:H("9"),independentlyReviewedNativeTEvidenceSha256:H("b"),
+  independentlyReviewedRunAndRetentionEvidenceSha256:H("9"),frozenBuilderSha256:H("a"),builderFrozenAtUtc:format(clock-3600000),
+  selectedTConfig:{milestone:"departure.scheduledTime.utc",version:"ci-conditional-T",artifactHash:H("b"),verifiedProviderNativeSchedule:true,semanticsEvidenceSha256:H("b")},
+  selectedTNativeUtc:native,maxPopulationStalenessSeconds:3600,expectedRestrictedPreWriterRole:"phase5_fids_pre_writer_prod_20261107",
+  identityEvidenceTier:"CONDITIONAL_QUERY_FILTERED_SERVICE",externalConditionalScheduleSourceAndUseReviewed:true,reviewedProtocolAmendmentSha256:protocol,
+  reviewedStableServiceKeySha256:stable,expectedOperatorFlightNumber:"CI300",expectedDestinationIcao:"YSSY",requireProspectiveConditionalSourceMarker:true,
+  reviewedStandaloneLaterNoT24:{schema:"v39.phase5.standalone-later-asof-no-t24.v1",reviewedProtocolSha256:standalone,reviewedOriginalResponseSha256:H("a"),
+   reviewedNativeTSemanticsSha256:H("b"),missingT24Class:"HONEST_T24_UNOBSERVED_NOT_BACKFILLED",independentLaterAsOfAndMissingnessReviewAttested:true},
+  reviewedSupplementalFeatureBundle:{schema:"v39.phase5.e-signed-source-supplement.v1",flightInstanceId:"leg:g5a:"+stable,populationQueryId:"a23e4567-e89b-42d3-a456-426614174000",
+   originalResponseSha256:H("a"),observationsSha256:sha(Buffer.from("[]")),externalSourceAndContentsReviewReceiptSha256:content,fields:[],observations:[]}};
+ const proof=generateKeyPairSync("ed25519"),policy=H("9"),proofRaw=Buffer.from(JSON.stringify({schema:"v39.phase7.separate-pre-field-proof.v1",manifestSha256:p.manifestSha256,rightsSha256:p.expectedReviewedSourceRightsSha256,policySha256:policy,permitSha256:hashPhase7DurableCandidate(p),issuedAtUtc:format(clock-60000),validUntilUtc:format(clock+3600000),fields:[]}));
+ const proofWire={payloadBase64:proofRaw.toString("base64"),signatureBase64:sign(null,proofRaw,proof.privateKey).toString("base64")};
+ const proofEnv={P6_PHASE7_PRE_PRESERVATION_POLICY_SHA256:policy,P6_PHASE7_PRE_PROOF_REVIEWER_FINGERPRINT_SHA256:sha(proof.publicKey.export({type:"spki",format:"der"})),P6_PHASE7_PRE_PROOF_REVIEWER_PUBLIC_KEY_BASE64:Buffer.from(proof.publicKey.export({type:"spki",format:"pem"})).toString("base64")};
+ verifyPhase7SignedPreFieldProof(proofEnv,p,policy,[],proofWire);
+ const bytes=Buffer.from(JSON.stringify({schema:"v39.phase5.github-conditional-standalone-later-pre-asof-reviewed.v1",reviewedCodeSha:code,
+  reviewArtifactSha256:H("a"),independentlyReviewedConditionalScheduleServiceAndSourceAttested:true,reviewedConditionalProtocolSha256:protocol,prePermit:p,phase7FieldProof:proofWire}));
+ const packetSha=sha(bytes),{expectedT24ReceiptSha256:unused,...old}=f.plan.registryProposal.entries[0];
+ const reg={...f.plan.registryProposal,entries:[{...old,expectedPacketSha256:packetSha,expectedFlightInstanceId:p.flightInstanceId}]};
+ const raw=Buffer.from(JSON.stringify(reg));
+ const plan:P5UnsignedLaterRegistryReviewPlan={...f.plan,registryProposal:reg,registryProposalBytes:raw,proposedRegistrySha256:sha(raw),proposedPacketFiles:[{filePath:f.packetPath,sha256:packetSha,bytes}],redactedSummary:{...f.plan.redactedSummary,shardIndex:3,reviewedT24Witnesses:0,separatelyReviewedNoT24:1}};
+ const k=generateKeyPairSync("ed25519"),keyFp=sha(k.publicKey.export({type:"spki",format:"der"}));
+ const conditionalPreScope={protocolSha256:protocol,externalContentUseReviewSha256:content,independentlyApprovedStandaloneProtocolSha256:standalone};
+ const pins={...f.pins,expectedReviewerPublicKeyFingerprintSha256:keyFp,conditionalPreScope};
+ const review:P5Ed25519ExternalLaterShardReview={...f.wire.review,reviewerPublicKeyFingerprintSha256:keyFp,proposedRegistrySha256:sha(raw),packetFileManifestSha256:digestP5LaterShardPrivatePacketFileManifest(plan),conditionalPreScope};
+ const wire:P5Ed25519ReviewWireEnvelope={...f.wire,review,signatureBase64:sign(null,signedP5ExternalLaterReviewBytes(review),k.privateKey).toString("base64")};
+ return {...f,plan,pins,wire,publicPem:k.publicKey.export({type:"spki",format:"pem"}).toString(),permit:p,packetSha,bytes,conditionalPreScope,proofEnv,proofWire,policy};
+}
+
 const ownerUrl="postgresql://neondb_owner:ci-only-day-real@127.0.0.1:5432/neondb?sslmode=disable";
 if(process.env.CI!=="true"||process.env.P6_DAY_EPOCH_REAL_DISPOSABLE_ONLY!=="1"||
  process.env.P6_REAL_DISPOSABLE_OWNER_URL!==ownerUrl||process.env.DATABASE_URL||
@@ -234,6 +275,39 @@ try{
  assert.equal(q2.rows[0].n,3);
  const rows2=await owner.query("SELECT count(*)::int AS n FROM "+table+" WHERE run_day_index=17");
  assert.equal(rows2.rows[0].n,5);
+ // T071: real private conditional publication -> current signed day ->
+ // independent restricted reader -> original queue consumer. The actual
+ // Stage14 final 3-minute write window is separately tested by T070; no
+ // fabricated clock or reduced 15-minute publication lead here.
+ const cf=conditionalShard(),conditionalInput={...input,plan:cf.plan,wire:cf.wire,
+  reviewerPublicKeyPem:cf.publicPem,reviewerPins:cf.pins,publisherScope:cf.scope,
+  scope:{...input.scope,expectedLaterReviewerFingerprintSha256:cf.pins.expectedReviewerPublicKeyFingerprintSha256}};
+ const cb=Buffer.from(JSON.stringify({...JSON.parse(policyBytes.toString("utf8")),laterReviewerFingerprintSha256:cf.pins.expectedReviewerPublicKeyFingerprintSha256,
+  conditionalLaterPreScope:cf.conditionalPreScope}));
+ const ca={...approval,policyBytes:cb,expectedPolicySha256:sha(cb)};
+ await assert.rejects(runP6DelegatedReviewedLaterAppend(conditionalInput,approval),/POLICY_STUDY_OR_DISTINCT_KEYS_DRIFT/);
+ const cp=await runP6DelegatedReviewedLaterAppend(conditionalInput,ca);
+ assert.equal(cp.status,"REVIEWED_LATER_SHARD_AND_SIGNED_DAY_APPEND_ACTUAL_READBACK_NO_GO");
+ assert.equal(cp.insertedPrivateRows,2);
+ assert.equal(cp.automatedDelegatedDaySignatureIssued,true);
+ assert.equal(cp.phase6PaidGo,false);
+ const againConditional=await runP6DelegatedReviewedLaterAppend(conditionalInput,ca);
+ assert.equal(againConditional.insertedPrivateRows,0);
+ const selector={runDayIndex:17,indexRevision:4,indexSha256:cp.indexSha256,shardIndex:3,laterRegistrySha256:cf.plan.proposedRegistrySha256};
+ const queuePolicy={independentLaterQueueTransportProjectionApproved:true,existingPaidDispatchApproved:false,
+  conditionalPreScope:{protocolSha256:cf.conditionalPreScope.protocolSha256,externalContentUseReviewSha256:cf.conditionalPreScope.externalContentUseReviewSha256},
+  independentlyApprovedStandaloneProtocolSha256:cf.conditionalPreScope.independentlyApprovedStandaloneProtocolSha256};
+ const roster=await readP6PrivateLaterQueueRoster({client:reader,trust,selector,policy:queuePolicy});
+ assert.equal(roster.packetCount,1);assert.equal(roster.standaloneCount,1);assert.equal(roster.phase6PaidGo,false);
+ assert.equal(roster.privateEntries[0].packetSha256,cf.packetSha);
+ assert.ok(roster.privateEntries[0].bytes.equals(cf.bytes));
+ assert.ok(!JSON.stringify(roster).includes(cf.permit.flightInstanceId));
+ verifyPhase7SignedPreFieldProof(cf.proofEnv,cf.permit,cf.policy,[],JSON.parse(roster.privateEntries[0].bytes.toString("utf8")).phase7FieldProof);
+ await assert.rejects(readP6PrivateLaterQueueRoster({client:reader,trust,selector,policy:{...queuePolicy,conditionalPreScope:undefined}}),/CONDITIONAL/);
+ await assert.rejects(readP6PrivateLaterQueueRoster({client:reader,trust,selector,policy:{...queuePolicy,independentlyApprovedStandaloneProtocolSha256:undefined}}),/MISSING_SIGNED_INDEPENDENT_STANDALONE_REVIEW/);
+ assert.equal((await owner.query("SELECT count(*)::int n FROM phase6_private.signed_run_day_index_revision_v39 WHERE run_day_index=17")).rows[0].n,4);
+ assert.equal((await owner.query("SELECT count(*)::int n FROM "+table+" WHERE run_day_index=17")).rows[0].n,7);
+ console.log("T071_REAL_PG16_CONDITIONAL_PRIVATE_APPEND_CURRENT_SIGNED_DAY_QUEUE_CONSUMER_NO_REPLAY_CI_ONLY");
  console.log("PASS_REAL_PG16_DELEGATED_LATER_APPEND_DISTINCT_SIGNING_KEY_READBACK_NO_REPLAY_SYNTHETIC_ONLY");
  console.log("PASS_REAL_PG16_REVIEWED_LATER_APPEND_READBACK_AND_NO_REPLAY_SYNTHETIC_ONLY");
 }finally{await Promise.allSettled([reader.end(),publisher.end(),owner.end()]);}
