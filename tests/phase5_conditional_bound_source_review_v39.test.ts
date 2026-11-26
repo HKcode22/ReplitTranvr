@@ -4,7 +4,7 @@ import {createHash} from "node:crypto";
 import {describe,it,expect} from "vitest";
 import {addCanonicalFidsEnvelopeHashV39} from "../server/lib/disruption/fidsEnvelopeCanonical_v39";
 import {readP7ExactConditionalSelectedFeaturesPage,readP7ReviewedTierSelectedFeaturesPage,requireP7ActualSourceReadback} from "../server/lib/disruption/phase7IndependentPreSourceReader_v39";
-import {digestP5ConditionalPermitEvidence,prepareP5ConditionalPrePermitForIndependentSigning,prepareP5ConditionalPrePermitPageForIndependentSigning,buildP5ConditionalPrePacketPreview,buildP5ConditionalPreProofPage,completeP5ConditionalPreProofPage,attachP5ConditionalPreFieldProof} from "../server/lib/disruption/phase5ConditionalPrePermitPreparation_v39";
+import {digestP5ConditionalPermitEvidence,prepareP5ConditionalPrePermitForIndependentSigning,prepareP5ConditionalPrePermitPageForIndependentSigning,buildP5ConditionalPrePacketPreview,buildP5ConditionalPreProofPage,completeP5ConditionalPreProofPage,attachP5ConditionalPreFieldProof,prepareP5ConditionalPrePermitPageFromSignedReviews,p5ConditionalReviewPagePreimage,type P5ConditionalReviewPage} from "../server/lib/disruption/phase5ConditionalPrePermitPreparation_v39";
 import {generateKeyPairSync,sign} from "node:crypto";
 import {hashPhase7DurableCandidate} from "../server/lib/disruption/phase7DurableDerivedBundleCandidate_v39";
 import {digestP5LaterShardPrivatePacketFileManifest,signedP5ExternalLaterReviewBytes,verifyP5ExternalEd25519ReviewOfLaterShard,type P5Ed25519ExternalLaterShardReview,type P5Ed25519ReviewWireEnvelope} from "../server/lib/disruption/phase5ExternalEd25519LaterShardReviewerVerify_v39";
@@ -193,6 +193,32 @@ describe("source-bound conditional service preparation",()=>{
   expect(page).toMatchObject({preparedCount:1,originalBodyReadCount:1,signedPrePacketsIssued:0,providerCalls:0,databaseWrites:0});
   expect(page.privatePrepared[0].privatePermit).toEqual(built.privatePermit);
   expect(pageDb.queries.filter(x=>x.includes("SELECT r.raw_payload"))).toHaveLength(1);
+  // T045: a protected independent reviewer signs exact dynamic artifact pins,
+  // not a publisher-selected digest. Authenticate before touching SQL.
+  const permitReviewer=generateKeyPairSync("ed25519");
+  const permitAuthority={expectedReviewerFingerprintSha256:createHash("sha256").update(permitReviewer.publicKey.export({format:"der",type:"spki"})).digest("hex"),
+   reviewerPublicKeyPem:permitReviewer.publicKey.export({type:"spki",format:"pem"}).toString(),expectedReviewedCodeSha:review.reviewedCodeSha,
+   forbiddenSignerFingerprints:[h("f")],independentlyApprovedStandaloneProtocolSha256:h("b")};
+  const reviewPage:P5ConditionalReviewPage={schema:"v39.phase5.conditional-pre-external-review-page.v1",reviewedCodeSha:review.reviewedCodeSha,
+   manifestSha256:proofScope.source.manifestSha256,rightsSha256:proofScope.source.rightsReviewSha256,protocolSha256:proofScope.protocolSha256,
+   externalContentUseReviewSha256:proofScope.externalContentUseReviewSha256,queryDigestSha256:proofScope.source.queryDigestSha256,
+   populationQueryId:proofScope.expectedPopulationQueryId,responseSha256:proofScope.expectedResponseSha256,runDayIndex:proofScope.source.runDayIndex,
+   horizon:proofScope.source.horizon,sourceGithubRunId:proofScope.source.expectedSourceGithubRunId,
+   reviews:[{flightInstanceId:id,reviewArtifactBase64:pageInput.reviewBytes.toString("base64"),reviewArtifactSha256:pageInput.pins.expectedReviewArtifactSha256,separatelyApprovedStandaloneProtocolSha256:h("b")}]};
+  const reviewWire=(x=reviewPage)=>({page:x,signatureBase64:sign(null,p5ConditionalReviewPagePreimage(x),permitReviewer.privateKey).toString("base64")});
+  const wireDb=make(scope.protocolSha256,expectedDecodedBodySha256,marked,[m]);
+  const signedPage=await prepareP5ConditionalPrePermitPageFromSignedReviews(wireDb.pool,proofScope,[id],reviewWire(),permitAuthority);
+  expect(signedPage.privatePrepared[0].privatePermit).toEqual(built.privatePermit);
+  expect(wireDb.queries.filter(x=>x.includes("SELECT r.raw_payload"))).toHaveLength(1);
+  const rejectDb=make(scope.protocolSha256,expectedDecodedBodySha256,marked,[m]);
+  const tryReview=(w=reviewWire(),a=permitAuthority,ids=[id])=>prepareP5ConditionalPrePermitPageFromSignedReviews(rejectDb.pool,proofScope,ids,w,a);
+  await expect(tryReview({...reviewWire(),signatureBase64:Buffer.alloc(64).toString("base64")})).rejects.toThrow("SIGNED_REVIEW_PAGE_SIGNATURE");
+  await expect(tryReview(reviewWire({...reviewPage,queryDigestSha256:h("0")}))).rejects.toThrow("EXACT_SIGNED_REVIEW_PAGE_SCOPE");
+  await expect(tryReview(reviewWire({...reviewPage,reviews:[{...reviewPage.reviews[0],reviewArtifactSha256:h("0")}]}))).rejects.toThrow("EXACT_SIGNED_REVIEW_ARTIFACT_BYTES");
+  await expect(tryReview(reviewWire(),{...permitAuthority,independentlyApprovedStandaloneProtocolSha256:h("0")})).rejects.toThrow("EXACT_SIGNED_REVIEW_ARTIFACT_SET");
+  await expect(tryReview(reviewWire(),{...permitAuthority,forbiddenSignerFingerprints:[permitAuthority.expectedReviewerFingerprintSha256]})).rejects.toThrow("EXACT_SIGNED_REVIEW_PAGE_SCOPE");
+  await expect(tryReview(reviewWire(),permitAuthority,[id,id])).rejects.toThrow("EXACT_SIGNED_REVIEW_PAGE_SCOPE");
+  expect(rejectDb.queries).toHaveLength(0);
   expect(JSON.stringify(page)).not.toMatch(/SQ78|privatePrepared|SIA/);
   const badPage=make(scope.protocolSha256,expectedDecodedBodySha256,marked,[m]);
   await expect(prepareP5ConditionalPrePermitPageForIndependentSigning(badPage.pool,proofScope,[pageInput,pageInput])).rejects.toThrow("EXACT_PAGE_SCOPE");

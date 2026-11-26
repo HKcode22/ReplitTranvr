@@ -4,7 +4,7 @@
  * manufactures a review, signs a production registry or grants paid GO.
  * Legacy Stage14 field names are retained for compatible execution, but
  * the evidence is explicitly conditional service / reported schedule only. */
-import {createHash} from "node:crypto";
+import {createHash,createPublicKey,verify} from "node:crypto";
 import {attachPhase7SignedProofBeforeRoster} from "./phase7SignedPreFieldProof_v39";
 import {hashPhase7DurableCandidate} from "./phase7DurableDerivedBundleCandidate_v39";
 import type {Phase7CanonicalFieldDisposition} from "./phase7CanonicalFieldParity_v39";
@@ -228,4 +228,73 @@ export function assertP5ProofAttachedConditionalPacket(x:P5ProofAttachedConditio
  if(!proofAttachedPackets.has(x)||!Buffer.isBuffer(x.packetBytes)||hash(x.packetBytes)!==x.packetSha256||
     !Buffer.from(JSON.stringify(x.packet),"utf8").equals(x.packetBytes))
   return hold("ACTUAL_PROOF_ATTACHED_PACKET_REQUIRED");
+}
+
+/** F027: authenticate the dynamically supplied review artifact page, rather
+ * than accepting a publisher-selected digest as an independent approval.
+ * The signing key is held outside this consumer. Protected caller pins
+ * the separate reviewer, code, exact SOURCE and standalone policy. */
+export type P5ConditionalReviewPagePins={
+ expectedReviewerFingerprintSha256:string;reviewerPublicKeyPem:string;expectedReviewedCodeSha:string;
+ forbiddenSignerFingerprints:readonly string[];independentlyApprovedStandaloneProtocolSha256?:string;
+};
+export type P5ConditionalReviewPage={
+ schema:"v39.phase5.conditional-pre-external-review-page.v1";
+ reviewedCodeSha:string;manifestSha256:string;rightsSha256:string;protocolSha256:string;externalContentUseReviewSha256:string;
+ queryDigestSha256:string;populationQueryId:string;responseSha256:string;runDayIndex:number;horizon:string;sourceGithubRunId:string;
+ reviews:{flightInstanceId:string;reviewArtifactBase64:string;reviewArtifactSha256:string;expectedT24ReceiptSha256?:string;separatelyApprovedStandaloneProtocolSha256?:string}[];
+};
+export type P5ConditionalReviewPageWire={page:P5ConditionalReviewPage;signatureBase64:string};
+export function p5ConditionalReviewPagePreimage(page:P5ConditionalReviewPage){
+ return Buffer.concat([Buffer.from("HKcode22/ReplitTranvr:PHASE6_CONDITIONAL_PRE_EXTERNAL_PERMIT_REVIEW_PAGE:v1\n","utf8"),Buffer.from(JSON.stringify(page),"utf8")]);
+}
+export async function prepareP5ConditionalPrePermitPageFromSignedReviews(pool:P5EReadOnlyPgPool,scope:P5SignedConditionalFeatureReadScope,
+ requestedFlightIds:readonly string[],wire:P5ConditionalReviewPageWire,authority:P5ConditionalReviewPagePins){
+ const p=wire?.page,q=scope?.source;
+ if(!q||!authority||!H.test(authority.expectedReviewerFingerprintSha256??"")||!C.test(authority.expectedReviewedCodeSha??"")||
+  !Array.isArray(authority.forbiddenSignerFingerprints)||authority.forbiddenSignerFingerprints.some(k=>!H.test(k)||k===authority.expectedReviewerFingerprintSha256)||
+  (authority.independentlyApprovedStandaloneProtocolSha256!==undefined&&!H.test(authority.independentlyApprovedStandaloneProtocolSha256))||
+  typeof authority.reviewerPublicKeyPem!=="string"||authority.reviewerPublicKeyPem.length>5000||
+  !authority.reviewerPublicKeyPem.includes("BEGIN PUBLIC KEY")||authority.reviewerPublicKeyPem.includes("PRIVATE KEY")||
+  !Array.isArray(requestedFlightIds)||requestedFlightIds.length<1||requestedFlightIds.length>96||
+  requestedFlightIds.some(id=>!/^leg:g5a:[a-f0-9]{64}$/.test(id))||new Set(requestedFlightIds).size!==requestedFlightIds.length||
+  !p||Object.keys(wire).sort().join("|")!=="page|signatureBase64"||
+  Object.keys(p).sort().join("|")!==["schema","reviewedCodeSha","manifestSha256","rightsSha256","protocolSha256","externalContentUseReviewSha256","queryDigestSha256","populationQueryId","responseSha256","runDayIndex","horizon","sourceGithubRunId","reviews"].sort().join("|")||
+  p.schema!=="v39.phase5.conditional-pre-external-review-page.v1"||p.reviewedCodeSha!==authority.expectedReviewedCodeSha||
+  p.manifestSha256!==q.manifestSha256||p.rightsSha256!==q.rightsReviewSha256||p.protocolSha256!==scope.protocolSha256||
+  p.externalContentUseReviewSha256!==scope.externalContentUseReviewSha256||p.queryDigestSha256!==q.queryDigestSha256||
+  p.populationQueryId!==scope.expectedPopulationQueryId||p.responseSha256!==scope.expectedResponseSha256||
+  p.runDayIndex!==q.runDayIndex||p.horizon!==q.horizon||p.sourceGithubRunId!==q.expectedSourceGithubRunId||
+  !Array.isArray(p.reviews)||p.reviews.length!==requestedFlightIds.length||
+  typeof wire.signatureBase64!=="string"||!/^[A-Za-z0-9+/]{86}==$/.test(wire.signatureBase64))
+  return hold("EXACT_SIGNED_REVIEW_PAGE_SCOPE");
+ const wanted=new Set(requestedFlightIds),seen=new Set<string>(),inputs:ReviewInput[]=[];
+ for(const x of p.reviews){
+  if(!x||Object.keys(x).some(k=>!["flightInstanceId","reviewArtifactBase64","reviewArtifactSha256","expectedT24ReceiptSha256","separatelyApprovedStandaloneProtocolSha256"].includes(k))||
+   !wanted.has(x.flightInstanceId)||seen.has(x.flightInstanceId)||!H.test(x.reviewArtifactSha256??"")||
+   typeof x.reviewArtifactBase64!=="string"||x.reviewArtifactBase64.length<100||x.reviewArtifactBase64.length>266668||
+   (x.expectedT24ReceiptSha256!==undefined&&!H.test(x.expectedT24ReceiptSha256))||
+   (x.separatelyApprovedStandaloneProtocolSha256!==undefined&&(!H.test(x.separatelyApprovedStandaloneProtocolSha256)||
+    x.separatelyApprovedStandaloneProtocolSha256!==authority.independentlyApprovedStandaloneProtocolSha256)))
+   return hold("EXACT_SIGNED_REVIEW_ARTIFACT_SET");
+  const bytes=Buffer.from(x.reviewArtifactBase64,"base64");
+  if(bytes.length>200000||bytes.toString("base64")!==x.reviewArtifactBase64||hash(bytes)!==x.reviewArtifactSha256)
+   return hold("EXACT_SIGNED_REVIEW_ARTIFACT_BYTES");
+  seen.add(x.flightInstanceId);
+  inputs.push({flightInstanceId:x.flightInstanceId,reviewBytes:bytes,pins:{expectedReviewArtifactSha256:x.reviewArtifactSha256,
+   expectedReviewedCodeSha:authority.expectedReviewedCodeSha,expectedConditionalProtocolSha256:scope.protocolSha256,
+   expectedExternalContentUseReviewSha256:scope.externalContentUseReviewSha256,expectedT24ReceiptSha256:x.expectedT24ReceiptSha256,
+   separatelyApprovedStandaloneProtocolSha256:x.separatelyApprovedStandaloneProtocolSha256}});
+ }
+ const sig=Buffer.from(wire.signatureBase64,"base64");
+ if(sig.length!==64||sig.toString("base64")!==wire.signatureBase64)return hold("SIGNED_REVIEW_PAGE_SIGNATURE");
+ try{
+  const key=createPublicKey(authority.reviewerPublicKeyPem);
+  if(key.asymmetricKeyType!=="ed25519"||hash(key.export({format:"der",type:"spki"}))!==authority.expectedReviewerFingerprintSha256||
+    !verify(null,p5ConditionalReviewPagePreimage(p),key,sig))return hold("SIGNED_REVIEW_PAGE_SIGNATURE");
+ }catch{return hold("SIGNED_REVIEW_PAGE_SIGNATURE");}
+ // No SQL before exact signed authority and complete unique review set.
+ // Existing fresh restricted original read revalidates every member, clock,
+ // feature bundle, witness or standalone protocol and Stage14 preflight.
+ return prepareP5ConditionalPrePermitPageForIndependentSigning(pool,scope,inputs);
 }
