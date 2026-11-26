@@ -112,6 +112,7 @@ export async function runP6StoredSourceDispatcher(env,options={}){
  const headers={Accept:"application/vnd.github+json",Authorization:"Bearer "+env.GITHUB_TOKEN,
   "X-GitHub-Api-Version":"2022-11-28"};
  let proposals,previousIds,active,historyClock,unavailableDays=0,unavailableQueries=0;
+ let stage="SOURCE_OBSERVATION",capacityEvidence={};
  try{
   // Local read-only arguments only. No mutation of repository global arm.
   const pl=await observe({...env,V39_PHASE6_PROCESS_ARMED:"0",
@@ -120,6 +121,7 @@ export async function runP6StoredSourceDispatcher(env,options={}){
    // here. Do not synthesize the event or propagate a paid arm to that helper.
    P6_PRIVATE_SOURCE_PARENT_RO_CONFIRM:env.GITHUB_EVENT_NAME==="workflow_dispatch"?
     "READ_ONLY_AUTHENTIC_PRIVATE_DAY_SOURCE_NO_PROVIDER_NO_DISPATCH":""},{storedCapacityProfile:true});
+  stage="SOURCE_OBSERVATION_VALIDATION";
   if(pl?.providerCalls!==0||pl.databaseWrites!==0||pl.githubDispatches!==0||pl.paidPhase6Go!==false)
    fail("OBSERVATION_NOT_READ_ONLY");
   if(pl.status==="NO_DUE_SOURCE_DAYS_NO_PRIVATE_READ_OR_DISPATCH")
@@ -128,6 +130,7 @@ export async function runP6StoredSourceDispatcher(env,options={}){
    return summary("SELECTED_SOURCE_DAY_REVIEWS_UNAVAILABLE_NO_DISPATCH",{
     acknowledgedGithubChildCount:0,unavailableSelectedDayCount:pl.unavailableSelectedDayCount,
     unavailableSelectedDueQueryCount:pl.unavailableSelectedDueQueryCount});
+  stage="SIGNED_PROPOSAL_VALIDATION";
   const desc=Object.getOwnPropertyDescriptor(pl,"privateStoredChildInputProposals");
   if(pl.status!=="SIGNED_PRIVATE_DAY_SOURCE_AND_ACTUAL_DB_DUE_REVIEW_ONLY_NO_DISPATCH"||
      pl.storedReviewMode!==true||!desc||desc.enumerable||desc.writable||
@@ -147,26 +150,40 @@ export async function runP6StoredSourceDispatcher(env,options={}){
   }
   historyClock=Date.parse(pl.observedSourceDatabaseClockUtc);
   if(!Number.isFinite(historyClock)||Math.abs(now()-historyClock)>120000)fail("OBSERVED_DB_CLOCK_STALE");
+  // Counts are observational metadata; do not turn omitted old-fixture
+  // counters into zero or treat a submitted child as successful collection.
+  const count=k=>Number.isSafeInteger(pl[k])&&pl[k]>=0&&pl[k]<=700?pl[k]:null;
+  const observationEvidence={eligibleDueUnsubmitted:count("eligibleDueUnsubmitted"),alreadySubmittedGitHubChildren:count("alreadySubmittedGitHubChildren"),
+   deferredDueCount:count("deferredDueCount"),missedOrStoppedCensored:count("missedOrStoppedCensored")};
   if(!proposals.length)return summary("NO_SIGNED_DUE_CHILD_NO_DISPATCH",{
    acknowledgedGithubChildCount:0,unavailableSelectedDayCount:unavailableDays,
-   unavailableSelectedDueQueryCount:unavailableQueries});
+   unavailableSelectedDueQueryCount:unavailableQueries,...observationEvidence});
+  stage="COMPLETE_PARENT_HISTORY";
   const prior=await readP5CompleteCurrentParentHistory(historyClock,fetcher,headers);
+  stage="PRIOR_DISPATCH_CERTAINTY";
   await proveNoPriorUncertainStoredDispatch({history:prior,currentRunId:Number(env.GITHUB_RUN_ID),fetcher,headers});
+  stage="COMPLETE_CHILD_HISTORY";
   const child=await readP5CompleteGithubWorkflowHistory(historyUrl(CHILD,"workflow_dispatch",historyClock),fetcher,headers);
   previousIds=new Set(child.workflow_runs.map(x=>x.id));
   const submitted=new Set();active=0;
+  stage="EXACT_CHILD_HISTORY_RECONCILIATION";
   const eligibleHistory=await excludeP6KnownNoPhysicalStartSubmissions(child,env,fetcher,headers,digests);
   for(const x of eligibleHistory.workflow_runs){
    if(!/^P5 SOURCE [a-f0-9]{64}$/.test(x.display_title))fail("UNKNOWN_SOURCE_CHILD_TITLE");
    submitted.add(x.display_title.slice("P5 SOURCE ".length));
    if(x.status!=="completed")active++;
   }
-  proposals=proposals.filter(x=>!submitted.has(x.query_digest)).slice(0,Math.max(0,Math.min(CAP.perTickCap,CAP.inFlightCap-active)));
+  const proposedCount=proposals.length,notSubmitted=proposals.filter(x=>!submitted.has(x.query_digest));
+  proposals=notSubmitted.slice(0,Math.max(0,Math.min(CAP.perTickCap,CAP.inFlightCap-active)));
+  capacityEvidence={...observationEvidence,proposedCount,alreadySubmittedAtFinalReadCount:proposedCount-notSubmitted.length,
+   capacityDeferredCount:notSubmitted.length-proposals.length,availableInFlightSlots:Math.max(0,CAP.inFlightCap-active),
+   remainingDueNotDispatchedCount:notSubmitted.length-proposals.length};
+  stage="FINAL_CLOCK_FRESHNESS";
   if(Math.abs(now()-historyClock)>120000)fail("PRE_DISPATCH_CLOCK_STALE");
  }catch{
   // No POST occurred; ordinary preflight failure should not quarantine
   // unrelated work for hours. Explicit redacted HOLD, not success evidence.
-  return summary("HOLD_PRE_DISPATCH_NO_POST",{acknowledgedGithubChildCount:0});
+  return summary("HOLD_PRE_DISPATCH_NO_POST",{acknowledgedGithubChildCount:0,preDispatchHoldStage:stage});
  }
  const acknowledged=[];
  for(const p of proposals){
@@ -186,7 +203,7 @@ export async function runP6StoredSourceDispatcher(env,options={}){
   }catch{fail("UNKNOWN_DISPATCH_POST_NEVER_AUTO_REPLAY");}
  }
  return summary("BOUNDED_STORED_SOURCE_CHILD_DISPATCH_ACKS_NOT_PAID_RECEIPTS",{
-  activeSourceChildCountBefore:active,acknowledgedGithubChildCount:acknowledged.length,
+  ...capacityEvidence,activeSourceChildCountBefore:active,acknowledgedGithubChildCount:acknowledged.length,
   acknowledgedGithubRunIds:acknowledged,inFlightCap:CAP.inFlightCap,perTickCap:CAP.perTickCap,maxLeadMinutes:CAP.maxLeadMinutes,
   unavailableSelectedDayCount:unavailableDays,unavailableSelectedDueQueryCount:unavailableQueries});
 }

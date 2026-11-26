@@ -214,3 +214,21 @@ test("approved new executable can dispatch unchanged historical study policy, bu
  for(const bad of [{P6_PHASE5B_RUNTIME_EXECUTABLE_SHA:""},{P6_PHASE5B_RUNTIME_EXECUTABLE_SHA:"8".repeat(40)},{V39_P5_APPROVED_CODE_SHA:"9".repeat(40)},{V39_PHASE5_SOURCE_RIGHTS_APPROVED:"0"},{GITHUB_RUN_ATTEMPT:"2"}])
   assert.throws(()=>admitP6StoredSourceDispatcher({...f.env,...bad}),/NO_EXACT_INDEPENDENT/);
 });
+
+test("T057 explains safe preflight hold, already submitted work and capacity deferrals without changing dispatch authority",async()=>{
+ const f=fixture();Object.assign(f.planned,{eligibleDueUnsubmitted:6,alreadySubmittedGitHubChildren:2,deferredDueCount:2,missedOrStoppedCensored:3});
+ const m=f.mock({children:Array.from({length:24},(_,i)=>f.run(100+i,"queued","P5 SOURCE "+H("9")))});
+ const cap=await runP6StoredSourceDispatcher(f.env,{...f.options,fetchImpl:m.fetchImpl});
+ assert.equal(cap.capacityDeferredCount,4);assert.equal(cap.availableInFlightSlots,0);assert.equal(cap.eligibleDueUnsubmitted,6);
+ assert.equal(cap.deferredDueCount,2);assert.equal(cap.acknowledgedGithubChildCount,0);assert.equal(m.posts.length,0);
+ const prior=f.run(12344,"completed","parent","failure"),job={name:"separately-authorized-stored-source-children",status:"completed",conclusion:"failure",
+  steps:[{name:"Dispatch stored SOURCE exact children",conclusion:"failure"}]};
+ const uncertain=f.mock({previous:[prior],jobs:[job]});
+ const hold=await runP6StoredSourceDispatcher(f.env,{...f.options,fetchImpl:uncertain.fetchImpl});
+ assert.equal(hold.preDispatchHoldStage,"PRIOR_DISPATCH_CERTAINTY");assert.equal(uncertain.posts.length,0);
+ const absent=f.mock();const err=await runP6StoredSourceDispatcher(f.env,{...f.options,fetchImpl:absent.fetchImpl,observe:async()=>{throw Error("PRIVATE_UNSAFE_DETAIL")}});
+ assert.equal(err.preDispatchHoldStage,"SOURCE_OBSERVATION");assert(!JSON.stringify(err).includes("PRIVATE_UNSAFE_DETAIL"));
+ const dup=f.mock({children:f.inputs.map((x,i)=>f.run(10+i,"completed","P5 SOURCE "+x.query_digest,"success"))});
+ const seen=await runP6StoredSourceDispatcher(f.env,{...f.options,fetchImpl:dup.fetchImpl});
+ assert.equal(seen.alreadySubmittedAtFinalReadCount,4);assert.equal(seen.capacityDeferredCount,0);assert.equal(dup.posts.length,0);
+});
