@@ -226,7 +226,7 @@ describe("source-bound conditional service preparation",()=>{
    nativeLaterReview:{approved:true,t24Custody:protectedCustody,frameSha256:h("4"),configSha256:h("5"),builderSha256:h("9"),builderFrozenAtUtc:t("04:00"),
     runAndRetentionEvidenceSha256:h("8"),laterReviewerFingerprintSha256:h("c"),validFromUtc:t("00:00"),validUntilUtc:t("23:00"),
     selectedTConfig:{milestone:"departure.scheduledTime.utc",version:"v1",artifactHash:h("e"),verifiedProviderNativeSchedule:true,semanticsEvidenceSha256:h("7")},
-    dayAppendPolicy:{schema:"v39.phase6.delegated-later-day-append-review-policy.v1",delegatedAutomatedLaterDayAppendApproved:true,approvedCodeSha:laterCode,
+    conditionalLaterDayAppendPolicy:{schema:"v39.phase6.delegated-later-day-append-review-policy.v1",delegatedAutomatedLaterDayAppendApproved:true,approvedCodeSha:laterCode,
      manifestSha256:scope.source.manifestSha256,rightsSha256:scope.source.rightsReviewSha256,releaseSha256:scope.source.reviewedReleaseSha256,
      laterReviewerFingerprintSha256:h("c"),dayReviewerFingerprintSha256:h("d"),queryReviewerFingerprintSha256:h("f"),validFromUtc:t("00:00"),validUntilUtc:t("23:00"),
      conditionalLaterPreScope:{...conditionalScope,independentlyApprovedStandaloneProtocolSha256:h("b")}}}};
@@ -247,7 +247,7 @@ describe("source-bound conditional service preparation",()=>{
   expect(verified.privatePrepared[0].privatePermit.reviewedStandaloneLaterNoT24?.missingT24Class).toBe("HONEST_T24_UNOBSERVED_NOT_BACKFILLED");
   expect((await issueLater(laterPolicy,true)).privateWire).toBeNull();
   const witnessedOnly={...laterPolicy,conditionalLaterPermitReview:{...laterPolicy.conditionalLaterPermitReview,standaloneNoT24ProtocolSha256:null},
-   nativeLaterReview:{...laterPolicy.nativeLaterReview,dayAppendPolicy:{...laterPolicy.nativeLaterReview.dayAppendPolicy,conditionalLaterPreScope:conditionalScope}}};
+   nativeLaterReview:{...laterPolicy.nativeLaterReview,conditionalLaterDayAppendPolicy:{...laterPolicy.nativeLaterReview.conditionalLaterDayAppendPolicy,conditionalLaterPreScope:conditionalScope}}};
   expect((await issueLater(witnessedOnly)).privateWire).toBeNull();
   await expect(issueLater({...laterPolicy,conditionalLaterPermitReview:undefined})).rejects.toThrow(/EXACT_CONDITIONAL_LATER_DELEGATION_REQUIRED/);
   await expect(issueLater({...laterPolicy,conditionalLaterPermitReview:{...laterPolicy.conditionalLaterPermitReview,standaloneNoT24ProtocolSha256:h("a")}})).rejects.toThrow(/EXACT_CONDITIONAL_LATER_DELEGATION_REQUIRED/);
@@ -439,7 +439,7 @@ describe("source-bound conditional service preparation",()=>{
   const signingPolicy={...laterPolicy,calendarSha256:signingTrust.calendarSha256,
    conditionalLaterPermitReview:{...laterPolicy.conditionalLaterPermitReview,reviewerFingerprintSha256:permitAuthority.expectedReviewerFingerprintSha256},
    nativeLaterReview:{...laterPolicy.nativeLaterReview,privatePublicationApproved:true,maximumPrivateRetentionHours:24,
-    laterReviewerFingerprintSha256:reviewerFp,dayAppendPolicy:{...laterPolicy.nativeLaterReview.dayAppendPolicy,
+    laterReviewerFingerprintSha256:reviewerFp,conditionalLaterDayAppendPolicy:{...laterPolicy.nativeLaterReview.conditionalLaterDayAppendPolicy,
      calendarSha256:signingTrust.calendarSha256,laterReviewerFingerprintSha256:reviewerFp}}};
   const signingScope={expectedSourceRegistrySha256:hd(srcBytes),sourceRegistryFilePath:reg.sourceDayRegistryFilePath,
    expectedSourceReviewEvidenceSha256:h("5"),proposedLaterRegistryFilePath:rp.registryFilePath,shardIndex:1,
@@ -458,7 +458,7 @@ describe("source-bound conditional service preparation",()=>{
   expect(()=>issueRegistry(signingPolicy,{}, {...shared})).toThrow("ACTUAL_RESOLVED_CONDITIONAL_PAGE_REQUIRED");
   expect(()=>issueRegistry(signingPolicy,{retentionNotAfterUtc:"2035-11-26T00:00:00.000Z"})).toThrow("CLOCK_OR_RETENTION");
   expect(()=>issueRegistry(signingPolicy,{observedDbClockUtc:t("05:46")})).toThrow("MEMBER_SCOPE_OR_LEAD");
-  expect(()=>issueRegistry({...signingPolicy,nativeLaterReview:{...signingPolicy.nativeLaterReview,dayAppendPolicy:{...signingPolicy.nativeLaterReview.dayAppendPolicy,conditionalLaterPreScope:undefined}}})).toThrow("POLICY_SCOPE");
+  expect(()=>issueRegistry({...signingPolicy,nativeLaterReview:{...signingPolicy.nativeLaterReview,conditionalLaterDayAppendPolicy:{...signingPolicy.nativeLaterReview.conditionalLaterDayAppendPolicy,conditionalLaterPreScope:undefined}}})).toThrow("POLICY_SCOPE");
   const {conditionalPreScope:_scope,...legacyReview}=externalReview;
   expect(()=>check({...signed,signatureBase64:wireFor(legacyReview).signatureBase64})).toThrow("EXTERNAL_REVIEW_SIGNATURE_INVALID");
   // T047 synthetic T24 signed transport/witness metadata, not a real PRE.

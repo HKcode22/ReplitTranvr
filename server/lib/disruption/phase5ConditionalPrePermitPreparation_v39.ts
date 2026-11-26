@@ -424,7 +424,7 @@ export async function issueP5ConditionalLaterSignedReviewPage(
    hash(createPublicKey(input.signer).export({format:"der",type:"spki"}))!==input.expectedReviewerFingerprintSha256)
   return hold("INDEPENDENT_LATER_ISSUER_KEY");}catch{return hold("INDEPENDENT_LATER_ISSUER_KEY");}
  let p:any;try{p=JSON.parse(input.policyBytes.toString("utf8"));}catch{return hold("EXACT_CONDITIONAL_LATER_DELEGATION_REQUIRED");}
- const v=p?.nativeLaterReview,d=p?.conditionalLaterPermitReview,f=p?.conditionalPreFeatureReview,cfg=v?.selectedTConfig,day=v?.dayAppendPolicy,cs=day?.conditionalLaterPreScope;
+ const v=p?.nativeLaterReview,d=p?.conditionalLaterPermitReview,f=p?.conditionalPreFeatureReview,cfg=v?.selectedTConfig,day=v?.conditionalLaterDayAppendPolicy,cs=day?.conditionalLaterPreScope;
  const standalone=d?.standaloneNoT24ProtocolSha256;
  const keys=["schema","approved","protocolSha256","externalContentUseReviewSha256","reviewerFingerprintSha256","reportedScheduleSemanticsSha256","validFromUtc","validUntilUtc","standaloneNoT24ProtocolSha256"];
  if(p?.schema!=="v39.phase6.delegated-daily-source-review-policy.v1"||p.delegatedDailyPacketProductionApproved!==true||

@@ -830,7 +830,7 @@ export function signP6DelegatedConditionalLaterRegistry({page,sourceRegistryByte
     page.privateAttachedPackets.length>96)
   fail("DELEGATED_CONDITIONAL_LATER_EXACT_PAGE_OR_POLICY");
  let p;try{p=JSON.parse(authority.policyBytes.toString("utf8"));}catch{fail("DELEGATED_CONDITIONAL_LATER_POLICY");}
- const v=p.nativeLaterReview,d=p.conditionalLaterPermitReview,f=p.conditionalPreFeatureReview,day=v?.dayAppendPolicy;
+ const v=p.nativeLaterReview,d=p.conditionalLaterPermitReview,f=p.conditionalPreFeatureReview,day=v?.conditionalLaterDayAppendPolicy;
  const conditionalPreScope={protocolSha256:b.protocolSha256,externalContentUseReviewSha256:b.externalContentUseReviewSha256,
   ...(b.standaloneProtocolSha256===undefined?{}:{independentlyApprovedStandaloneProtocolSha256:b.standaloneProtocolSha256})};
  if(p.schema!=="v39.phase6.delegated-daily-source-review-policy.v1"||p.delegatedDailyPacketProductionApproved!==true||
