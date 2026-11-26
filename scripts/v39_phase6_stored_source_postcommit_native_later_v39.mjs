@@ -180,6 +180,11 @@ export function p6NativeLaterReadbackDiagnostics(actual,handoff,features,t24Appr
  });
  const observed=count(actual?.observedMemberCount),native=count(actual?.candidateCount),
   review=count(handoff?.reviewEntryCount),matched=count(features?.matchedCount);
+ const conditional=actual?.conditionalSourceReview;
+ const conditionalMembers=count(conditional?.stage14MatchedMembershipCount);
+ const conditionalDrafts=count(conditional?.featureReview?.featureDraftCount);
+ const conditionalStatus=conditionalDrafts===null?"NOT_MEASURED":conditionalDrafts>0?
+  "CONDITIONAL_DRAFTS_AWAIT_INDEPENDENT_PERMIT_REVIEW_AND_REGISTRY":"NO_CONDITIONAL_FEATURE_DRAFTS";
  const reason=review===0?(observed===0?"NO_OBSERVED_MEMBERS":native===0?"NO_ELIGIBLE_NATIVE_CANDIDATES":"NO_PENDING_REVIEW_ENTRIES"):
   matched===0?"NO_MATCHED_NATIVE_FEATURES":
   !features?"NO_FEATURE_REVIEW_RESULT":
@@ -188,6 +193,8 @@ export function p6NativeLaterReadbackDiagnostics(actual,handoff,features,t24Appr
   censoredMemberCount:count(actual?.censoredCount),reviewEntryCount:review,matchedFeatureCount:matched,
   unsupportedNativeIdentityCount:count(features?.unsupportedNativeIdentityCount),
   classifications:counts,pendingLaterReview:pending,timingSensitivityOnly:sensitivity,
+  conditionalMatchedMembershipCount:conditionalMembers,conditionalFeatureDraftCount:conditionalDrafts,
+  conditionalPublicationStatus:conditionalStatus,conditionalRegistryPublicationAttempted:false,
   sourceAuditOnlyReason:reason,policyChanged:false};
 }
 export async function runP6NativeLaterRuntime(env,phase7ProofPort){

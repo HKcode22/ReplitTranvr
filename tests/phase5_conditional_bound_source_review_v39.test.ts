@@ -4,7 +4,7 @@ import {createHash} from "node:crypto";
 import {describe,it,expect} from "vitest";
 import {addCanonicalFidsEnvelopeHashV39} from "../server/lib/disruption/fidsEnvelopeCanonical_v39";
 import {readP7ExactConditionalSelectedFeaturesPage,readP7ReviewedTierSelectedFeaturesPage,requireP7ActualSourceReadback} from "../server/lib/disruption/phase7IndependentPreSourceReader_v39";
-import {digestP5ConditionalPermitEvidence,prepareP5ConditionalPrePermitForIndependentSigning,prepareP5ConditionalPrePermitPageForIndependentSigning,buildP5ConditionalPrePacketPreview,attachP5ConditionalPreFieldProof} from "../server/lib/disruption/phase5ConditionalPrePermitPreparation_v39";
+import {digestP5ConditionalPermitEvidence,prepareP5ConditionalPrePermitForIndependentSigning,prepareP5ConditionalPrePermitPageForIndependentSigning,buildP5ConditionalPrePacketPreview,buildP5ConditionalPreProofPage,attachP5ConditionalPreFieldProof} from "../server/lib/disruption/phase5ConditionalPrePermitPreparation_v39";
 import {generateKeyPairSync,sign} from "node:crypto";
 import {hashPhase7DurableCandidate} from "../server/lib/disruption/phase7DurableDerivedBundleCandidate_v39";
 import {verifyP5ConditionalQueuePacket} from "../server/lib/disruption/phase5ConditionalPreQueuePacket_v39";
@@ -209,7 +209,18 @@ describe("source-bound conditional service preparation",()=>{
    P6_PHASE7_PRE_PRESERVATION_POLICY_SHA256:policySha,P6_PHASE7_PRE_PROOF_REVIEWER_FINGERPRINT_SHA256:hd(keys.publicKey.export({type:"spki",format:"der"})),P6_PHASE7_PRE_PROOF_REVIEWER_PUBLIC_KEY_BASE64:Buffer.from(keys.publicKey.export({type:"spki",format:"pem"})).toString("base64")};
   const meta=Buffer.from(JSON.stringify({schema:"v39.phase7.separate-pre-field-proof.v1",manifestSha256:p.manifestSha256,rightsSha256:p.expectedReviewedSourceRightsSha256,policySha256:policySha,permitSha256:hashPhase7DurableCandidate(preview.packet.prePermit),issuedAtUtc:t("05:04"),validUntilUtc:t("06:00"),fields:[]}));
   const wire={payloadBase64:meta.toString("base64"),signatureBase64:sign(null,meta,keys.privateKey).toString("base64")};
-  const packet=attachP5ConditionalPreFieldProof(preview,env,policySha,[],wire);
+  // T041: same actual independently prepared member enters the shared
+  // bounded proof interface; never expose the private packet in JSON.
+  const proofPage=buildP5ConditionalPreProofPage(page.privatePrepared);
+  expect(proofPage).toMatchObject({phase7ProofPreviewOnly:true,signatureIssued:false,packetCount:1,providerCalls:0,databaseWrites:0,phase6PaidGo:false});
+  expect(proofPage.privateCompletedPackets[0].completed.packet.prePermit).toEqual(built.privatePermit);
+  expect(Object.getOwnPropertyDescriptor(proofPage,"privateCompletedPackets")?.enumerable).toBe(false);
+  expect(JSON.stringify(proofPage)).not.toMatch(/SQ78|privateCompletedPackets|SIA/);
+  expect(()=>buildP5ConditionalPreProofPage([])).toThrow("EXACT_PROOF_PAGE_SCOPE");
+  expect(()=>buildP5ConditionalPreProofPage([built,built])).toThrow("EXACT_PROOF_PAGE_SCOPE");
+  expect(()=>buildP5ConditionalPreProofPage(Array(97).fill(built))).toThrow("EXACT_PROOF_PAGE_SCOPE");
+  expect(()=>buildP5ConditionalPreProofPage([{...built}])).toThrow("ACTUAL_PREPARED_PERMIT_REQUIRED");
+  const packet=attachP5ConditionalPreFieldProof(proofPage.privateCompletedPackets[0].completed,env,policySha,[],wire);
   expect(packet.packetSha256).toBe(hd(packet.packetBytes));
   expect(JSON.stringify(packet)).not.toMatch(/SQ78|payloadBase64|privatePermit/);
   const release={schema:"v39.phase5.cd-gh-pre-explicit-release.v1" as const,releaseMode:"PHASE6_APPROVED" as const,approvedCodeSha:review.reviewedCodeSha,

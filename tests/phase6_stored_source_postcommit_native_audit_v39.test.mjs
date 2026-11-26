@@ -150,6 +150,17 @@ test("same-child later PRE reports count-only funnel and lead sensitivity even w
  assert.equal(x.classifications.CENSORED_NO_PROSPECTIVE_PRE_LEAD,10);
  assert.deepEqual(x.timingSensitivityOnly.map(y=>y.eligible),[0,7,10]);
  assert.equal(x.policyChanged,false);
+ assert.equal(x.conditionalPublicationStatus,"NOT_MEASURED");
+ const separate=p6NativeLaterReadbackDiagnostics({...a,conditionalSourceReview:{
+  stage14MatchedMembershipCount:4,featureReview:{featureDraftCount:3},privateIdentity:"SECRET"
+ }},{reviewEntryCount:0,horizon:"T-6h"},null,true);
+ assert.equal(separate.sourceAuditOnlyReason,"NO_ELIGIBLE_NATIVE_CANDIDATES");
+ assert.equal(separate.conditionalMatchedMembershipCount,4);
+ assert.equal(separate.conditionalFeatureDraftCount,3);
+ assert.equal(separate.conditionalPublicationStatus,"CONDITIONAL_DRAFTS_AWAIT_INDEPENDENT_PERMIT_REVIEW_AND_REGISTRY");
+ assert.equal(separate.conditionalRegistryPublicationAttempted,false);
+ assert(!JSON.stringify(separate).includes("SECRET"));
+ assert.equal(p6NativeLaterReadbackDiagnostics({...a,conditionalSourceReview:{featureReview:{featureDraftCount:0}}},{reviewEntryCount:0},null,true).conditionalPublicationStatus,"NO_CONDITIONAL_FEATURE_DRAFTS");
  assert(!JSON.stringify(x).includes("SECRET"));
  assert.equal(p6NativeLaterReadbackDiagnostics({observedMemberCount:0,candidateCount:0},{reviewEntryCount:0},null,true).sourceAuditOnlyReason,"NO_OBSERVED_MEMBERS");
  assert.equal(p6NativeLaterReadbackDiagnostics({observedMemberCount:4,candidateCount:2},{reviewEntryCount:0},null,true).sourceAuditOnlyReason,"NO_PENDING_REVIEW_ENTRIES");

@@ -171,6 +171,29 @@ export function buildP5ConditionalPrePacketPreview(prepared:ReturnType<typeof co
   {packet:{value:packet,enumerable:false},packetBytes:{value:packetBytes,enumerable:false}})) as {status:string;packetSha256:string;providerCalls:number;databaseWrites:number;phase6PaidGo:boolean;readonly packet:typeof packet;readonly packetBytes:Buffer};
  previews.add(out);return out;
 }
+/** Bounded adapter to the existing independent proof-publication port.
+ * Only genuine prepared permits can enter; no registry signature is issued.
+ * Keep all flight identities and packet bytes in the nonenumerable handoff. */
+export function buildP5ConditionalPreProofPage(prepared:readonly ReturnType<typeof constructFromBound>[]){
+ if(!Array.isArray(prepared)||prepared.length<1||prepared.length>96)return hold("EXACT_PROOF_PAGE_SCOPE");
+ const packets=prepared.map(buildP5ConditionalPrePacketPreview);
+ const permits=packets.map(x=>x.packet.prePermit);
+ const first=permits[0];
+ if(!first||new Set(permits.map(p=>p.flightInstanceId)).size!==permits.length||
+  permits.some(p=>p.manifestSha256!==first.manifestSha256||p.runDayIndex!==first.runDayIndex||
+   p.horizon!==first.horizon||p.queryDigestSha256!==first.queryDigestSha256||
+   p.expectedSourceResponseSha256!==first.expectedSourceResponseSha256||
+   p.expectedSourcePopulationQueryId!==first.expectedSourcePopulationQueryId||
+   p.expectedReviewedSourceRightsSha256!==first.expectedReviewedSourceRightsSha256||
+   p.reviewedProtocolAmendmentSha256!==first.reviewedProtocolAmendmentSha256))
+  return hold("EXACT_PROOF_PAGE_SCOPE");
+ const completed=Object.freeze(packets.map(p=>Object.freeze({completed:p})));
+ const result={phase7ProofPreviewOnly:true as const,signatureIssued:false as const,providerCalls:0 as const,databaseWrites:0 as const,
+  phase6PaidGo:false as const,packetCount:packets.length};
+ return Object.freeze(Object.defineProperty(result,"privateCompletedPackets",{value:completed,enumerable:false})) as typeof result&{
+  readonly privateCompletedPackets:typeof completed};
+}
+
 /** Existing independent field-proof verification is reused before the
  * separately authenticated registry signer can sign the packet digest. */
 export function attachP5ConditionalPreFieldProof(preview:ReturnType<typeof buildP5ConditionalPrePacketPreview>,
