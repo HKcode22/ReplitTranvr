@@ -84,6 +84,11 @@ export function admitP5GitHubOneQueryRelease(
   hold("PHASE5_SOURCE_RIGHTS_OR_SELECTED_DRAW_NOT_SIGNED");
  if(payload.plan?.day1LaterRecovery&&payload.plan.day1LaterRecovery.manifestSha256!==payload.manifestSha256)
    hold("DAY1_LATER_SOURCE_MANIFEST_MISMATCH");
+ const conditional=payload.plan?.conditionalService;
+ if(conditional!==undefined&&(!conditional||conditional.reviewedConditionalServiceScope!==true||
+   !SHA.test(conditional.protocolSha256??"")||
+   conditional.protocolSha256!==env.P6_CONDITIONAL_SERVICE_PROTOCOL_SHA256))
+  hold("UNAPPROVED_CONDITIONAL_SERVICE_PROTOCOL_PIN");
  const range=payload.plan?.sourcePartition;
  // A signed JSON SHA is only integrity. Range permission has separate
  // independently reviewed evidence, carried as restricted GH secrets.
