@@ -17,7 +17,7 @@ import {makeP5Stage28DedicatedRolePool} from "./phase5Stage28DedicatedRolePool_v
 import {P5_E_V0079_SOURCE_READONLY_LOGIN_V39} from "./phase5AmendmentEOriginalFidsReadonlyCompiler_v39";
 import {admitP7ExactSourcePreProducer,readP7RestrictedSourceClock} from "./phase7ExactSourcePreProofProducer_v39";
 import {readP7ExactSelectedFeatures,readP7ExactSelectedFeaturesPage,requireP7ActualSourceReadback} from "./phase7IndependentPreSourceReader_v39";
-import {verifyP7NoaaExactPreLaneEvidence,type P7SignedPublicNoaaArtifact} from "./phase7IndependentNoaaReceipt_v39";
+import {verifyP7NoaaExactPreLaneEvidence,readP7WeatherOnlyForPresentPermit,type P7SignedPublicNoaaArtifact} from "./phase7IndependentNoaaReceipt_v39";
 import {admitPurposeBoundReferenceIdentifier} from "./phase7PurposeBoundReferenceIdentifier_v39";
 import {assertP7IndependentLaneReceiptMetadata,type Phase7AuthenticatedLaneReceipt} from "./phase7IndependentPreProofIssuer_v39";
 import {phase7SelectedFeatureDigest} from "./phase7SignedPreFieldProof_v39";
@@ -132,13 +132,13 @@ export function openP7ActualPreLaneEvidenceAuthority(env:NodeJS.ProcessEnv,signe
  const underlying=new Pool({connectionString:a.sourceUrl,max:1,connectionTimeoutMillis:8000,query_timeout:25000,application_name:"p7_actual_pre_lane_authority",options:"-c default_transaction_read_only=on"});
  const pool=makeP5Stage28DedicatedRolePool(underlying,{group:"source",reviewedDedicatedLogin:P5_E_V0079_SOURCE_READONLY_LOGIN_V39,forbiddenApplicationLogin:"phase5_runtime_application_login"});
  return {async issueExactLaneReceipt(p:Readonly<P5Stage14SingleFlightPrePermit>){
-  const weather=weatherPort?await weatherPort.readExactReviewedWeatherArtifacts(p):[];
+  const weather=await readP7WeatherOnlyForPresentPermit(p,weatherPort);
   const actual=await readP7ExactSelectedFeatures(pool,p,a.externalContentUseReviewSha256);
   return signP7ActualPreLaneReceipt({env,signer,termsReviewSha256:a.policy.profile.termsReviewSha256,dispositions:a.policy.dispositions,referencePolicy},p,actual,weather);
  },async issueExactLaneReceiptPage(permits:readonly P5Stage14SingleFlightPrePermit[]){
   if(!Array.isArray(permits)||permits.length<1||permits.length>96)hold("EXACT_AUTHORITY_PAGE");
   const weather: (readonly P7SignedPublicNoaaArtifact[])[]=[];
-  for(const p of permits)weather.push(weatherPort?await weatherPort.readExactReviewedWeatherArtifacts(p):[]);
+  for(const p of permits)weather.push(await readP7WeatherOnlyForPresentPermit(p,weatherPort));
   const actual=await readP7ExactSelectedFeaturesPage(pool,permits,a.externalContentUseReviewSha256);
   const config={env,signer,termsReviewSha256:a.policy.profile.termsReviewSha256,dispositions:a.policy.dispositions,referencePolicy};
   return permits.map((p,i)=>signP7ActualPreLaneReceipt(config,p,actual[i],weather[i]));

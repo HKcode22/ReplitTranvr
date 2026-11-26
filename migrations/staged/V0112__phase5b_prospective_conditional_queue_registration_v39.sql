@@ -20,11 +20,11 @@ DECLARE
     r.raw_payload->>'phase5PopulationIdentityVersion' AS identity_version,
     r.raw_payload->'fidsRequestContract' AS request_contract,
     r.raw_payload IS NOT NULL AND r.raw_expired_at_utc IS NULL$new$;
- old_member constant text := $old$    m.response_hash,m.provider_content_expired_at_utc,
-    m.available_at,m.dep_scheduled_utc,m.population_member_id$old$;
- new_member constant text := $new$    m.response_hash,m.provider_content_expired_at_utc,
-    m.available_at,m.dep_scheduled_utc,m.population_member_id,
-    m.arr_airport_icao,m.flight_number,m.query_direction$new$;
+ old_member constant text := $old$   m.response_hash,m.provider_content_expired_at_utc,
+   m.available_at,m.dep_scheduled_utc,m.population_member_id$old$;
+ new_member constant text := $new$   m.response_hash,m.provider_content_expired_at_utc,
+   m.available_at,m.dep_scheduled_utc,m.population_member_id,
+   m.arr_airport_icao,m.flight_number,m.query_direction$new$;
  old_predicate constant text := $old$   member.scope_classification<>'confirmed_core' OR
    member.codeshare_resolution_status<>'confirmed_operating_leg' OR$old$;
  new_predicate constant text := $new$   NOT COALESCE((
