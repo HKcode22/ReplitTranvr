@@ -52,3 +52,11 @@ export function sourceDbDiagnosticLabel(error){
  };
  return Object.hasOwn(known,m)?known[m]:postDiagnostic("SOURCE_HINT_SCAN",error).category;
 }
+
+// Outer transport diagnostics: fixed stage and SQL category only. Never echo
+// arbitrary exceptions, private packet paths, digests, or response bodies.
+const SOURCE_CHILD_STAGES=new Set(["ADMISSION","READER_CONNECT","READER_ROLE","SIGNED_DAY_READ","SIGNED_DAY_VERIFY","SIGNED_ROUTE_BIND","SIGNED_QUERY_READ","SIGNED_QUERY_VERIFY","READER_CLOSE","ROUTE_BINDING","ORIGINAL_ADMISSION","ORIGINAL_SUBPROCESS","EPHEMERAL_CLEANUP"]);
+export function sourceChildFailureDiagnostic(stage,error){
+ if(!SOURCE_CHILD_STAGES.has(stage))throw Error("UNKNOWN_SOURCE_CHILD_DIAGNOSTIC_STAGE");
+ return Object.freeze({status:"P6_SOURCE_CHILD_FAILURE_DIAG_NO_PROVIDER_CONTENT",stage,category:sourceDbDiagnosticLabel(error)});
+}

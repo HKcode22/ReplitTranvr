@@ -42,3 +42,5 @@ Read [the permanent recovery register](data-collection/phase6/RECOVERY_REGISTER.
 
 
 **Experiment chronology clarification (owner, 2026-11-26):** Day 1 of the paid one-month experiment is November 23, 2026 Pacific. Preserve prelaunch November 3–22 defects as historical regression precedents with existing IDs; do not include them in paid-study loss counts. Record actual study recurrences separately, without calendar changes or retrospective reconstruction.
+
+**Permanent test IDs (owner reaffirmed 2026-11-26):** T### identifies one regression scenario in RECOVERY_REGISTER.md. Keep IDs immutable; link F/I/C and exact test/workflow files, record positive and negative acceptance criteria, and distinguish existing partial fixtures from complete end-to-end tests and exact-head/production evidence. All F IDs must have at least one T scenario; missing acceptance stays open, never mark repaired solely from a mapped test.

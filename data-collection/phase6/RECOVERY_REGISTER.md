@@ -2,7 +2,7 @@
 
 Working branch: phase5b/20261125-1610-custody-identity-reconciliation, [PR #976](https://github.com/HKcode22/ReplitTranvr/pull/976), [master #413](https://github.com/HKcode22/ReplitTranvr/issues/413). Baseline Nov26 02:04 PST: production main 1ce885f1, relay 87949484, paid SOURCE/POST paused, exact prior candidate 3327ff5d 42/42 CI success. This is an initial evidence-linked index, not exhaustive review of all 627 issue comments or all historical workflows.
 
-F = failure family or evidenced defect; I = corrective implementation; C = incomplete component, not a new gate. IDs permanent, consecutive, never renumber or delete. Recurrence updates existing F; new distinct cause gets next ID. Link actual checkpoint, commit, job and production evidence. Historical loss is irreversible. Tested is not deployed; deployed is not end-to-end proven. No new branches or closed gates without substantive evidence.
+F = failure family or evidenced defect; I = corrective implementation; C = incomplete component, not a new gate; T = regression scenario and acceptance evidence. IDs permanent, consecutive, never renumber or delete. Recurrence updates existing F; new distinct cause gets next ID. Link actual checkpoint, commit, job and production evidence. Historical loss is irreversible. Tested is not deployed; deployed is not end-to-end proven. No new branches or closed gates without substantive evidence.
 
 **Experiment Day 1 is November 23, 2026 (Pacific owner correction, Nov26).** November 3–22 failures are prelaunch historical regression evidence, not losses of the one-month paid experiment. Keep their stable IDs and distinguish any recurrence on or after Nov23. Do not rewrite the signed calendar or historical outcomes.
 
@@ -12,7 +12,7 @@ F = failure family or evidenced defect; I = corrective implementation; C = incom
 |---|---|---|---|
 | F001 | Historical repaired | Nov3 cron and job predicate drift, plus independently missed GitHub schedule. [Checkpoint](../phase4/2026-11-03_GATE5_G5A_MISSED_T24_REAL_ACTIONS_RECOVERY.md) | I001 |
 | F002 | Historical repaired | Nov4 idle PG 57P01 and prearm cancellation. [Checkpoint](../phase4/2026-11-04_G5A_T24_CANCELLED_RUN_HEARTBEAT_RECOVERY.md) | I002 |
-| F003 | Historical loss | Nov4 and Nov24 reservations without bound originals, generic failure; HTTP/billing not proved by reservation. [Checkpoint](../phase4/2026-11-04_G5A_ZERO_SOURCE_T24_INCIDENT_AND_BUDGET_PROTECTION.md) | I003, I009, I010, I013 |
+| F003 | Historical loss | Nov4 and Nov24 reservations without bound originals, generic failure; HTTP/billing not proved by reservation. [Checkpoint](../phase4/2026-11-04_G5A_ZERO_SOURCE_T24_INCIDENT_AND_BUDGET_PROTECTION.md) | I003, I009, I010, I013, I030 |
 | F004 | Historical repaired | Nov4 expired foreign cohort blocked PREPARED owner; empty DB tests missed this. [Checkpoint](../phase4/2026-11-04_G5A_PREARM_FOREIGN_COHORT_ROOT_CAUSE_AND_BOUNDARY_REPAIR.md) | I004 |
 | F005 | Open recurring | Nov5 and Nov25–26 native ID/explicit origin/scope evidence missing, zero native PRE. Synthetic provider IDs hid failure. [Nov5](../phase4/2026-11-05_G5A_IDLESS_OPERATOR_CRITICAL_SCIENCE_FIX_NEXT_COHORT.md), [Nov26](checkpoints/2026-11-26_0152_PST_PHASE5B_OWNER_CENSUS_AND_QUEUE_REPAIR.md) | I005, I014, I015, I016 |
 | F006 | Historical repaired | Nov12 unreachable T24 scheduling branch. [Checkpoint](../phase5/2026-11-12_T24_SCHEDULE_UNREACHABLE_BRANCH_AND_EXCLUSIVE_AUTOMATION_REPAIR.md) | I001 |
@@ -26,7 +26,7 @@ F = failure family or evidenced defect; I = corrective implementation; C = incom
 | F014 | Production mitigated | Nov24 executable SHA vs immutable policy anchor mismatch before paid step. [Checkpoint](checkpoints/2026-11-24_1819_PST_PHASE5B_SOURCE_ROLE_SUCCESSOR_INCIDENT.md) | I010 |
 | F015 | Production observed | Nov25 cutover lacked exact-main full two-job retention baseline. [Checkpoint](checkpoints/2026-11-25_0007_PST_PHASE5B_CUSTODY_PAIR_AND_RATE_LIMIT_REPAIR.md) | I011 |
 | F016 | Mitigated unproven | Nov24–25 HTTP 429 concurrent SOURCE waves, pacing fallback. [Checkpoint](checkpoints/2026-11-25_1549_PST_T6_SOURCE_RESPONSE_AND_PACING_INCIDENT.md) | I012 |
-| F017 | Open | Nov24–25 HTTP_OK then FIDS_BODY_UNAVAILABLE, older 204/205 masked; exact old transport causes unknown. [Checkpoint](checkpoints/2026-11-25_1549_PST_T6_SOURCE_RESPONSE_AND_PACING_INCIDENT.md) | I013 |
+| F017 | Open | Nov24–25 HTTP_OK then FIDS_BODY_UNAVAILABLE, older 204/205 masked; exact old transport causes unknown. [Checkpoint](checkpoints/2026-11-25_1549_PST_T6_SOURCE_RESPONSE_AND_PACING_INCIDENT.md) | I013, I030 |
 | F018 | Partial branch repair | Native-only signer/normalizer/witness/registration reject existing conditional tier. [Checkpoint](checkpoints/2026-11-26_0152_PST_PHASE5B_OWNER_CENSUS_AND_QUEUE_REPAIR.md) | I014, I015, I016 |
 | F019 | Tested branch | Conditional reader staleness measured from binding rather than availability; signed window/member clock mismatch. [Commit](https://github.com/HKcode22/ReplitTranvr/commit/0731789d16675d012d42cd68ba8c49d3c898bf23) | I017 |
 | F020 | Tested branch | Stage14 cutoff-specific duplicate check admitted possible retimed second PRE. [Commit](https://github.com/HKcode22/ReplitTranvr/commit/23b02b489db71d331efe1f8b9da95c67f4c1fd07) | I018 |
@@ -77,6 +77,7 @@ F = failure family or evidenced defect; I = corrective implementation; C = incom
 | I027 | Implemented; exact CI pending | Scope primary identifier parsing to three canonical sections; reject duplicates, malformed rows, wrong family and missing sections; regress repeated crosswalk IDs. [Commit](https://github.com/HKcode22/ReplitTranvr/commit/4d00959c389dfd08fafc0bf2050525ed75c34837) | F032 |
 | I028 | Implemented; CI pending | Reconcile private candidate report, member proposals and draft counts to final database clock; reject stale direct member match, preserve cutoff and source custody, add positive and exact-boundary regression. | F033 |
 | I029 | Implemented; CI pending | Explicit separately scoped independent conditional exact permit-page read, using existing authentic marked-source reader, Stage14 checks and Phase7 feature drift recomputation; test wrong scope, omitted features, late and positive paths. Not wired to active signer or deployed. | F027 |
+| I030 | Implemented; CI pending | Fixed-stage outer SOURCE reader/admission/subprocess/cleanup diagnostics with bounded SQL category; preserve redaction, no replay and existing exception boundaries. | F003, F017 |
 
 ## Completion components (not gates)
 
@@ -91,6 +92,37 @@ F = failure family or evidenced defect; I = corrective implementation; C = incom
 | C007 | Open | Bulk exact-head cutover and safe resumed paid collection | F026 | I008, I011, I023 |
 | C008 | Open | Missingness, representativeness, no leakage and 31-day split audit | F005, F026, F029 | I018, I020 |
 | C009 | Open | Remove redundant runtime dependencies and isolate failures without weakening custody | F007, F021, F023, F024 | I006, I019, I021, I022 |
+
+## Regression tests
+
+T IDs are permanent scenarios, not claims of passing CI. Each references existing test files or workflows; **open end-to-end acceptance** rows list partial fixtures, not a completed integration test. Production acceptance always needs separate evidence. Do not increment a T ID for a recurrence of the same scenario.
+
+| ID | Status | Scenario and acceptance | Failure IDs | Implementation IDs | Component IDs | Test / workflow paths |
+|---|---|---|---|---|---|---|
+| T001 | Existing historical regression | Cron cadence and clock ownership, never equate green dispatch with execution | F001, F006, F007, F009 | I001, I006, I007 | C009 | tests/phase6_autonomous_github_controller_heartbeat_v39.test.mjs; tests/phase6_direct_recovery_tick_v39.test.mjs |
+| T002 | Existing historical regression | Bounded recovery after connection interruption; no uncertain write replay | F002, F008 | I002, I006 | C009 | tests/phase6_rolling_failure_journal_v39.test.mjs; tests/phase6_rolling_failure_readback_v39.test.mjs |
+| T003 | Existing regression; live evidence required | Reservation versus original binding, never charge/replay uncertain source | F003, F017, F026 | I003, I013, I020, I030 | C006, C008 | tests/phase5b_source_diagnostics_v39.test.mjs; tests/phase6_private_source_one_original_child_github_v39.test.ts |
+| T004 | Existing historical regression | Expired foreign cohort cannot block current owner; historical records preserved | F004 | I004 | C005 | tests/phase5_stage9_v0082_atomic_segmented_pg16_v39.test.ts |
+| T005 | Existing regression; end-to-end open | Positive operator ID-less service matches marked original; no physical native claim | F005, F018, F030 | I005, I014, I024 | C001, C002 | tests/phase5_conditional_fids_service_recovery_v39.test.ts; tests/phase5_conditional_bound_source_review_v39.test.ts |
+| T006 | Existing regression | Signed flags and exact launch approval required; no unreviewed spend | F010 | I008 | C007 | tests/phase6_source_enable_approval_ledger_v39.test.ts; tests/phase6_direct_recovery_tick_v39.test.mjs |
+| T007 | Existing PG16 regression; production readback separate | Restricted SOURCE writer/trigger and POST metadata privileges; actual transaction required | F011, F012, F013 | I009 | C005, C006 | tests/phase5_stage14_bound_flight_pre_real_pg_v39.test.ts; tests/phase5_cd_v0088_existing_stage14_real_v0087_queue_pg16_v39.test.ts |
+| T008 | Existing regression; production binding separate | Immutable study anchor and executable successor distinct; role projection cannot leak other credentials | F014 | I010 | C007 | tests/phase7_local_private_pre_handoff_v39.test.ts; tests/phase7_post_actor_preflight_v39.test.ts |
+| T009 | Existing regression; full production baseline required | Exact retention expiry execution and independent source custody | F015, F022 | I011, I020 | C007, C008 | tests/fids_population_retention_v39.test.ts; tests/phase5_retention_metadata_private_readonly_sentinel_v39.test.mjs |
+| T010 | Existing regression; actual HTTP cause unknown | Rate status and finite body availability: no fabricated empty original, no extra physical GET | F016, F017 | I012, I013 | C006 | tests/phase5b_fids_response_diagnostics_v39.test.ts; tests/phase5b_source_diagnostics_v39.test.mjs |
+| T011 | Existing PG16 regression; deployment pending | Separate conditional T24 witness and scoped queue enrollment; no native or physical substitution | F018, F005 | I015, I016 | C005 | tests/phase5_stage14_bound_flight_pre_real_pg_v39.test.ts; tests/phase5_cd_v0088_existing_stage14_real_v0087_queue_pg16_v39.test.ts |
+| T012 | Focused CI passed on 5936e6d | Original availability versus binding, minimum review lead, final-clock candidate/draft parity | F019, F033 | I017, I028 | C002 | tests/phase5_conditional_bound_source_review_v39.test.ts |
+| T013 | Existing regression | Reject retimed or duplicate PRE and preserve same-flight cutoff | F020 | I018 | C001, C008 | tests/phase5_stage14_bound_flight_pre_real_pg_v39.test.ts |
+| T014 | Existing diagnostic regression; cause unknown | Later PRE stage/category diagnostics only; no unsafe retry | F021 | I019 | C009 | tests/phase5b_source_diagnostics_v39.test.mjs; tests/phase6_private_later_pre_existing_stage14_bridge_v39.test.ts |
+| T015 | Existing regression | Idle publication does not lock before audit; empty result is not success evidence | F023 | I021 | C009 | tests/phase6_stored_source_postcommit_native_audit_v39.test.mjs |
+| T016 | Existing regression | Absent optional NOAA archive does not block FIDS-only proof; present weather independently verified | F024 | I022 | C002, C009 | tests/phase7_independent_noaa_receipt_v39.test.ts |
+| T017 | Exact CI required | Typecheck, full offline and actual PG16 migration execution at exact head | F025, F028 | I023, I026 | C005, C007 | .github/workflows/v39-phase0-offline.yml; .github/workflows/phase5b-conditional-t24-witness-pg16.yml; .github/workflows/phase5-v0091-source-bound-registration-disposable-pg16.yml |
+| T018 | Focused CI passed on 5936e6d; signer still open | Independent conditional exact original reread and drift rejection for omitted/changed FIDS values | F027, F030, F031 | I024, I025, I026, I029 | C002 | tests/phase5_conditional_bound_source_review_v39.test.ts; tests/phase7_signed_pre_field_proof_v39.test.ts |
+| T019 | Existing isolated test; actual label source unresolved | Conditional schedule revision and physical gate-out are distinct; unknown not zero | F029 | I005 | C003, C004 | tests/phase5_conditional_signed_schedule_pair_v39.test.ts; tests/phase7_continuous_gate_out_target_v39.test.ts |
+| T020 | Existing focused CI | Register consecutive IDs, duplicate section, reciprocal references and crosswalk ignored | F032 | I027 | C009 | tests/phase5b_recovery_register_v39.test.mjs |
+| T021 | Existing partial coverage; full production chain required | Packet A expiry and Packet B approved field parity; no permanent raw link or unapproved field | F027, F026 | I025, I029 | C002, C008 | tests/phase7_canonical_field_parity_v39.test.ts; tests/phase7_derived_release_writer_v39.test.ts; tests/phase7_purpose_bound_reference_identifier_v39.test.ts |
+| T022 | Open end-to-end acceptance | Positive signed conditional SOURCE→independent proof→queue→committed PRE→lawful distinct POST; no historical backfill | F005, F018, F027, F029 | I005, I014, I016, I029 | C001, C002, C003, C004, C005 | tests/phase5_conditional_bound_source_review_v39.test.ts; tests/phase5_conditional_signed_schedule_pair_v39.test.ts |
+| T023 | Open scientific acceptance | Fixed 20/5/6 split; per-day/horizon denominator and missingness, no leakage | F026, F005, F029 | I018, I020 | C008 | tests/phase7_final_group_assembly_v39.test.ts; tests/phase7_paired_derived_release_candidate_v39.test.ts |
+| T024 | New tests committed; CI pending | Outer SOURCE stage category on reader and admission failure; no raw errors or replay | F003, F017 | I030 | C006, C009 | tests/phase5b_source_diagnostics_v39.test.mjs; tests/phase6_private_source_one_original_child_github_v39.test.ts |
 
 ## Scientific and retention authorities
 
