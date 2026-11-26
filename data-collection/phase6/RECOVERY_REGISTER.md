@@ -34,14 +34,14 @@ F = failure family or evidenced defect; I = corrective implementation; C = incom
 | F022 | Tested branch | Audit incorrectly classified eight expired original hashes as mismatches. [Checkpoint](checkpoints/2026-11-26_0152_PST_PHASE5B_OWNER_CENSUS_AND_QUEUE_REPAIR.md) | I020 |
 | F023 | Tested branch | Idle native follow-on acquired publisher lock before zero candidate check. [Checkpoint](checkpoints/2026-11-26_0152_PST_PHASE5B_OWNER_CENSUS_AND_QUEUE_REPAIR.md) | I021 |
 | F024 | Tested branch | Optional weather archive read for FIDS-only permit. [Commit](https://github.com/HKcode22/ReplitTranvr/commit/3327ff5d84d9d0aa0478a34bb41e44e788cd3a9a) | I022 |
-| F025 | Prior compile correction tested; focused workflow blocked by F032 | Prior TS2322 and V0112 predecessor errors corrected 42/42; new 6572192 TS18048 at conditional draft ([45799354670](https://github.com/HKcode22/ReplitTranvr/actions/runs/45799354670)) corrected by explicit never-return narrowing; successor full offline suite passed; focused diagnostics skipped by F032. [PG16](https://github.com/HKcode22/ReplitTranvr/actions/runs/45796775104) | I023, I026 |
+| F025 | Corrected and exact #976 CI passed | Superseded V0112 predecessor mismatch 45796497453; seven workflows on 6572192 failed same TS18048; two on 41d5d38f failed synthetic Phase7 digest shape. Successor #976 exact 454349c9 passed 46/46, including TypeScript, focused proof/registration, PG16 and full offline safety. Production install separate. | I023, I026 |
 | F026 | Historical loss | Day1 zero bindings; Day2 52 bindings zero PRE; pause missed T90 and elapsed Day3 T24. [Owner census](checkpoints/2026-11-26_0152_PST_PHASE5B_OWNER_CENSUS_AND_QUEUE_REPAIR.md) | I008, I012, I013, I014, I016, I043 |
-| F027 | Partial; independent reader staged | Native-only production feature proof and signed packet issuance even though conditional writer exists. [Prior decision](../phase5/2026-11-09_REUSE_PHASE4_CONDITIONAL_SERVICE_PRE_IN_PHASE5_WITHOUT_NEW_PILOT.md) | I005, I014, I016, I025, I029, I031, I033, I034, I038, I039, I040, I041 |
+| F027 | Partial; staged conditional later registry reader | Native-only private registry/producer/feature proof despite separate conditional writer. #976 implements independent source proof/permit preparation and conditional queue packets; #977 connects protected current later registry reader. No actual conditional producer signature or observed PRE. | I005, I014, I016, I025, I029, I031, I033, I034, I038, I039, I040, I041, I044 |
 | F028 | Superseded CI failure | Stacked PR excluded full offline CI; trigger fixed. [Checkpoint](checkpoints/2026-11-25_1730_PST_PHASE5B_DRAIN_AND_STACKED_CI_COVERAGE.md) | I023 |
 | F029 | Open | Actual physical gate-out source not certified; schedule revision is not substitute. [Adopted runtime scope](../phase5/evidence/2026-11-22_PHASE6_RUNTIME_BINDING_OWNER_DELEGATED_SCOPE_REVIEW.md) | I005 |
 | F030 | Focused tested, full pending | Conditional raw/normalized matcher parity corrected in c66f6307; [focused run](https://github.com/HKcode22/ReplitTranvr/actions/runs/45799119831) passed. Not a demonstrated live cause. | I024 |
 | F031 | Code finding, not live cause | Provider timestamp precision/UTC representation mismatch can discard otherwise identical observations; reject unzoned or impossible dates rather than assume timezone. | I026 | 
-| F032 | Code correction committed; CI pending | Recovery-register parser wrongly reads a single-ID regression-crosswalk row as a duplicate primary F025, causing two test failures and skipping downstream diagnostics. [Job](https://github.com/HKcode22/ReplitTranvr/actions/runs/45800099500/job/139840779912) | I027 |
+| F032 | Corrected and exact #976 CI passed | Register crosswalk parser failure 45800099500 and T038 invalid test-path metadata 45810213223 corrected; exact 454349c9 46/46. No production SOURCE fault. | I027 |
 | F033 | Code finding; correction staged | Conditional feature review pruned late drafts at the final database clock but still returned earlier candidate/member proposals. A future signer could see a stale proposal after required lead was lost. Not established as a historical live cause. | I028 |
 
 | F034 | Open monitoring distinction | Managed cron audit failed with pending or unresolved wake evidence; HTTP ACK not execution proof. Relay runs 45709316609, 45573403453, 45562024566, 45424056708. Later audit pass is not proof every wake executed. | I032 |
@@ -50,7 +50,9 @@ F = failure family or evidenced defect; I = corrective implementation; C = incom
 | F036 | Implemented staged; exact relay CI pending | Four ROLLING_ROOT cancellations (45727773405, 45717616827, 45713496477, 45709128629), empty job lists; no runner execution or paid call proven. Concurrency replacement is plausible, not proven cause. | I035 |
 | F037 | Code-discovered deadline risk; implemented staged | Seven serial distinct route groups with up to 10s active read and 10s dispatch each can exceed 120s wake deadline; late route starvation risk, historical attribution not proven. | I036 |
 
-| F038 | Code-discovered concurrency risk; staged | Conditional independent proof resolver used the original child index as current, although another valid PRE/POST append can advance it. Never substitute a changed SOURCE or roll back. | I037, I042 |
+| F038 | Code repair merged; actual live acceptance open | Immutable original selector and coherent current snapshot; exact 454349c9 46/46. Never substitute changed SOURCE or roll back. | I037, I042 |
+
+| F039 | Code-discovered signed-object parity risk; staged | Existing signed later registry validated separate caller-provided parsed objects instead of comparing to authenticated bytes. A changed shard or source entry must never inherit original digest. | I044 |
 
 ## Implementations
 
@@ -78,11 +80,11 @@ F = failure family or evidenced defect; I = corrective implementation; C = incom
 | I020 | Tested branch | Three-day expiry-aware custody audit | F022 |
 | I021 | Tested branch | Audit before publisher lock | F023 |
 | I022 | Tested branch | Skip weather read for absent weather; present proof retained | F024 |
-| I023 | Tested branch | Exact-head CI coverage, compile/SQL fixes | F025, F028 |
+| I023 | Exact #976 CI passed | Exact-head coverage and compile/SQL fixes; 46/46 on 454349c9, target merged f4fe806d. | F025, F028 |
 | I024 | Focused tested | Shared conditional route/key/positive-operator ambiguity between normalizer and raw review; real normalizer and reader regressions; run 45799119831 passed | F030 |
 | I025 | Implemented, CI pending | Shared existing four-field FIDS feature draft from authenticated marked conditional raw member, exact protected content-use/protocol, private output and fresh cutoff; no signed issuance | F027 |
-| I026 | Implemented, CI pending | Fix explicit never-return narrowing; shared explicit UTC parsing for conditional identity and native feature extraction; linear lookup and avoid needless clock read on empty draft | F025, F031 | 
-| I027 | Implemented; exact CI pending | Scope primary identifier parsing to three canonical sections; reject duplicates, malformed rows, wrong family and missing sections; regress repeated crosswalk IDs. [Commit](https://github.com/HKcode22/ReplitTranvr/commit/4d00959c389dfd08fafc0bf2050525ed75c34837) | F032 |
+| I026 | Exact #976 CI passed | Explicit never-return narrowing, UTC parity, linear lookup; all exact #976 workflows passed. | F025, F031 |
+| I027 | Exact #976 CI passed | Scope primary ID parsing to canonical sections and correct T038 test-path metadata; no relaxed validator. | F032 |
 | I028 | Implemented; CI pending | Reconcile private candidate report, member proposals and draft counts to final database clock; reject stale direct member match, preserve cutoff and source custody, add positive and exact-boundary regression. | F033 |
 | I029 | Implemented; CI pending | Explicit separately scoped independent conditional exact permit-page read, using existing authentic marked-source reader, Stage14 checks and Phase7 feature drift recomputation; test wrong scope, omitted features, late and positive paths. Not wired to active signer or deployed. | F027 |
 | I030 | Implemented; CI pending | Fixed-stage outer SOURCE reader/admission/subprocess/cleanup diagnostics with bounded SQL category; preserve redaction, no replay and existing exception boundaries. | F003, F017 |
@@ -105,27 +107,29 @@ F = failure family or evidenced defect; I = corrective implementation; C = incom
 
 | I040 | Implemented staged; CI pending | Bounded 96-member conditional permit preparation page validates every independent review before SQL and reads actual SOURCE original/member population once, reuses existing Stage14 preflight; rejects duplicates/absent member and no signing. | F027 |
 
-| I041 | Implemented staged; exact CI pending | Distinct conditional T24/witnessed later/standalone later packet envelopes from actual prepared permit, existing independent Phase7 proof attachment, exact C+D roster and worker-side protected scope validation. Existing private registry signing/consumer routing not yet fully connected. | F027 |
+| I041 | Exact #976 CI passed; live issuance incomplete | Separate conditional packet envelopes, existing Phase7 proof attachment, C+D roster metadata and worker-side scope; actual signed publication remains open. | F027 |
 
-| I042 | Implemented staged; exact CI pending | Current SOURCE snapshot resolves signed revision and hydrates in a bounded read-only retry only on explicit concurrent append race, always anchored to immutable child. Native audit/pending and conditional proof use same snapshot. | F038 |
+| I042 | Exact #976 CI passed; target merged | Current SOURCE snapshot uses bounded read-only retry on explicit stale revision, always anchored to immutable child. Actual production conditional use still unproven. | F038 |
 
-| I043 | Staged owner procedure; exact CI and owner execution pending | Coordinated exact target #976 and relay #30 paused-only cutover, complete CI and drain, read protected variable metadata, preserve full retention and immutable study anchor, no paid resume or migration. | F026 |
+| I043 | Target merged/repinned; relay held safely | Owner exact #976 and relay #30 CI 46/46 and 4/4. Target main f4fe806d, retention 45812762727 both jobs success; ACTIVE_RELAY_NO_CANCEL before relay merge. Idempotent owner procedure can resume on quiet interval; no paid resume. | F026 |
+
+| I044 | Implemented #977; exact CI pending | Conditional later registry and private C+D hydration/projection accept only explicit protected prospective scope and mandatory proof metadata; compare parsed registry/source objects against authenticated bytes; legacy direct writer remains native-only. | F027, F039 |
 
 ## Completion components (not gates)
 
 | ID | Status | Component | Failure IDs | Implementation IDs |
 |---|---|---|---|---|
-| C001 | Partial | Conditional permit preparation implemented; prospective signed issuance and private producer-consumer admission still open | F005, F018, F027 | I005, I014, I016, I034 |
+| C001 | Partial | Conditional permit preparation and packet admission merged; #977 current later registry consumer staged; independent prospective registry signing/publication and actual task remain incomplete. | F005, F018, F027 | I005, I014, I016, I034 |
 | C002 | Partial | Conditional feature drafts, UTC parity and separate exact independent readback staged; authenticated authority/issuer integration and lawful Packet B preservation still incomplete | F027, F030, F031, F033 | I014, I024, I025, I026, I028, I029, I031, I033 |
 | C003 | Open | Distinct conditional schedule-revision POST pairing | F005, F029 | I005 |
 | C004 | Open | Same-leg physical gate-out observability, honest censoring | F029 | I005 |
 | C005 | Open | V0111/V0112 production install and genuine task path | F018 | I015, I016 |
 | C006 | Open | Prospective SOURCE effectiveness and status/body custody | F016, F017 | I012, I013 |
-| C007 | Open | Bulk exact-head cutover and safe resumed paid collection | F026 | I008, I011, I023 |
+| C007 | Partial | Target paused cutover verified; relay cutover pending, production scientific path and safe paid resume open. | F026 | I008, I011, I023 |
 | C008 | Open | Missingness, representativeness, no leakage and 31-day split audit | F005, F026, F029 | I018, I020 |
 | C009 | Open | Remove redundant runtime dependencies and isolate failures without weakening custody | F007, F021, F023, F024 | I006, I019, I021, I022 |
 
-| C010 | Partial | Independent clock relay execution/ACK evidence, canceled wake classification, bounded lane starvation repair and exact regression reconciliation | F034, F035, F036, F037 | I032, I035, I036 |
+| C010 | Partial | Relay exact #30 4/4, target cutover verified but relay merge held on active job; next independent pulse still needed. | F034, F035, F036, F037 | I032, I035, I036 |
 
 ## Regression tests
 
@@ -149,10 +153,10 @@ T IDs are permanent scenarios, not claims of passing CI. Each references existin
 | T014 | Existing diagnostic regression; cause unknown | Later PRE stage/category diagnostics only; no unsafe retry | F021 | I019 | C009 | tests/phase5b_source_diagnostics_v39.test.mjs; tests/phase6_private_later_pre_existing_stage14_bridge_v39.test.ts |
 | T015 | Existing regression | Idle publication does not lock before audit; empty result is not success evidence | F023 | I021 | C009 | tests/phase6_stored_source_postcommit_native_audit_v39.test.mjs |
 | T016 | Existing regression | Absent optional NOAA archive does not block FIDS-only proof; present weather independently verified | F024 | I022 | C002, C009 | tests/phase7_independent_noaa_receipt_v39.test.ts |
-| T017 | Exact CI required | Typecheck, full offline and actual PG16 migration execution at exact head | F025, F028 | I023, I026 | C005, C007 | .github/workflows/v39-phase0-offline.yml; .github/workflows/phase5b-conditional-t24-witness-pg16.yml; .github/workflows/phase5-v0091-source-bound-registration-disposable-pg16.yml |
+| T017 | Exact #976 46/46 passed | Typecheck, full offline and actual PG16 migration execution at exact head | F025, F028 | I023, I026 | C005, C007 | .github/workflows/v39-phase0-offline.yml; .github/workflows/phase5b-conditional-t24-witness-pg16.yml; .github/workflows/phase5-v0091-source-bound-registration-disposable-pg16.yml |
 | T018 | Focused CI passed on 5936e6d; signer still open | Independent conditional exact original reread and drift rejection for omitted/changed FIDS values | F027, F030, F031 | I024, I025, I026, I029 | C002 | tests/phase5_conditional_bound_source_review_v39.test.ts; tests/phase7_signed_pre_field_proof_v39.test.ts |
 | T019 | Existing isolated test; actual label source unresolved | Conditional schedule revision and physical gate-out are distinct; unknown not zero | F029 | I005 | C003, C004 | tests/phase5_conditional_signed_schedule_pair_v39.test.ts; tests/phase7_continuous_gate_out_target_v39.test.ts |
-| T020 | Existing focused CI | Register consecutive IDs, duplicate section, reciprocal references and crosswalk ignored | F032 | I027 | C009 | tests/phase5b_recovery_register_v39.test.mjs |
+| T020 | Exact #976 46/46 passed | Register consecutive IDs, duplicate section, reciprocal references and crosswalk ignored | F032 | I027 | C009 | tests/phase5b_recovery_register_v39.test.mjs |
 | T021 | Existing partial coverage; full production chain required | Packet A expiry and Packet B approved field parity; no permanent raw link or unapproved field | F027, F026 | I025, I029 | C002, C008 | tests/phase7_canonical_field_parity_v39.test.ts; tests/phase7_derived_release_writer_v39.test.ts; tests/phase7_purpose_bound_reference_identifier_v39.test.ts |
 | T022 | Open end-to-end acceptance | Positive signed conditional SOURCE→independent proof→queue→committed PRE→lawful distinct POST; no historical backfill | F005, F018, F027, F029 | I005, I014, I016, I029 | C001, C002, C003, C004, C005 | tests/phase5_conditional_bound_source_review_v39.test.ts; tests/phase5_conditional_signed_schedule_pair_v39.test.ts |
 | T023 | Open scientific acceptance | Fixed 20/5/6 split; per-day/horizon denominator and missingness, no leakage | F026, F005, F029 | I018, I020 | C008 | tests/phase7_final_group_assembly_v39.test.ts; tests/phase7_paired_derived_release_candidate_v39.test.ts |
@@ -177,11 +181,13 @@ T IDs are permanent scenarios, not claims of passing CI. Each references existin
 
 | T035 | New regression; exact CI pending | Conditional permit page validates inputs before SQL, one actual original read, no duplicate permit or partial signing, missing member held | F027 | I040 | C001 | tests/phase5_conditional_bound_source_review_v39.test.ts |
 
-| T036 | New regression; exact CI pending | Actual prepared conditional permit -> real fixture Ed25519 independent proof -> immutable packet -> existing roster; reject native promotion, missing policy, invalid signature or synthetic preview | F027 | I041 | C001 | tests/phase5_conditional_bound_source_review_v39.test.ts |
+| T036 | Exact #976 46/46 passed; actual registry publication open | Actual prepared conditional permit -> real fixture Ed25519 independent proof -> immutable packet -> existing roster; reject native promotion, missing policy, invalid signature or synthetic preview | F027 | I041 | C001 | tests/phase5_conditional_bound_source_review_v39.test.ts |
 
-| T037 | New regression; exact CI pending | Concurrent append after CURRENT_DAY read retries only stale current revision up to three times; original anchor preserved, changed query/expiry/integrity errors never retried | F038 | I042 | C002, C009 | tests/phase6_stored_source_native_candidate_audit_v39.test.ts |
+| T037 | Exact #976 46/46 passed; actual live use open | Concurrent append after CURRENT_DAY read retries only stale current revision up to three times; original anchor preserved, changed query/expiry/integrity errors never retried | F038 | I042 | C002, C009 | tests/phase6_stored_source_native_candidate_audit_v39.test.ts |
 
-| T038 | New syntax check; owner actual execution pending | Guarded dual repository exact head/base/tree/CI, paused and drained acquisition, effective environment pins and full-retention readback. No automatic paid resume | F026 | I043 | C007, C010 | .github/workflows/phase5b-source-diagnostics-offline.yml |
+| T038 | Target partial cutover proven; relay owner completion pending | Exact #976 and relay #30 green; target new main and retention both verified, active relay safe stop before merge. | F026 | I043 | C007, C010 | .github/workflows/phase5b-source-diagnostics-offline.yml |
+
+| T039 | New regression; exact CI pending | Conditional actual prepared packet into exact signed later registry; absent or wrong protected scope refuses. Parsed SOURCE/later objects must match original authenticated bytes; legacy native direct owner remains separate. | F027, F039 | I044 | C001, C002 | tests/phase5_conditional_bound_source_review_v39.test.ts; tests/phase5_signed_later_pre_day_registry_v39.test.ts |
 
 ## Scientific and retention authorities
 
@@ -208,3 +214,7 @@ Owner 01:52 PST: 92 reservations, 184 reserved units (not billing), 52 bindings 
 
 - PR #976 head 7c607d6: 41 success / 1 failure of 42 completed PR workflows; full offline safety 45800099520 passed. Failed 45800099500 job 139840779912: register test interpreted crosswalk F025 as a duplicate primary ID (66 distinct / 67 parsed rows) and then failed reciprocal validation; downstream focused tests skipped. This is F032, not evidence of a fresh production SOURCE failure. I027 committed 4d00959c; successor exact CI remains required.
 - Owner clarified Day 1 Nov23. C001–C003 remain incomplete: private conditional drafts are not signed PREs, and native runtime currently publishes only native candidates; independent proof must be separately authorized and verified before release. No provider calls, production database changes, or main/relay changes in this audit. Keep existing scientific/retention scopes.
+
+## Nov26 03:42 PST onward — post-cutover reconciliation
+
+See [CI failure reconciliation and partial cutover](checkpoints/2026-11-26_0342_PST_PHASE5B_POST_CUTOVER_CI_RECONCILIATION.md). #976 merged and exact main retention verified; do not repeat superseded CI failures as new production defects. #977 is the single target continuation on exact main f4fe806d. No paid replay, migration commissioning or physical-label substitution.

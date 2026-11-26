@@ -142,6 +142,11 @@ describe("signed per-day multiple later PRE flights, source registry lineage",()
    (p)=>badFile.get(p)!))
    .toThrow("FROZEN_FLIGHT_PACKET_BYTES_NOT_AUTHENTIC");
  });
+ it("T039 refuses parsed registry or source object drift even with unchanged authentic byte digests",()=>{
+  const f=fixture();
+  expect(()=>f.verify({...f.registry,shardIndex:2})).toThrow("PARSED_REGISTRY_BYTES_DRIFT");
+  expect(()=>f.verify(f.registry,f.registryBytes,{...f.source,entries:[{...f.source.entries[0],expectedPacketSha256:SHA("9")},f.source.entries[1]]})).toThrow("PARSED_REGISTRY_BYTES_DRIFT");
+ });
  it("refuses duplicate same-flight/same-horizon even with distinct filenames",()=>{
   const f=fixture();
   const copy={...f.registry,entries:[
