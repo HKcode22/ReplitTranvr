@@ -164,7 +164,7 @@ export function selectP6NonpaidSourceDay(ctx,plans,calendar,indexRows,observedUt
  let tooLate=0,missingDraw=0,alreadyIndexed=0;const eligible=[];
  // Content-free operational evidence, separate from provider or flight
  // outcomes. A past first-request deadline is not a valid backfill window.
- const missedUnpublishedDays=[],atRiskMissingDrawDays=[],pastIncompleteGenesisDays=[];
+ const missedUnpublishedDays=[],atRiskMissingDrawDays=[],pastIncompleteGenesisDays=[],futurePreparation=[];
  for(const plan of plans){
   if(ctx.requestedDay!==null&&plan.runDayIndex!==ctx.requestedDay)continue;
   const c=byDay.get(plan.runDayIndex),i=indexes.get(plan.runDayIndex);
@@ -187,7 +187,11 @@ export function selectP6NonpaidSourceDay(ctx,plans,calendar,indexRows,observedUt
    else missedUnpublishedDays.push(deadline);
    continue;
   }
-  if(lead>maximum)continue;
+  if(lead>maximum){
+   if(!indexed)futurePreparation.push({...deadline,preparationOpensUtc:new Date(utc(plan.firstRequestUtc)-maximum).toISOString(),
+    drawCount:c.draw_n,genesisState:i.claim_n===0&&i.index_n===0?"ABSENT": "PARTIAL_REQUIRES_REVIEW"});
+   continue;
+  }
   if(indexed){alreadyIndexed++;continue;}
   if(i.claim_n!==0||i.index_n!==0)hold("INCOMPLETE_FUTURE_INDEX_GENESIS_NO_REPLAY");
   if(c.draw_n!==4){
@@ -201,7 +205,9 @@ export function selectP6NonpaidSourceDay(ctx,plans,calendar,indexRows,observedUt
  }
  eligible.sort((a,b)=>a.firstRequestUtc.localeCompare(b.firstRequestUtc)||a.runDayIndex-b.runDayIndex);
  return {selected:eligible[0]??null,eligibleDayCount:eligible.length,missingDraw,tooLate,alreadyIndexed,
-  missedUnpublishedDays,atRiskMissingDrawDays,pastIncompleteGenesisDays};
+  missedUnpublishedDays,atRiskMissingDrawDays,pastIncompleteGenesisDays,
+  nextFuturePreparation:futurePreparation.sort((a,b)=>a.firstRequestUtc.localeCompare(b.firstRequestUtc)||a.runDayIndex-b.runDayIndex)[0]??null,
+  futureOutsideLookaheadCount:futurePreparation.length};
 }
 async function calendarRead(restricted,ctx){
  const c=await restricted.connect();
@@ -304,6 +310,8 @@ export async function runP6NonpaidSourceDayGithub(env){
     observedDbUtc:i.now,missedUnpublishedDays:selection.missedUnpublishedDays,
     atRiskMissingDrawDays:selection.atRiskMissingDrawDays,
     pastIncompleteGenesisDays:selection.pastIncompleteGenesisDays,
+    nextFuturePreparation:selection.nextFuturePreparation??null,futureOutsideLookaheadCount:selection.futureOutsideLookaheadCount??null,
+    minimumPreparationLeadMinutes:ctx.reviewed.minimumPreparationLeadMinutes,maximumPreparationLookaheadMinutes:ctx.reviewed.maximumPreparationLookaheadMinutes,
     actualFlightLossVerified:false,actualProviderCollectionVerified:false},
    providerCalls:0,githubDispatches:0,phase6PaidGo:false};
   if(!selection.selected)return Object.freeze({...base,status:"NO_ELIGIBLE_UNPUBLISHED_FUTURE_DAY_NO_WRITE"});

@@ -58,6 +58,10 @@ test("T054 frozen 31-day split distinguishes unprepared denominator, source miss
  assert.equal(out.cells.length,93);assert.deepEqual(out.bySplit.map(x=>x.calendarDays),[20,5,6]);
  assert.equal(out.cells[0].prepared,null);assert.equal(out.cells[1].bindings,2);assert.equal(out.leakageDiagnostics.requiresIndependentReview,true);
  assert.equal(out.trainingEligibilityCertified,false);
+ assert.equal(out.leakageDiagnostics.status,"IDENTITY_COLLISION_REVIEW_REQUIRED");
+ const none=projectP6SignedCalendarCoverage(calendar,[],{cross_day_ids:0,cross_partition_ids:0,duplicate_day_horizon_ids:0},at);
+ assert.equal(none.leakageDiagnostics.status,"NO_LINKED_PRE_ROWS_LEAKAGE_NOT_ASSESSABLE");
+ assert.equal(none.leakageDiagnostics.fullLeakageAuditComplete,false);
  assert.throws(()=>projectP6SignedCalendarCoverage(calendar,[{...r,elapsed_unreserved:41}],dup,at),/COUNT_OR_CLOCK_CONTRADICTION/);
  assert.throws(()=>projectP6SignedCalendarCoverage(calendar,[r,r],dup,at),/COUNT_OR_CLOCK_CONTRADICTION/);
  assert.throws(()=>projectP6SignedCalendarCoverage(calendar.map(d=>d.run_day_index===21?{...d,evaluation_partition:"train"}:d),[r],dup,at),/FROZEN_CALENDAR_OR_SPLIT_DRIFT/);

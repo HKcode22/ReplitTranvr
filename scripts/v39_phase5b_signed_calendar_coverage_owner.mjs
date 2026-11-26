@@ -42,8 +42,11 @@ export function projectP6SignedCalendarCoverage(calendar,rows,duplicates,observe
   return {partition:p,calendarDays:a.length/3,preparedHorizonCells:seen.length,unpreparedHorizonCells:a.length-seen.length,
    ...Object.fromEntries(countFields.map(k=>[k,seen.reduce((n,x)=>n+x[k],0)]))};
  });
+ const linkedPreRows=rows.reduce((n,x)=>n+x.pre_rows,0),collision=duplicates.cross_day_ids>0||duplicates.cross_partition_ids>0||duplicates.duplicate_day_horizon_ids>0;
  return {status:"SIGNED_CALENDAR_PREPARED_QUERY_AND_SPLIT_COUNTS_READONLY",observedAtUtc,calendarDays:31,bySplit,cells,
-  leakageDiagnostics:{...duplicates,requiresIndependentReview:duplicates.cross_day_ids>0||duplicates.cross_partition_ids>0||duplicates.duplicate_day_horizon_ids>0},
+  leakageDiagnostics:{...duplicates,observedLinkedPreRows:linkedPreRows,
+   status:linkedPreRows===0?"NO_LINKED_PRE_ROWS_LEAKAGE_NOT_ASSESSABLE":collision?"IDENTITY_COLLISION_REVIEW_REQUIRED":"NO_OBSERVED_COLLISION_NOT_LEAKAGE_CERTIFICATION",
+   requiresIndependentReview:collision,fullLeakageAuditComplete:false},
   preparedQueriesAreNotFullFrozenTemplateDenominator:true,reservationsAreNotBillingProof:true,
   createdAtCutoffIsNotIndependentCommitProof:true,actualLabelsCertified:false,trainingEligibilityCertified:false,providerCalls:0,databaseWrites:0};
 }
