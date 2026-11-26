@@ -149,3 +149,29 @@ describe("T034 conditional instructions private role transport",()=>{
   }finally{await server.close();rmSync(dir,{recursive:true,force:true});}
  });
 });
+
+it("T049 real local conditional T24 review transport accepts exact anchor and member list only on lane; replay cannot issue again",async()=>{
+ const dir=mkdtempSync(join(tmpdir(),"p7r-")),paths={lane:join(dir,"l.sock"),proof:join(dir,"p.sock"),publisher:join(dir,"w.sock")};
+ const id="leg:g5a:"+h("service"),request={anchor:{sourceGithubRunId:scope.runId,populationQueryId:"a23e4567-e89b-42d3-a456-426614174000",responseSha256:h("response")},flightInstanceIds:[id]};
+ const proof={schema:"synthetic instruction"},review={page:{schema:"v39.phase5.conditional-pre-external-review-page.v1" as const,reviewedCodeSha:scope.codeSha,
+ manifestSha256:scope.manifestSha256,rightsSha256:scope.rightsSha256,protocolSha256:h("protocol"),externalContentUseReviewSha256:h("contents"),
+ queryDigestSha256:scope.queryDigestSha256,populationQueryId:request.anchor.populationQueryId,responseSha256:request.anchor.responseSha256,
+ runDayIndex:scope.runDayIndex,horizon:"T-24h",sourceGithubRunId:scope.runId,reviews:[{flightInstanceId:id,reviewArtifactBase64:"fixture",reviewArtifactSha256:h("artifact")}]},
+ signatureBase64:Buffer.alloc(64,1).toString("base64")};
+ let called=0;
+ const server=await listenP7LocalPreRole({path:paths.lane,role:"lane",scope,maxLifetimeMs:30000,handler:async q=>{
+  called++;expect(q.op).toBe("issue_conditional_t24_review");expect(q.conditionalT24Review).toEqual(request);expect(q.conditionalSourceProof).toEqual(proof);
+  return {wires:[],committedCount:0,conditionalReviewWire:review};
+ }});
+ try{
+  const port=openP7LocalPrivatePreHandoff({scope,paths,readStored:async()=>new Map(),readConditionalT24ReviewInstructionProof:async()=>proof});
+  const q=makeP7LocalPreRequest(scope,"issue_conditional_t24_review",[],[],proof,request);
+  expect(()=>validateP7LocalPreRequest(q,scope,"proof")).toThrow("ROLE_OPERATION");
+  expect(()=>makeP7LocalPreRequest(scope,"issue_conditional_t24_review",[],[],proof,{...request,flightInstanceIds:[id,id]})).toThrow("CONDITIONAL_REVIEW_REQUEST_SCOPE");
+  expect(()=>makeP7LocalPreRequest(scope,"issue_conditional_t24_review",[],[],proof,{...request,anchor:{...request.anchor,sourceGithubRunId:"999999"}})).toThrow("CONDITIONAL_REVIEW_REQUEST_SCOPE");
+  expect(await port.readConditionalT24Review(request)).toEqual(review);
+  await expect(port.readConditionalT24Review(request)).rejects.toThrow("REMOTE_HOLD_NO_REPLAY");
+  await expect(callP7LocalPreRole(paths.lane,makeP7LocalPreRequest(scope,"issue_conditional_t24_review",[],[],{...proof,extra:true},request))).rejects.toThrow("REMOTE_HOLD_NO_REPLAY");
+  expect(called).toBe(1);
+ }finally{await server.close();rmSync(dir,{recursive:true,force:true});}
+});

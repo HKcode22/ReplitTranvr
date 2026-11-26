@@ -7,7 +7,7 @@
 import {createPrivateKey,createHash} from "node:crypto";
 import {AsyncLocalStorage} from "node:async_hooks";
 import {readP6StableSourceTrust} from "../server/lib/disruption/phase6StoredSourceRuntimeTrust_v39.mjs";
-import {verifyP6ConditionalSourceInstructionProof} from "../server/lib/disruption/phase6StoredSourceNativeCandidateAudit_v39.mjs";
+import {verifyP6ConditionalSourceInstructionProof,verifyP6ConditionalT24ReviewInstructionProof} from "../server/lib/disruption/phase6StoredSourceNativeCandidateAudit_v39.mjs";
 import {p6ReviewedPolicyMatchesRuntime} from "../server/lib/disruption/phase6ReviewedRuntimeCode_v39.mjs";
 import type {P7ConditionalProofScopePort} from "../server/lib/disruption/phase7IndependentPreSourceReader_v39";
 import {execFileSync} from "node:child_process";
@@ -135,6 +135,12 @@ async function serve(role:P7LocalPreRole){
   if(role==="lane"){
    const a=openP7ActualPreLaneEvidenceAuthority(e,key(e[laneKey]),undefined,conditionalScope);clean=a.close;readClock=a.preflight;await a.preflight();
    handler=async q=>{
+    if(q.op==="issue_conditional_t24_review"){
+     const x=readP7ConditionalInstructionRolePolicy(e),request=q.conditionalT24Review!;
+     const scope=verifyP6ConditionalT24ReviewInstructionProof(q.conditionalSourceProof,{...x,anchor:request.anchor,observedDbClockUtc:await readClock()});
+     const conditionalReviewWire=await a.issueConditionalT24Review(scope,request.flightInstanceIds,x.trust.reviewedCodeSha,[x.trust.dayReviewerFingerprintSha256,x.trust.queryReviewerFingerprintSha256]);
+     return {wires:[],committedCount:0,conditionalReviewWire};
+    }
     const issued=await instructionContext.run(q.conditionalSourceProof,()=>a.issueExactLaneReceiptPage(q.permits));
     if(issued.length!==q.permits.length)hold("EXACT_LANE_PAGE");
     return {wires:q.permits.map((permit,i)=>({permitSha256:hashPhase7DurableCandidate(permit),wire:issued[i].privateWire})),committedCount:0};

@@ -13,6 +13,8 @@
  */
 import {createHash,createPublicKey,randomUUID,sign,type KeyObject} from "node:crypto";
 import {Pool} from "pg";
+import {issueP5ConditionalT24SignedReviewPage} from "./phase5ConditionalPrePermitPreparation_v39";
+import type {P5SignedConditionalFeatureReadScope} from "./phase5ConditionalBoundSourceReview_v39";
 import {makeP5Stage28DedicatedRolePool} from "./phase5Stage28DedicatedRolePool_v39";
 import {P5_E_V0079_SOURCE_READONLY_LOGIN_V39} from "./phase5AmendmentEOriginalFidsReadonlyCompiler_v39";
 import {admitP7ExactSourcePreProducer,readP7RestrictedSourceClock} from "./phase7ExactSourcePreProofProducer_v39";
@@ -131,7 +133,12 @@ export function openP7ActualPreLaneEvidenceAuthority(env:NodeJS.ProcessEnv,signe
  const referencePolicy=parseP7ReferenceLinkPolicy(env,a.policy.profile.termsReviewSha256,a.policy.dispositions);
  const underlying=new Pool({connectionString:a.sourceUrl,max:1,connectionTimeoutMillis:8000,query_timeout:25000,application_name:"p7_actual_pre_lane_authority",options:"-c default_transaction_read_only=on"});
  const pool=makeP5Stage28DedicatedRolePool(underlying,{group:"source",reviewedDedicatedLogin:P5_E_V0079_SOURCE_READONLY_LOGIN_V39,forbiddenApplicationLogin:"phase5_runtime_application_login"});
- return {async issueExactLaneReceipt(p:Readonly<P5Stage14SingleFlightPrePermit>){
+ return {async issueConditionalT24Review(scope:P5SignedConditionalFeatureReadScope,ids:readonly string[],reviewedCodeSha:string,additionalForbidden:readonly string[]){
+  const raw=env.P6_NONPAID_DAILY_POLICY_BASE64??"",policyBytes=Buffer.from(raw,"base64");
+  if(policyBytes.toString("base64")!==raw)hold("CONDITIONAL_T24_POLICY_BYTES");
+  return issueP5ConditionalT24SignedReviewPage(pool,scope,ids,{policyBytes,expectedPolicySha256:env.P6_NONPAID_DAILY_POLICY_SHA256??"",
+   expectedReviewedCodeSha:reviewedCodeSha,expectedReviewerFingerprintSha256:fp,forbiddenSignerFingerprints:[...new Set([...a.forbiddenSignerFingerprints,...additionalForbidden])],signer,env});
+ },async issueExactLaneReceipt(p:Readonly<P5Stage14SingleFlightPrePermit>){
   const weather=await readP7WeatherOnlyForPresentPermit(p,weatherPort);
   const actual=await readP7ReviewedTierSelectedFeatures(pool,p,a.externalContentUseReviewSha256,conditionalScope);
   return signP7ActualPreLaneReceipt({env,signer,termsReviewSha256:a.policy.profile.termsReviewSha256,dispositions:a.policy.dispositions,referencePolicy},p,actual,weather);

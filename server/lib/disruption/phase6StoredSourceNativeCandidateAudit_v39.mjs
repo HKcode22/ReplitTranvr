@@ -166,13 +166,12 @@ function proofBytes(x,max){
  if(b.length>max||b.toString("base64")!==x)fail("CONDITIONAL_PROOF_BYTES");
  return b;
 }
-export function verifyP6ConditionalSourceInstructionProof(proof,{trust,selector,policy,permit,observedDbClockUtc,expectedSourceRunId}){
+function verifiedConditionalInstructionQuery(proof,{trust,selector,policy,observedDbClockUtc,expectedSourceRunId}){
  if(!exact(proof,["schema","dayWire","indexBase64","sourceRegistries","queryWire","queryBase64"])||proof.schema!==PROOF_SCHEMA||
     !checkSelector(selector)||trust?.independentStudyTrustPinsApproved!==true||
     trust.dayReviewerFingerprintSha256===trust.queryReviewerFingerprintSha256||
     policy?.existingPaidDispatchApproved!==false||policy.noProviderCredentialsInAudit!==true||
     !iso(observedDbClockUtc)||!/^\d{5,25}$/.test(expectedSourceRunId??"")||
-    permit?.expectedGithubSourceRunId!==expectedSourceRunId||
     !Array.isArray(proof.sourceRegistries)||proof.sourceRegistries.length<1||proof.sourceRegistries.length>1024||
     Buffer.byteLength(JSON.stringify(proof))>4*1024*1024)
   fail("CONDITIONAL_INSTRUCTION_PROOF_SCOPE");
@@ -220,18 +219,42 @@ export function verifyP6ConditionalSourceInstructionProof(proof,{trust,selector,
  if(!live(verified))fail("CONDITIONAL_INSTRUCTION_PROOF_EXPIRED");
  const bytes=proofBytes(proof.queryBase64,200000);
  if(hash(bytes)!==q.expectedPacketSha256)fail("CONDITIONAL_INSTRUCTION_QUERY_HASH");
- return bindP6ConditionalProofScope(deriveP6VerifiedQueryBytes(bytes,selector,trust,policy),trust,policy,permit);
+ return deriveP6VerifiedQueryBytes(bytes,selector,trust,policy);
+}
+export function verifyP6ConditionalSourceInstructionProof(proof,x){
+ if(x.permit?.expectedGithubSourceRunId!==x.expectedSourceRunId)fail("CONDITIONAL_INSTRUCTION_PROOF_SCOPE");
+ return bindP6ConditionalProofScope(verifiedConditionalInstructionQuery(proof,x),x.trust,x.policy,x.permit);
+}
+/** Permit-review ingress has no permit yet. Only immutable SOURCE anchor
+ * references cross the socket; the independent role rereads the actual
+ * bound original and determines the member evidence itself. */
+export function verifyP6ConditionalT24ReviewInstructionProof(proof,x){
+ const q=verifiedConditionalInstructionQuery(proof,x),m=q.conditionalServiceScope,f=x.policy?.conditionalPreFeatureReview,a=x.anchor;
+ if(!exact(a,["sourceGithubRunId","populationQueryId","responseSha256"])||
+    a.sourceGithubRunId!==x.expectedSourceRunId||!SHA.test(a.responseSha256??"")||
+    !/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i.test(a.populationQueryId??"")||
+    q.horizon!=="T-24h"||!m||!f||f.schema!=="v39.phase5.conditional-pre-feature-review-policy.v1"||f.approved!==true||
+    !exact(f,["schema","approved","protocolSha256","rightsSha256","externalContentUseReviewSha256"])||
+    f.protocolSha256!==m.protocolSha256||f.rightsSha256!==x.trust.rightsSha256||!SHA.test(f.externalContentUseReviewSha256??""))
+  fail("EXACT_CONDITIONAL_T24_REVIEW_INSTRUCTION_SCOPE");
+ return Object.freeze({source:Object.freeze({...q,expectedSourceGithubRunId:a.sourceGithubRunId}),
+  protocolSha256:m.protocolSha256,ownerProspectiveSeparateTierApproved:true,frozenStudyStartUtc:m.cohortStartUtc,
+  policyEffectiveUtc:m.effectiveUtc,minimumReviewLeadSeconds:900,expectedPopulationQueryId:a.populationQueryId,
+  expectedResponseSha256:a.responseSha256,expectedLocalFrom:m.localFrom,expectedLocalTo:m.localTo,
+  expectedServiceWindowStartUtc:q.expectedServiceWindowStartUtc,expectedServiceWindowEndUtc:q.expectedServiceWindowEndUtc,
+  externalContentUseReviewSha256:f.externalContentUseReviewSha256});
 }
 /** Capture exact originally admitted signed instructions using existing
  * restricted reader. An append may advance the day head but the immutable
  * child revision remains a valid proof of its own SOURCE. The separately
  * authenticated current continuity check is still required before issuance. */
-export async function readP6ConditionalSourceInstructionProof({readerClient,trust,selector,policy,permit}){
+async function readConditionalInstructionProof({readerClient,trust,selector,policy,permit,anchor,expectedSourceRunId}){
  if(!checkSelector(selector)||trust?.independentStudyTrustPinsApproved!==true||
     policy?.independentNativeCandidateReadOnlyApproved!==true||policy.existingPaidDispatchApproved!==false||
     policy.noProviderCredentialsInAudit!==true||!policy.conditionalPreFeatureReview||
-    permit?.identityEvidenceTier!=="CONDITIONAL_QUERY_FILTERED_SERVICE"||
-    permit.runDayIndex!==selector.runDayIndex||permit.queryDigestSha256!==selector.queryDigestSha256)
+    (!anchor&&(permit?.identityEvidenceTier!=="CONDITIONAL_QUERY_FILTERED_SERVICE"||
+    permit.runDayIndex!==selector.runDayIndex||permit.queryDigestSha256!==selector.queryDigestSha256))||
+    (anchor&&(permit!==undefined||anchor.sourceGithubRunId!==expectedSourceRunId)))
   fail("NO_EXPLICIT_CONDITIONAL_PROOF_SCOPE");
  await selectP6CurrentCommittedSourceSelector({readerClient,trust,selector});
  const scope={privateStoredReviewReadOnlyApproved:true,existingPaidDispatchApproved:false};
@@ -245,15 +268,18 @@ export async function readP6ConditionalSourceInstructionProof({readerClient,trus
   selector:{kind:"SOURCE_QUERY",runDayIndex:selector.runDayIndex,shardIndex:selected.entry.shardIndex,
    logicalPath:selected.q.filePath,contentSha256:selected.q.expectedPacketSha256}});
  const receipt=await readP6PrivateSourcePostOnce(readerClient,signed.pins,signed.wire,signed.publicKeyPem);
- deriveP6ConditionalProofReadScope(receipt,selected,selector,trust,policy,permit);
+ if(!anchor)deriveP6ConditionalProofReadScope(receipt,selected,selector,trust,policy,permit);
  const proof={schema:PROOF_SCHEMA,dayWire:review.wire,indexBase64:index.privateCurrentIndexBytes.toString("base64"),
   sourceRegistries:index.privateParsedIndex.entries.filter(e=>e.lane==="SOURCE").map(e=>({path:e.filePath,bytesBase64:index.getFrozen(e.filePath).toString("base64")})),
   queryWire:signed.wire,queryBase64:receipt.privateBytes.toString("base64")};
- verifyP6ConditionalSourceInstructionProof(proof,{trust,selector,policy,permit,expectedSourceRunId:permit.expectedGithubSourceRunId,
-  observedDbClockUtc:receipt.redactedSummary.observedDatabaseClockUtc});
+ const at=receipt.redactedSummary.observedDatabaseClockUtc;
+ if(anchor)verifyP6ConditionalT24ReviewInstructionProof(proof,{trust,selector,policy,anchor,expectedSourceRunId,observedDbClockUtc:at});
+ else verifyP6ConditionalSourceInstructionProof(proof,{trust,selector,policy,permit,expectedSourceRunId:permit.expectedGithubSourceRunId,observedDbClockUtc:at});
  return Object.freeze(Object.defineProperty({status:"CONDITIONAL_SIGNED_SOURCE_INSTRUCTIONS_PRIVATE_NO_GO",providerCalls:0,databaseWrites:0,phase6PaidGo:false},
   "privateProof",{value:Object.freeze(proof),enumerable:false}));
 }
+export async function readP6ConditionalSourceInstructionProof(x){return readConditionalInstructionProof(x);}
+export async function readP6ConditionalT24ReviewInstructionProof(x){return readConditionalInstructionProof(x);}
 /** Shared exact SOURCE identity continuity check for concurrent append-only
  * PRE/POST registry publication. Neither an advanced revision nor an ACK
  * changes the original signed query, shard or bytes. */
