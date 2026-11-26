@@ -146,3 +146,20 @@ describe("explicit dispatch uses the same current PRE route, not a legacy or enr
   expect(()=>loadP6CurrentPreCalendarWindows({...manual,P6_PRIVATE_CURRENT_PRE_DISPATCH_CONFIRM:""},trust,read)).toThrow("EXPLICIT_SCHEDULE_SCOPE_REQUIRED");
  });
 });
+
+import {classifyP6CurrentPreFailure} from "../server/lib/disruption/phase6CurrentPreFailureDiagnostic_v39.mjs";
+describe("current PRE fixed diagnostic metadata",()=>{
+ it("keeps stage and allowlisted error category, never prints secrets or raw error",()=>{
+  const x=classifyP6CurrentPreFailure("READ_DUE_ROSTERS",{code:"42501",message:"postgresql://secret",detail:"private query"});
+  expect(x).toMatchObject({stage:"READ_DUE_ROSTERS",category:"DB_PERMISSION_DENIED",providerCalls:0,commitOutcomeInferred:false,replayAuthorized:false});
+  expect(JSON.stringify(x)).not.toMatch(/secret|private query|42501/);
+ });
+ it("does not echo unknown codes or stages",()=>{
+  const x=classifyP6CurrentPreFailure("private identity",{code:"secret",message:"secret"});
+  expect(x.stage).toBe("UNKNOWN_STAGE");expect(x.category).toBe("UNCLASSIFIED_REDACTED");
+  expect(JSON.stringify(x)).not.toContain("secret");
+ });
+ it.each([["57014","DB_QUERY_CANCELLED_OR_TIMEOUT"],["55P03","DB_LOCK_UNAVAILABLE"],["40001","DB_SERIALIZATION_CONFLICT"],["08006","DB_CONNECTION_FAILURE"],["ECONNRESET","TRANSPORT_FAILURE"]])("maps %s to fixed %s",(code,category)=>{
+  expect(classifyP6CurrentPreFailure("SIGNED_WORKER_EXECUTION",{code}).category).toBe(category);
+ });
+});
