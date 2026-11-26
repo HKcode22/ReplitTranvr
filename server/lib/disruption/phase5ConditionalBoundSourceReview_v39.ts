@@ -125,7 +125,7 @@ async function readBound(pool:P5EReadOnlyPgPool,input:Omit<ReviewScope,"expected
   const o=rows[0];
   const bodyHash=signed?o?.decoded_original_body_sha256:input.expectedDecodedBodySha256;
   if(typeof bodyHash!=="string"||!SHA.test(bodyHash)||
-    (signed&&o?.conditional_source_protocol_sha256!==input.protocolSha256))hold("SIGNED_SOURCE_MARKER_OR_BODY_BINDING");
+    (signed&&o?.conditional_source_protocol_sha256!==input.protocolSha256))return hold("SIGNED_SOURCE_MARKER_OR_BODY_BINDING");
   const s:ReviewScope={...input,expectedDecodedBodySha256:bodyHash};
   if(rows.length!==1||!o||s.ownerProspectiveSeparateTierApproved!==true||!SHA.test(s.protocolSha256??"")||
     !q.plannedRequestUtc||ms(s.policyEffectiveUtc)>ms(q.plannedRequestUtc)||o.manifest_sha256!==q.manifestSha256||
@@ -139,6 +139,12 @@ async function readBound(pool:P5EReadOnlyPgPool,input:Omit<ReviewScope,"expected
   const sql=P5_E_BATCH_ORIGINAL_SQL.replace("AND r.raw_payload IS NOT NULL","AND b.source_expires_at_utc>clock_timestamp()+interval '30 seconds' AND r.raw_payload IS NOT NULL");
   if(sql===P5_E_BATCH_ORIGINAL_SQL)hold("QUERY_CONTRACT");
   const originals=(await c.query(sql,[...params,s.expectedPopulationQueryId])).rows;
+  if(signed){
+   const raw=originals[0]?.raw_payload as Record<string,any>|undefined;
+   const marker=raw?.fidsRequestContract?.phase5ConditionalService;
+   if(originals.length!==1||marker?.protocolSha256!==s.protocolSha256||marker?.cohortStartUtc!==s.frozenStudyStartUtc)
+    hold("SIGNED_ORIGINAL_COHORT_MARKER_DRIFT");
+  }
   const z=(await c.query("SELECT clock_timestamp() AS at")).rows;
   if(z.length!==1)hold("CLOCK");
   prepareP5BoundConditionalServiceReview(s,rows,originals,stamp(z[0].at));

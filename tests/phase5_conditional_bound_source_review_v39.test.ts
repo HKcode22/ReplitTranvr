@@ -85,13 +85,13 @@ describe("source-bound conditional service preparation",()=>{
   const raw=r.raw_payload as any;
   const {canonicalEnvelopeHashSchema,canonicalEnvelopeSha256,...bare}=raw;
   const marked=addCanonicalFidsEnvelopeHashV39({...bare,fidsRequestContract:{...bare.fidsRequestContract,phase5ConditionalService:{protocolSha256:scope.protocolSha256,cohortStartUtc:scope.frozenStudyStartUtc}}});
-  const make=(marker:string,body:string)=>{
+  const make=(marker:string,body:string,original=marked)=>{
    const queries:string[]=[];
    const pool={connect:async()=>({release(){},query:async(sql:string)=>{
     queries.push(sql);
     if(sql.startsWith("SELECT session_user"))return {rows:[{login:"phase5_p5_source_login_20261108",actor:"phase5_fids_source_prod_20261107",db:"neondb",version:160010,ro:"on",primary:true}]};
     if(sql.includes("FROM clean.phase5_fids_allowed_query_v39"))return {rows:[{...o,normalized_members_count:0,conditional_source_protocol_sha256:marker,decoded_original_body_sha256:body}]};
-    if(sql.includes("SELECT r.raw_payload"))return {rows:[{...r,raw_payload:marked}]};
+    if(sql.includes("SELECT r.raw_payload"))return {rows:[{...r,raw_payload:original}]};
     if(sql.includes("FROM clean.flight_population"))return {rows:[]};
     if(sql.startsWith("SELECT clock_timestamp()"))return {rows:[{at:t("05:04")}]};
     return {rows:[]};
@@ -106,6 +106,9 @@ describe("source-bound conditional service preparation",()=>{
    await expect(readSigned(rejected.pool,input)).rejects.toThrow(/SIGNED_SOURCE_MARKER_OR_BODY_BINDING/);
    expect(rejected.queries.some(x=>x.includes("SELECT r.raw_payload"))).toBe(false);
   }
+  const wrongCohort=make(scope.protocolSha256,expectedDecodedBodySha256,addCanonicalFidsEnvelopeHashV39({...bare,fidsRequestContract:{...bare.fidsRequestContract,phase5ConditionalService:{protocolSha256:scope.protocolSha256,cohortStartUtc:t("01:00")}}}));
+  await expect(readSigned(wrongCohort.pool,input)).rejects.toThrow(/SIGNED_ORIGINAL_COHORT_MARKER_DRIFT/);
+  expect(wrongCohort.queries.at(-1)).toBe("ROLLBACK");
   const wrongBody=make(scope.protocolSha256,h("9"));
   await expect(readSigned(wrongBody.pool,input)).rejects.toThrow(/ORIGINAL_BINDING/);
   expect(wrongBody.queries.at(-1)).toBe("ROLLBACK");
