@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import {createHash,generateKeyPairSync} from "node:crypto";
 import {readFileSync} from "node:fs";
 import {selectP6DueSourceDays} from "../server/lib/disruption/phase6StoredSourceRuntimeTrust_v39.mjs";
-import {runP6StoredSourceDispatcher,admitP6StoredSourceDispatcher}
+import {runP6StoredSourceDispatcher,admitP6StoredSourceDispatcher,proveNoPriorUncertainStoredDispatch}
  from "../scripts/v39_phase6_stored_source_child_dispatcher_v39.mjs";
 const H=c=>c.repeat(64),code="f".repeat(40),clock="2026-11-15T06:00:00.000Z";
 const root="https://api.github.com/repos/HKcode22/ReplitTranvr";
@@ -249,4 +249,39 @@ test("T057 no-due SOURCE metadata preserves DB clock and count, not full coverag
  }
  const m=f.mock(),out=await runP6StoredSourceDispatcher(f.env,{...f.options,fetchImpl:m.fetchImpl,observe:async()=>({...base,status:"SELECTED_SOURCE_DAY_REVIEWS_UNAVAILABLE_NO_DISPATCH",observedActualSourceQueueQueries:3,observedSourceDatabaseClockUtc:clock,unavailableSelectedDayCount:1,unavailableSelectedDueQueryCount:2})});
  assert.equal(out.queueObservationFresh,true);assert.equal(out.observedActualSourceQueueQueries,3);assert.equal(out.unavailableSelectedDueQueryCount,2);assert.equal(m.calls.length,0);
+});
+
+test("T094 prior all-attempt history is read with bounded parallel GETs and every uncertain result still holds",async()=>{
+ const rows=Array.from({length:13},(_,i)=>({id:i+100}));
+ let active=0,peak=0,reads=0;
+ const fetcher=async(url,opts)=>{
+  assert.equal(opts.method,"GET");assert.match(url,/\/jobs\?per_page=100&filter=all$/);
+  reads++;active++;peak=Math.max(peak,active);
+  await new Promise(resolve=>setImmediate(resolve));active--;
+  return {ok:true,json:async()=>({total_count:1,jobs:[{name:"separately-authorized-stored-source-children",status:"completed",conclusion:"success",steps:[{name:"Dispatch stored SOURCE exact children",conclusion:"success"}]}]})};
+ };
+ await proveNoPriorUncertainStoredDispatch({history:{workflow_runs:rows},currentRunId:100,fetcher,headers:{}});
+ assert.equal(reads,12);assert.equal(peak,4);assert.equal(active,0);
+ reads=0;const uncertain=async(url,opts)=>{
+  if(url.includes("/runs/103/"))return {ok:true,json:async()=>({total_count:1,jobs:[{name:"separately-authorized-stored-source-children",status:"completed",conclusion:"failure",steps:[{name:"Dispatch stored SOURCE exact children",conclusion:"failure"}]}]})};
+  return fetcher(url,opts);
+ };
+ await assert.rejects(proveNoPriorUncertainStoredDispatch({history:{workflow_runs:rows},currentRunId:100,fetcher:uncertain,headers:{}}),/PREVIOUS_DISPATCH_UNCERTAIN_NO_REPLAY/);
+ assert.equal(active,0);assert.equal(reads,3);
+});
+test("T094 freshness expiry after a real ACK retains the exact undispatched denominator and never replays",async()=>{
+ const f=fixture(),m=f.mock();let current=Date.parse(clock);
+ const fetchImpl=async(url,opts)=>{
+  const result=await m.fetchImpl(url,opts);
+  if(opts.method==="POST")current=Date.parse(clock)+121000;
+  return result;
+ };
+ const out=await runP6StoredSourceDispatcher(f.env,{...f.options,fetchImpl,now:()=>current});
+ assert.equal(out.status,"STALE_REMAINING_PLAN_DEFERRED_NO_REPLAY");
+ assert.equal(out.acknowledgedGithubChildCount,1);
+ assert.equal(out.staleDeferredCount,3);
+ assert.equal(out.remainingDueNotDispatchedCount,3);
+ assert.equal(out.capacityDeferredCount,0);
+ assert.equal(out.providerCallsByParent,0);
+ assert.equal(m.posts.length,1);
 });

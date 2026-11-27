@@ -16,7 +16,7 @@ F = failure family or evidenced defect; I = corrective implementation; C = incom
 | F004 | Historical repaired | Nov4 expired foreign cohort blocked PREPARED owner; empty DB tests missed this. [Checkpoint](../phase4/2026-11-04_G5A_PREARM_FOREIGN_COHORT_ROOT_CAUSE_AND_BOUNDARY_REPAIR.md) | I004 |
 | F005 | Open recurring | Nov5 and Nov25–26 native ID/explicit origin/scope evidence missing, zero native PRE. Synthetic provider IDs hid failure. [Nov5](../phase4/2026-11-05_G5A_IDLESS_OPERATOR_CRITICAL_SCIENCE_FIX_NEXT_COHORT.md), [Nov26](checkpoints/2026-11-26_0152_PST_PHASE5B_OWNER_CENSUS_AND_QUEUE_REPAIR.md) | I005, I014, I015, I016, I034, I059 |
 | F006 | Historical repaired | Nov12 unreachable T24 scheduling branch. [Checkpoint](../phase5/2026-11-12_T24_SCHEDULE_UNREACHABLE_BRANCH_AND_EXCLUSIVE_AUTOMATION_REPAIR.md) | I001 |
-| F007 | Mitigated | Nov15–24 best-effort cron and ACK/history visibility; direct root incomplete read 45429790971. [Checkpoint](checkpoints/2026-11-24_1625_PST_PHASE5B_OPERATIONAL_INCIDENT_AUDIT.md) | I006, I007, I060, I062 |
+| F007 | Mitigated; bounded history repair staged | Nov15–24 best-effort cron and ACK/history visibility; direct root incomplete read 45429790971. Nov26 code audit: serial all-attempt SOURCE parent history GETs can exhaust 120s freshness and partial-ACK stale return omitted undispatched counts; no proven live miss from this defect. [Checkpoint](checkpoints/2026-11-24_1625_PST_PHASE5B_OPERATIONAL_INCIDENT_AUDIT.md) | I006, I007, I060, I062, I100 |
 | F008 | Mitigated | Nov15 rolling failure receipt custody and generic root diagnostics. [Checkpoint](../phase5/2026-11-15_ROLLING_FAILURE_CUSTODY_AND_RECEIPT_RETENTION.md) | I006 |
 | F009 | Mitigated | Nov23 heartbeat premature direct activation and wrong expiry multi-job recognition; later paused-route classification. [Checkpoint](checkpoints/2026-11-23_PHASE6_HEARTBEAT_AUTONOMOUS_WORKFLOW_AUDIT.md) | I007 |
 | F010 | Historical loss | Nov23 launch budget approval flag absent, early draw flag absent, first direct tick failed, Day1 T24 unprepared. [Run](https://github.com/HKcode22/ReplitTranvr/actions/runs/45293307564) | I008 |
@@ -48,7 +48,7 @@ F = failure family or evidenced defect; I = corrective implementation; C = incom
 | F035 | Historical fixture correction observed | Relay isolated test 45525733215 failed three assertions: extra active-state GETs, unknown active-read deferred before dispatch, pin rejection fixture. Current relay test models active states; exact-head isolated CI evidence pending. | I032 |
 
 | F036 | Implemented staged; exact relay CI pending | Four ROLLING_ROOT cancellations (45727773405, 45717616827, 45713496477, 45709128629), empty job lists; no runner execution or paid call proven. Concurrency replacement is plausible, not proven cause. | I035 |
-| F037 | Code-discovered deadline risk; implemented staged | Seven serial distinct route groups with up to 10s active read and 10s dispatch each can exceed 120s wake deadline; late route starvation risk, historical attribution not proven. | I036 |
+| F037 | Code-discovered deadline risk; additional SOURCE history repair staged | Seven serial distinct route groups with up to 10s active read and 10s dispatch each can exceed 120s wake deadline; late route starvation risk, historical attribution not proven. SOURCE parent also walked all prior job histories serially (12s/read); I100 bounded parallel GETs retains exact no-replay fence. | I036, I100 |
 
 | F038 | Code repair merged; actual live acceptance open | Immutable original selector and coherent current snapshot; exact 454349c9 46/46. Never substitute changed SOURCE or roll back. | I037, I042 |
 
@@ -194,7 +194,9 @@ F = failure family or evidenced defect; I = corrective implementation; C = incom
 | I097 | Staged; exact CI required | Existing bounded paid child auditor inspects up to 100 exact metadata rows and 64 terminal logs separately from prearm; fixed no-content/reset-content terminal category only for complete noncontradictory markers, still failure/unobserved and no replay. | F017 |
 | I098 | Staged; exact CI required | Existing owner read-only signed calendar census adds slot/airport denominator, reserved-without-binding and units/member counts; verifies exact per-horizon totals in same transaction, no raw source, no billing or zero-yield inference. | F003, F017 |
 
-| I099 | Staged; exact CI required | Reuse signed calendar owner read-only transaction to corroborate selected actual child run IDs against exact reservation/query/binding rows and slot, refuse missing/duplicate or contradictory custody; no HTTP/billing/PRE certification. | F003, F017 |
+| I099 | Exact e0e92a62 focused and PG16 passed; full exact suite 11/12 at inspection | Reuse signed calendar owner read-only transaction to corroborate selected actual child run IDs against exact reservation/query/binding rows and slot, refuse missing/duplicate or contradictory custody; no HTTP/billing/PRE certification. | F003, F017 |
+
+| I100 | Staged; exact CI required | Bounded four-wide read-only all-attempt SOURCE parent job inspection before any POST, wait for all batch results and hold any unknown; preserve 120s freshness and exact deferred counts after partial ACK. No cap, scope, scheduling or retry change. | F007, F037 |
 
 ## Completion components (not gates)
 
@@ -208,9 +210,9 @@ F = failure family or evidenced defect; I = corrective implementation; C = incom
 | C006 | Open | Prospective SOURCE effectiveness and status/body custody | F003, F016, F017 | I012, I013, I086, I087, I097, I098, I099 |
 | C007 | Coordinated deployment complete; actual paid capture open | Owner exact pins and budget/STOP audit passed 19:47:58Z, SOURCE switch enabled, first actual stored parent 45886377755 NO_DUE_WORK; POST remains paused. Do not treat routing as paid capture. Owner 23:20Z quiet hold followed by successful exact coordinated retry: target c2bb8e18, relay 2d96b223, retention 45910885837 both jobs success and final pin readback. No paid capture inferred. | F026, F040 | I008, I011, I023, I057, I082, I084, I086, I087, I090, I096 |
 | C008 | Partial; actual owner coverage readback passed | I059/T054 verified 31 days, 512 prepared queries, 92 reservations, 52 timely bindings, 292 elapsed unreserved, 128 future, zero linked PRE; leakage not assessable. I060 explicit empty status staged. Labels, feature completeness, actual split collision evaluation remain open. | F003, F005, F017, F026, F029 | I018, I020, I059, I060, I086, I087, I097, I098, I099 |
-| C009 | Open | Remove redundant runtime dependencies and isolate failures without weakening custody | F007, F021, F023, F024, F040, F041, F042, F043 | I006, I019, I021, I022, I049, I088, I089, I092, I093, I094, I096 |
+| C009 | Open | Remove redundant runtime dependencies and isolate failures without weakening custody | F007, F021, F023, F024, F037, F040, F041, F042, F043 | I006, I019, I021, I022, I049, I088, I089, I092, I093, I094, I096, I100 |
 
-| C010 | Coordinated deployment, rolling and actual primary due sweep verified | Relay #30 merged to 91888916, target f4fe806d; independent primary relay 45816236626 and target retention child 45816293783 passed. New relay rolling wake 45816860550 passed and six target child workflows completed; scientific execution remains separate. 23:19Z retention cleared 6 originals; cron audit 23:20Z detected older preflight defer. New-main 23:28Z and 23:38Z rolling six lanes passed; primary 23:34Z self-admitted and intentionally deferred recent retention, not new deletion. Actual 23:49Z independent retention 45913171519 cleared 6 originals/576 population/582 tombstones, zero hard due, private/P7 zero due. | F034, F035, F036, F037, F041 | I032, I035, I036, I049, I083, I084, I090 |
+| C010 | Coordinated deployment, rolling and actual primary due sweep verified | Relay #30 merged to 91888916, target f4fe806d; independent primary relay 45816236626 and target retention child 45816293783 passed. New relay rolling wake 45816860550 passed and six target child workflows completed; scientific execution remains separate. 23:19Z retention cleared 6 originals; cron audit 23:20Z detected older preflight defer. New-main 23:28Z and 23:38Z rolling six lanes passed; primary 23:34Z self-admitted and intentionally deferred recent retention, not new deletion. Actual 23:49Z independent retention 45913171519 cleared 6 originals/576 population/582 tombstones, zero hard due, private/P7 zero due. | F007, F034, F035, F036, F037, F041 | I032, I035, I036, I049, I083, I084, I090, I100 |
 
 ## Regression tests
 
@@ -342,7 +344,9 @@ T IDs are permanent scenarios, not claims of passing CI. Each references existin
 | T091 | Staged; exact CI required | Eight-wave actual 204 marker family and exact masked job shape, no-content/reset distinction, incomplete/contradictory or interrupted subprocess refuses attribution; 24 active rows do not crowd 64 terminal logs out of bounded audit. | F017 | I097 | C006, C008 | tests/phase5b_source_diagnostics_v39.test.mjs |
 | T092 | Staged; exact CI required | Real disposable PG16 actual slot SQL, synthetic bound/unbound reservation plus future rows, exact four-slot and horizon reconciliation with contradiction refusal. | F003, F017 | I098 | C006, C008 | tests/phase5b_source_diagnostics_v39.test.mjs; tests/phase5b_conditional_query_scope_real_pg16_v39.mjs |
 
-| T093 | Staged; exact CI required | Run receipt scope, exact one-row cardinality and timely/unbound positive and negative mapping, missing and contradictory evidence refusal; real disposable PG16 actual run-ID join. | F003, F017 | I099 | C006, C008 | tests/phase5b_source_diagnostics_v39.test.mjs; tests/phase5b_conditional_query_scope_real_pg16_v39.mjs |
+| T093 | Exact e0e92a62 focused and real PG16 passed | Run receipt scope, exact one-row cardinality and timely/unbound positive and negative mapping, missing and contradictory evidence refusal; real disposable PG16 actual run-ID join. | F003, F017 | I099 | C006, C008 | tests/phase5b_source_diagnostics_v39.test.mjs; tests/phase5b_conditional_query_scope_real_pg16_v39.mjs |
+
+| T094 | Staged; exact CI required | Twelve prior all-attempt metadata GETs bounded to four concurrent, any ambiguous attempt blocks POST; stale clock after one ACK retains exact remaining count without further POST. | F007, F037 | I100 | C009, C010 | tests/phase6_stored_source_child_dispatcher_v39.test.mjs |
 
 ## Scientific and retention authorities
 
@@ -627,3 +631,8 @@ Exact 28e86964 all 12 PR workflows successful. Latest failed workflow census sin
 ## Nov26 20:45 PST — actual run-to-slot custody and local archive hold
 
 [Checkpoint](checkpoints/2026-11-26_2045_PST_OWNER_SLOT_RECEIPT_AND_POLICY_CUSTODY.md). Owner 04:44:57Z exact 32 distinct run receipts, 32 reserved, 16 bound timely; actual HUB YSSY and MID_B LFQQ each 8/8; MID_A KBUF and REGIONAL NZNP each 0/8, prior no-content logs. No cause or billing inference. F003/F017 actual scope narrowed; F005/F027 still open, archive verification 0 does not establish missing policy secrets. I099/T093 durable exact selected run reconciliation in same read-only transaction, real PG16 fixture; exact successor CI required. No new F/C, no deployment or provider call.
+
+
+## Nov26 continuation — next T24 prearm and prospective policy transition
+
+[Checkpoint](checkpoints/2026-11-26_PHASE5B_T24_PREARM_HISTORY_AND_POLICY_TRANSITION_AUDIT.md). Four additional actual F017 no-content children at 04:45–05:00Z; 20 total inspected red SOURCE cases, no new family. Current capacity deferral observed without missed/stopped receipt. I100/T094 bounded parallel all-attempt history read and partial-ACK stale denominator, not a confirmed live root cause. Exact prior e0e92a62 focused/PG16 passed, 11/12 CI at inspection. Day3 T90 and Day4 T24 overlap prearm; no existing >=130min safe deployment gap before T24. Conditional policy transition must verify prior signed T24 registry digest continuity and activation clock (future conditional scope can block native preflight); no guessed keys, digest rewrite, or relaxation. P2/P3 remain open. F43 I100 T94 C10.
