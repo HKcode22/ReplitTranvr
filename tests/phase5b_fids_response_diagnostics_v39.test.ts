@@ -75,3 +75,31 @@ it("T101 every Fetch redirect status terminates the one-GET lane without retry o
   expect(reserve).toHaveBeenCalledTimes(1);expect(fetchImpl).toHaveBeenCalledTimes(1);expect(sleepImpl).not.toHaveBeenCalled();
  }
 });
+
+it("T101 ambiguous transport and server faults never retry a pre-reserved paid GET",async()=>{
+ for(const fault of ["transport","server"] as const){
+  const reserve=vi.fn(async()=> "a".repeat(64));
+  const fetchImpl=vi.fn(async()=>{
+   if(fault==="transport")throw Error("fixture transport interrupted after dispatch");
+   return new Response(null,{status:503,headers:{"Retry-After":"0"}});
+  });
+  const sleepImpl=vi.fn(async()=>undefined);
+  expect(await fetchFidsAirport("WSSS","2026-11-25T00:00","2026-11-25T02:00",{
+   direction:"Departure",strictDepartureList:true,onePhysicalAttemptOnly:true,
+   budgetOwner:{reserve},fetchImpl,sleepImpl
+  })).toBeNull();
+  expect(reserve).toHaveBeenCalledTimes(1);
+  expect(fetchImpl).toHaveBeenCalledTimes(1);
+  expect(sleepImpl).not.toHaveBeenCalled();
+ }
+});
+it("T101 refused durable reservation makes zero HTTP requests",async()=>{
+ const reserve=vi.fn(async():Promise<string>=>{throw Error("fixture reservation refused");});
+ const fetchImpl=vi.fn(async()=>new Response('{"departures":[]}'));
+ expect(await fetchFidsAirport("WSSS","2026-11-25T00:00","2026-11-25T02:00",{
+  direction:"Departure",strictDepartureList:true,onePhysicalAttemptOnly:true,
+  budgetOwner:{reserve},fetchImpl
+ })).toBeNull();
+ expect(reserve).toHaveBeenCalledTimes(1);
+ expect(fetchImpl).not.toHaveBeenCalled();
+});
