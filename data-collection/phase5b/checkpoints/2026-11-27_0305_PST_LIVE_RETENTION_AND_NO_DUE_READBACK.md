@@ -67,3 +67,12 @@ All ten completion components remain not fully closed:
 ## Safe next step
 
 Day4 T24 begins at 11:45Z and runs through 15:30Z. Keep autonomous schedules, retention, all admitted work and pins unchanged. The existing #980 helper is usable only after natural drain and its fresh STOP, task, quiet and full 130-minute guard all pass. No new owner command, worker cancellation, paid replay, provider call, database write, merge, deployment or science-scope change occurred for this checkpoint.
+
+
+## 11:19Z exact-head CI reconciliation and F009 evidence parity
+
+On 2026-11-27 at 11:11Z, #981 exact CI run 45988378322 had one failure: job 140469671390 failed T116 with `closed evidence drift F009`; the separate `conditional-query-owner-real-pg16` job 140469671067 passed. T116 correctly detected that the closure matrix included the 11:05Z retention readback and the canonical F009 register row did not. This is register evidence drift, not a new production recurrence. F009 remains `CLOSED` only for its scoped heartbeat/retention operational correction; backup/PITR and complete retention deployment remain unverified.
+
+This repair synchronizes the canonical F009 evidence row with the already-reviewed closure-matrix evidence and records the failed exact-head test. It changes no failure IDs, closure labels, scientific scope, or production code. Exact CI on the repair commit is pending. At 11:19:28Z, 20 P5 SOURCE child runs were queued or in progress (four newly queued, 16 in progress); scheduled work and lease-watchdog work were also active. Preserve all active work; no helper rerun, cancellation, paid provider call, production database write, merge, or deployment was issued.
+
+**Next action:** verify all exact-head #981 CI jobs for this repair commit, then continue the existing failure-by-failure audit without promoting a scoped closure or treating no-due work as collection proof.
