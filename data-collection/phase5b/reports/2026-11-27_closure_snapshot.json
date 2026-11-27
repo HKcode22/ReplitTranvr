@@ -5,7 +5,7 @@
   "counts": {
     "narrowCorrected": 13,
     "exactCiGreenPendingDeployment": 10,
-    "partialOrOpen": 33,
+    "partialOrOpen": 34,
     "historicalLoss": 2
   },
   "failures": [
@@ -782,11 +782,22 @@
       "closureStatus": "NOT_CLOSED",
       "scientificRisk": "P1_SCIENTIFIC",
       "workstream": "evidence_integrity"
+    },
+    {
+      "id": "F059",
+      "classification": "PARTIAL_OR_OPEN",
+      "implementations": [
+        "I131"
+      ],
+      "next": "Exact CI must verify test rejects ancestral but changed source; original callback publication guard stays intact",
+      "closureStatus": "NOT_CLOSED",
+      "scientificRisk": "OPERATIONAL",
+      "workstream": "release_reliability"
     }
   ],
   "binaryClosure": {
     "closed": 13,
-    "notClosed": 45,
+    "notClosed": 46,
     "definition": "CLOSED only for an explicitly evidenced, narrowly defined correction already recorded; no broader component or future recurrence guarantee. Partial, candidate-only, historical loss with unverified recurrence prevention, and missing positive production proof are NOT_CLOSED. No previously closed ID reopened."
   },
   "riskDefinition": {

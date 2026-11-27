@@ -2,7 +2,7 @@
 
 Observed: 2026-11-27T13:40:26.201644Z. Closure matrix: 2026-11-27T13:53:56Z.
 
-**58 failure families: 13 scoped corrections CLOSED; 45 NOT_CLOSED.**
+**59 failure families: 13 scoped corrections CLOSED; 46 NOT_CLOSED.**
 
 **Scientific improvement is not demonstrated by these workflow receipts.** Positive PRE/Packet B and separate POST/physical-label evidence remain required. This report does not certify current database counts.
 
@@ -61,6 +61,7 @@ Workflow failures count executions, not unique failure families. In-progress/que
 | F048 | OPERATIONAL | EXACT_CI_GREEN_DEPLOYMENT_PENDING | I109 | Deploy fail-closed custody transaction cleanup; actual protected readback |
 | F054 | OPERATIONAL | EXACT_CI_GREEN_DEPLOYMENT_PENDING | I116 | Deploy exact final clock/quiet guard; actual safe cutover |
 | F056 | OPERATIONAL | EXACT_CI_GREEN_DEPLOYMENT_PENDING | I118 | Deploy safe transport diagnostic categories |
+| F059 | OPERATIONAL | PARTIAL_OR_OPEN | I131 | Exact CI must verify test rejects ancestral but changed source; original callback publication guard stays intact |
 
 ## Closed corrections preserved
 

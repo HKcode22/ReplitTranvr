@@ -1,8 +1,8 @@
 # Recovery reports — November 27, 2026
 
-**45 of 58 failure families remain NOT_CLOSED. The available evidence does not demonstrate improved scientific collection or predictive accuracy.** The 13 CLOSED entries are narrowly evidenced corrections; they do not close all ten components or any P0 scientific family.
+**46 of 59 failure families remain NOT_CLOSED. The available evidence does not demonstrate improved scientific collection or predictive accuracy.** The 13 CLOSED entries are narrowly evidenced corrections; they do not close all ten components or any P0 scientific family.
 
-Start with [the full progress report](2026-11-27_RECOVERY_PROGRESS.md): all 45 open IDs, six P0 priorities, required next evidence, preserved closures and linked workflow sample. Its closure source is the [exact snapshot](2026-11-27_closure_snapshot.json) read from #981 the integrated #981 candidate; the original register remains canonical. Existing remote work through fb346f15 was fast-forwarded without overwriting another agent. F058 is the newly confirmed CLI reporting cause, I129/T123 its correction; I130/T124 supplies this report. The increase from44 to45 open IDs is explicit new-cause registration, not reopening a closed failure.
+Start with [the full progress report](2026-11-27_RECOVERY_PROGRESS.md): all 46 open IDs, six P0 priorities, required next evidence, preserved closures and linked workflow sample. Its closure source is the [exact snapshot](2026-11-27_closure_snapshot.json) read from #981 the integrated #981 candidate; the original register remains canonical. Existing remote work through fb346f15 was fast-forwarded without overwriting another agent. F058 is the newly confirmed CLI reporting cause, I129/T123 its correction; I130/T124 supplies this report. The increase from44 to45 open IDs is explicit new-cause registration, not reopening a closed failure.
 
 ## What is happening
 
@@ -33,3 +33,11 @@ Packet A is operational source custody under its source-specific expiry. Packet 
 [Verification record](2026-11-27_VERIFICATION.txt) and [focused tests](2026-11-27_FOCUSED_TESTS.txt) distinguish local verification from exact CI. The actual CLI correction recovered classifications without claiming positive PRE. Existing I124 PG16 is reused, not recreated. Existing source worker and retention execution remains intact; #980 is not modified or merged by this reporting repair.
 
 Owner explicitly authorized integration, commit and push to existing #981 and standing routine repository recovery operations. No further approval is needed for those operations; replit.md and AGENTS.md record the instruction. Production merge still uses the exact reviewed helper's actual guards. No Replit AI Agent, provider/paid call, production DB write, secret installation, replay, scientific redesign, expiry extension or deployment mutation is part of this patch.
+
+## Actual owner readback — 05:58 Pacific
+
+[Day4 native shape](2026-11-27_owner_day4_native_shape.json):18 retained T24 originals,1053 member observations. All1053 canonical mismatch/noncore/unconfirmed operating leg; zero identity format/duplicate/airport/role/hash/expiry/direction/memberID/scheduled-time failures in the reported cells. Counts overlap and are not distinct flights. No member passes complete native shape. This supports existing F005/F027, not a new gate or native-identity relaxation.
+
+[Storage inventory](2026-11-27_owner_storage_inventory.json):134 timely bindings,82 live originals,52 expired metadata-only,8307 historical member observations; zero linked/cutoff-safe PRE; global Phase7 fragments/bundles/links0,policy1. Day3 now64 bindings,Day4 18; source acquisition increased since the earlier readback but causality to repairs is not established. Scientific usability still not demonstrated. Do not repeat the same census without a new reason.
+
+F059/I131/T125 separately tracks the preexisting callback test's false ancestry-equals-source-equivalence assumption. The production wrapper stays unchanged and rejects drift. Original frozen implementation log restored, current update in a separate addendum. No original failure reopened.

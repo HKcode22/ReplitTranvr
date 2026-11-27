@@ -27,10 +27,16 @@ describe("Phase5 V5 reviewed callback receiver / mode-separated expiry release",
   expect(spawnSync("bash",["-n",FILE],{encoding:"utf8",timeout:10000}).status).toBe(0);
   expect(spawnSync("bash",[FILE,"--publish"],{encoding:"utf8",timeout:10000}).status).not.toBe(0);
  });
- it("actual source-equivalence when the pinned ancestry is present; otherwise fails closed",()=>{
+ it("T125 actual source-equivalence requires unchanged reviewed inputs as well as pinned ancestry",()=>{
   const ancestor=spawnSync("git",["merge-base","--is-ancestor",PIN,"HEAD"],{encoding:"utf8",timeout:10000});
   const result=spawnSync("bash",[FILE,"--verify-only"],{encoding:"utf8",timeout:10000});
-  if(ancestor.status!==0){
+  // An ancestor can have later executable descendants. The wrapper correctly
+  // rejects that drift; ancestor presence alone must never imply publishability.
+  const reviewedInputs=spawnSync("git",["diff","--quiet",PIN,"HEAD","--",
+   "client","server","shared","package.json","package-lock.json","scripts/build.ts",
+   "vite.config.ts","tsconfig.json","postcss.config.js","tailwind.config.ts","tailwind.config.js",
+   "components.json","drizzle.config.ts"],{encoding:"utf8",timeout:10000});
+  if(ancestor.status!==0||reviewedInputs.status!==0){
    expect(result.status).not.toBe(0);
   }else{
    expect(result.status).toBe(0);
