@@ -1,11 +1,11 @@
 {
-  "asOfUtc": "2026-11-27T12:04:56Z",
+  "asOfUtc": "2026-11-27T13:53:56Z",
   "exactCandidate": "c4408c621a84a2549355d935cca7333c5527d3c2",
   "canonicalRegister": "../phase6/RECOVERY_REGISTER.md",
   "counts": {
     "narrowCorrected": 13,
     "exactCiGreenPendingDeployment": 10,
-    "partialOrOpen": 32,
+    "partialOrOpen": 33,
     "historicalLoss": 2
   },
   "failures": [
@@ -496,7 +496,8 @@
       "implementations": [
         "I032",
         "I062",
-        "I083"
+        "I083",
+        "I130"
       ],
       "next": "Relay execution reconciliation distinct from webhook ACK",
       "closureStatus": "NOT_CLOSED",
@@ -770,11 +771,22 @@
       "closureStatus": "NOT_CLOSED",
       "scientificRisk": "P1_SCIENTIFIC",
       "workstream": "source_effectiveness"
+    },
+    {
+      "id": "F058",
+      "classification": "PARTIAL_OR_OPEN",
+      "implementations": [
+        "I129"
+      ],
+      "next": "Verify exact PR CI and preserve actual allowlisted receipt comparison; production collection remains separate",
+      "closureStatus": "NOT_CLOSED",
+      "scientificRisk": "P1_SCIENTIFIC",
+      "workstream": "evidence_integrity"
     }
   ],
   "binaryClosure": {
     "closed": 13,
-    "notClosed": 44,
+    "notClosed": 45,
     "definition": "CLOSED only for an explicitly evidenced, narrowly defined correction already recorded; no broader component or future recurrence guarantee. Partial, candidate-only, historical loss with unverified recurrence prevention, and missing positive production proof are NOT_CLOSED. No previously closed ID reopened."
   },
   "riskDefinition": {

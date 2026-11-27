@@ -69,3 +69,8 @@ Owner exact T120 passed 2/2. Actual Replit inventory returned HOLD_NO_EXACT_LOCA
 ## Mixed-tier POST separation
 
 I128/T122 fixes candidate-only coexistence defect before prospective conditional commissioning: native POST must neither hold on valid already authenticated conditional T24 registry nor treat conditional later service as native anchor. Exclude/count separate conditional tier, preserve native peer, fail closed on malformed/duplicate/tier drift. Native hints and lineage filter namespace. No conditional POST issuer or physical gate-out truth created; F027/F029 stay open. #981 candidate only.
+
+
+## November27 coordinated reporting repair
+
+F058/I129/T123: current gh refuses escape-bearing job logs unless the privately captured GET uses `--allow-escape-sequences`; retain strict classifier output, no raw log rendering. Actual60 common run receipts recovered30 timely/30 no-content. This is visibility only. I130/T124 current progress report lists all45 open families; no previous scoped closure or gate reopened. Use existing I124/T118 exact blob ee80cdf0a299ecf9203a93f66a40a0f4bbe628dc for Day4 shape and storage readback; source CI46002504853 passed realPG16. Single command stored in owner/2026-11-27_day4_shape_and_storage_readonly.sh. Await actual owner output. Do not rerun known-held #980 deployment during current active SOURCE.

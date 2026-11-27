@@ -15,3 +15,6 @@ Latest [binary closure checkpoint](checkpoints/2026-11-27_0305_PST_LIVE_RETENTIO
 
 
 Current live hold (12:04:56Z): main 2b9cb404 and relay 2d96b223 are unchanged; 20 P5 SOURCE children remain in progress and none are queued. The 11:47Z source parent acknowledged eight child dispatches, which are not paid receipts. Preserve the active runs; the held owner helper cannot pass its quiet guard yet. #980 remains open/draft at c4408c62 with 26 required CI paths green. #981's 94aa1f6 evidence-sync head passed exact run 45993869374, including T116 and disposable PG16. No positive PRE, Packet B, POST or physical-label proof exists; the PR remains a stacked draft and is not deployed.
+
+
+[Current owner recovery report](reports/README.md) and [all58 registered families](reports/2026-11-27_RECOVERY_PROGRESS.md): F058/I129/T123 records actual GitHub CLI log transport rejection; I130/T124 supplies reproducible evidence-first reports. Thirteen scoped closures preserved;45 NOT_CLOSED pending exact acceptance. Actual matched60 unreadable receipts recovered as30 timely originals/30 no-content, not positive PRE. Reuse other agent I124/T118 for the [single Day4 owner readback](owner/2026-11-27_day4_shape_and_storage_readonly.sh). Routine existing recovery branch integration/commit/push is owner-authorized; no new approval prompt.

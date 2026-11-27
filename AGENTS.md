@@ -184,3 +184,6 @@ Read [the permanent seven-priority and seven-requirement F/I/C/T crosswalk](data
 
 
 **Nov27 I128/T122:** native POST selector previously rejected all conditional T24 registry schemas and could include conditional later IDs in native candidate pages. Preserve native peer after authenticated conditional-tier enumeration, exclude/count conditional identities without claiming native eligibility, retain hard tier drift/duplicate checks, native hint and lineage SQL exclude leg:g5a namespace. Separate conditional POST issuance and physical labels remain unresolved; no historical production recurrence claimed. #980 unchanged.
+
+
+**Nov27 owner standing authorization and multi-agent continuity:** Routine fetch/integration/stage/commit/push on existing #981 recovery branch is explicitly authorized; do not ask again. Read current remote head and preserve other agents’ changes, reconcile permanent IDs before commit, never force-push. I124/T118 already implements native shape inventory; reuse it, no duplicate census. Owner-only Day4 shape+storage readback is a single exact immutable-script read-only command, independent of #980 live cutover. No new SOURCE, policy, paid, expiry, or production merge permission follows from a green report.
