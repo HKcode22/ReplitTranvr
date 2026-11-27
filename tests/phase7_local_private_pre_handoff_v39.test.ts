@@ -1,6 +1,6 @@
 import {describe,it,expect} from "vitest";
 import {createHash,generateKeyPairSync} from "node:crypto";
-import {mkdtempSync,rmSync} from "node:fs";
+import {mkdtempSync,rmSync,readFileSync} from "node:fs";
 import {tmpdir} from "node:os";
 import {join} from "node:path";
 import {readP7LocalPreScope,callP7LocalPreRole,listenP7LocalPreRole,makeP7LocalPreRequest,openP7LocalPrivatePreHandoff,validateP7LocalPreRequest,type P7LocalPreRole,type P7LocalPreScope} from "../server/lib/disruption/phase7LocalPrivatePreHandoff_v39";
@@ -210,4 +210,14 @@ it("T064 separate later review socket accepts exact subset or explicit no-review
   await expect(port.readConditionalLaterReview({...request,flightInstanceIds:[ids[4]]})).rejects.toThrow("REMOTE_HOLD_NO_REPLAY");
   expect(called).toBe(4);
  }finally{await server.close();rmSync(dir,{recursive:true,force:true});}
+});
+
+it("T083 SOURCE local actor cleanup requires successful dependency installation, retains paid admission interlock",()=>{
+ const y=readFileSync(".github/workflows/phase5-one-signed-day-source-child-dispatch.yml","utf8");
+ const s=y.slice(y.indexOf("  exact-private-source-existing-one-get-child:"));
+ expect(s).toContain("id: pre_actor_dependencies");
+ const dependencies=s.indexOf("id: pre_actor_dependencies"),lane=s.indexOf("name: Preflight independent PRE lane role"),readiness=s.indexOf("name: Validate native PRE publication readiness BEFORE SOURCE"),paid=s.indexOf("name: Authenticate real private PG16 signed index and query, then ORIGINAL one-physical-GET child"),cleanup=s.indexOf("name: Stop private PRE role processes");
+ expect(dependencies).toBeGreaterThan(0);expect(lane).toBeGreaterThan(dependencies);expect(readiness).toBeGreaterThan(lane);expect(paid).toBeGreaterThan(readiness);expect(cleanup).toBeGreaterThan(paid);
+ expect(s.slice(cleanup)).toContain("always() && steps.pre_actor_dependencies.outcome == 'success'");
+ expect(s.slice(paid,paid+500)).toContain("success() && inputs.confirm == 'ONE_SIGNED_SOURCE_CHILD_MAX_ONE_PAID_GET'");
 });

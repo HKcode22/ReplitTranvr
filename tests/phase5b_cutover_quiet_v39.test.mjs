@@ -125,3 +125,19 @@ test("T078 independent relay stage skips unrelated target push CI but still drai
  const y=runSourceGuards(`gh(){ if [[ "$2" == *phase5-primary-fids-expiry-no-provider.yml* ]];then echo '{"total_count":1}';else echo '{"total_count":0}';fi; }
  relay_stage_quiet`);assert.equal(y.status,4,y.stderr);
 });
+
+test("T084 target-only successor requires all exact mandatory CI paths and preserves shared quiet and gap guards",()=>{
+ const h="a".repeat(40);
+ const paths=["v39-phase0-offline.yml","phase5b-source-diagnostics-offline.yml","phase5b-phase7-role-successor.yml","phase5b-runtime-successor-compatibility.yml","phase5-one-signed-future-post-v0083-main-manual.yml","phase5-public-frozen-private-flight-packet-leak-guard.yml","phase5-actual-source-native-flight-candidates-readonly-manual.yml","phase2g-yssy-p25-published-identity-readonly.yml","phase2g-yssy-p25-release-no-provider-ci.yml","phase2g-yssy-p25-release-postgres-ci.yml"];
+ const rows=paths.map(path=>({path:".github/workflows/"+path,head_sha:h,status:"completed",conclusion:"success",run_attempt:1}));
+ const check=rs=>runSourceGuards("target_only_ci_ok '"+JSON.stringify({total_count:rs.length,workflow_runs:rs})+"' "+h+" && echo PASS");
+ assert.equal(check(rows).status,0);
+ for(const rs of [rows.slice(1),[{...rows[0],conclusion:"failure"},...rows.slice(1)],[{...rows[0],head_sha:"b".repeat(40)},...rows.slice(1)],[{...rows[0],run_attempt:2},...rows.slice(1)],[{...rows[0],path:rows[1].path},...rows.slice(1)]]){
+  const x=check(rs);assert.notEqual(x.status,0);assert.doesNotMatch(x.stdout,/PASS/);
+ }
+ assert.match(sourceCutover,/DEPLOY_EXACT_REVIEWED_SOURCE_ONLY_TARGET_979/);
+ const tail=sourceCutover.slice(sourceCutover.indexOf('stage=TARGET_MERGE'));
+ assert.match(tail,/merge_exact "\$R" "\$TARGET_PR"/);
+ assert.match(tail,/if \[\[ "\$TARGET_ONLY" == 1 \]\];then[\s\S]*?FINAL_TARGET_ONLY_READBACK[\s\S]*?relay_unchanged=\$ROLD[\s\S]*?exit 0[\s\S]*?stage=RELAY_MERGE/);
+ assert.ok(tail.indexOf("NEW_TARGET_RETENTION")<tail.indexOf("FINAL_TARGET_ONLY_READBACK"));
+});
