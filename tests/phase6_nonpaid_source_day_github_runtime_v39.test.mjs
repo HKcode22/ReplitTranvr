@@ -232,3 +232,39 @@ test("T103 conditional custody refuses uncertain transaction cleanup and discard
   assert.equal(x.statements.at(-1),"rollback");assert.deepEqual(x.releases,["discard"]);
  }
 });
+
+test("T104 custody cannot skip an earlier unsigned prospective conditional day",()=>{
+ const f=fixture(),e={...f.env,GITHUB_EVENT_NAME:"workflow_dispatch",GITHUB_ACTOR:"HKcode22",
+  P6_NONPAID_SOURCE_CONFIRM:"VERIFY_FUTURE_CONDITIONAL_POLICY_CUSTODY_NO_PROVIDER",P6_NONPAID_SOURCE_REQUESTED_DAY:"6"};
+ const ctx=admitP6NonpaidSourceDayGithub(e),plans=loadP6ReviewedDayPlans(ctx,f.read);
+ const run=()=>projectP6ConditionalPolicyCustody(ctx,plans,f.calendar,f.indexes,iso(now),0,e);
+ assert.throws(run,/CONDITIONAL_CUSTODY_EARLIER_UNSIGNED_PROSPECTIVE_DAY/);
+ f.indexes[4].claim_n=1;
+ assert.throws(run,/CONDITIONAL_CUSTODY_EARLIER_UNSIGNED_PROSPECTIVE_DAY/);
+ f.indexes[4].index_n=1;
+ assert.equal(run().prospective.runDayIndex,6);
+ // Published earlier day is allowed; actual earlier calendar drift is not.
+ f.calendar[4].config_hash=sha("9");
+ assert.throws(run,/ACTUAL_DAY_PLAN_OR_INDEX_STATE_DRIFT/);
+ f.calendar[4].config_hash=ctx.p.configSha256;
+ assert.equal(run().prospective.runDayIndex,6);
+});
+test("T105 custody accounts for the nested day-append conditional scope",()=>{
+ const f=fixture(),e={...f.env,GITHUB_EVENT_NAME:"workflow_dispatch",GITHUB_ACTOR:"HKcode22",
+  P6_NONPAID_SOURCE_CONFIRM:"VERIFY_FUTURE_CONDITIONAL_POLICY_CUSTODY_NO_PROVIDER",P6_NONPAID_SOURCE_REQUESTED_DAY:"5"};
+ const ctx=admitP6NonpaidSourceDayGithub(e),plans=loadP6ReviewedDayPlans(ctx,f.read);
+ const marker={};
+ const p={...ctx.p,nativeLaterReview:{dayAppendPolicy:{conditionalLaterPreScope:marker}}};
+ const custom={mode:ctx.mode,requestedDay:ctx.requestedDay,p,q:ctx.q,reviewed:ctx.reviewed,trust:ctx.trust,policyBytes:ctx.policyBytes};
+ const run=()=>projectP6ConditionalPolicyCustody(custom,plans,f.calendar,f.indexes,iso(now),0,e);
+ assert.equal(run().conditionalPolicyFieldState,"PARTIAL_HOLD");
+ delete p.nativeLaterReview.dayAppendPolicy.conditionalLaterPreScope;
+ assert.equal(run().conditionalPolicyFieldState,"ABSENT");
+ Object.assign(p,{conditionalPreFeatureReview:marker,conditionalT24PermitReview:marker,conditionalLaterPermitReview:marker});
+ Object.assign(custom.q={...ctx.q},{conditionalServicePolicy:marker});
+ Object.assign(p.nativeLaterReview,{conditionalT24Scope:marker,conditionalLaterDayAppendPolicy:marker,nativeT24PolicyTransition:marker});
+ assert.equal(run().conditionalPolicyFieldState,"PARTIAL_HOLD");
+ p.nativeLaterReview.dayAppendPolicy.conditionalLaterPreScope=marker;
+ const all=run();assert.equal(all.conditionalPolicyFieldState,"ALL_FIELDS_PRESENT_NOT_COMMISSIONED_PROOF");
+ assert.equal(all.actualConditionalPolicyInstalledVerified,false);
+});

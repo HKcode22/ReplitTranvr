@@ -250,9 +250,19 @@ export function projectP6ConditionalPolicyCustody(ctx,plans,calendar,indexRows,o
  const day=selected.nextFuturePreparation;
  if(!day||day.runDayIndex!==ctx.requestedDay||day.genesisState!=="ABSENT"||preparedCount!==0||utc(observedUtc)>=utc(day.preparationOpensUtc))
   hold("CONDITIONAL_CUSTODY_NOT_UNSIGNED_BEFORE_PREPARATION");
+ // The requested day selector is intentionally scoped for ordinary manual
+ // preparation. Commissioning instead needs the next unsigned prospective
+ // conditional day, not a caller-selected later day which skips one.
+ for(const earlier of plans.filter(x=>x.runDayIndex>=5&&x.runDayIndex<ctx.requestedDay&&utc(x.firstRequestUtc)>utc(observedUtc))){
+  const earlierCtx={requestedDay:earlier.runDayIndex,p:ctx.p,reviewed:ctx.reviewed};
+  selectP6NonpaidSourceDay(earlierCtx,plans,calendar,indexRows,observedUtc);
+  const prior=indexRows.find(x=>x.run_day_index===earlier.runDayIndex);
+  if(prior?.claim_n!==1||prior.index_n<1)hold("CONDITIONAL_CUSTODY_EARLIER_UNSIGNED_PROSPECTIVE_DAY");
+ }
  const p=ctx.p,q=ctx.q,v=p.nativeLaterReview;
  const fields=[p.conditionalPreFeatureReview,p.conditionalT24PermitReview,p.conditionalLaterPermitReview,
-  q.conditionalServicePolicy,v?.conditionalT24Scope,v?.conditionalLaterDayAppendPolicy,v?.nativeT24PolicyTransition];
+  q.conditionalServicePolicy,v?.conditionalT24Scope,v?.conditionalLaterDayAppendPolicy,v?.nativeT24PolicyTransition,
+  v?.dayAppendPolicy?.conditionalLaterPreScope];
  const present=fields.filter(x=>x!==undefined).length;
  let last=-Infinity;
  for(const x of plans.filter(z=>z.runDayIndex>=ctx.requestedDay)){
