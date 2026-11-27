@@ -68,7 +68,6 @@ export async function readInventory(c){
   return result;
  }finally{if(begun)await c.query("ROLLBACK");}
 }
-
 /** I124/T118: count-only current native shape diagnostics. Mirrors the
  * field checks in phase5ActualSourceNativeFlightCandidateAudit_v39.ts,
  * not its retained cross-original identity, timing, independent review,
@@ -88,18 +87,7 @@ export async function readNativeShapeRows(c,manifest,day){
     AND r.source_airport_icao=q.airport_icao AND r.query_direction='Departure'
   ), members AS (
    SELECT l.query_digest,l.slot_id,l.horizon,l.normalized_members_count,p.id IS NOT NULL AS present,
-    coalesce(p.analytic_identity_id ~ '^[a-zA-Z0-9_.:|-]{5,200}(process.argv[1])===fileURLToPath(import.meta.url)){
- let c;
- try{
-  const arg=process.argv[2],match=typeof arg==="string"?/^--native-shape-day=([1-9]|[12][0-9]|3[01])$/.exec(arg):null;
-  if((process.argv.length!==2&&!(process.argv.length===3&&match))||!process.env.DATABASE_URL||process.env.NODE_TLS_REJECT_UNAUTHORIZED==="0")throw Error("OWNER_CONTEXT");
-  const {Client}=createRequire(resolve(process.cwd(),"package.json"))("pg");
-  c=new Client({connectionString:process.env.DATABASE_URL,connectionTimeoutMillis:8000});
-  await c.connect();const result=match?await readNativeShapeInventory(c,Number(match[1])):await readInventory(c);await c.end();c=null;console.log(JSON.stringify(result));
- }catch(e){console.error(JSON.stringify({status:"P5B_RETENTION_AND_P7_STORAGE_METADATA_HOLD",sqlstate:/^[0-9A-Z]{5}$/.test(e?.code??"")?e.code:null,providerCalls:0,databaseWrites:0}));process.exitCode=2;}
- finally{if(c)await c.end().catch(()=>{});}
-}
-,false) AS identity_shape,
+    coalesce(p.analytic_identity_id ~ '^[a-zA-Z0-9_.:|-]{5,200}$' AND (p.analytic_identity_id NOT LIKE 'leg:p5v1:%' OR p.analytic_identity_id ~ '^leg:p5v1:[a-f0-9]{64}$'),false) AS identity_shape,
     count(p.id) OVER(PARTITION BY l.query_digest,p.analytic_identity_id)=1 AS unique_identity,
     coalesce(p.canonical_flight_instance_id=p.analytic_identity_id,false) AS canonical_match,
     coalesce(p.source_airport_icao=l.airport_icao,false) AS source_airport,
@@ -182,10 +170,11 @@ export async function readNativeShapeInventory(c,day){
 if(process.argv[1]&&resolve(process.argv[1])===fileURLToPath(import.meta.url)){
  let c;
  try{
-  if(process.argv.length!==2||!process.env.DATABASE_URL||process.env.NODE_TLS_REJECT_UNAUTHORIZED==="0")throw Error("OWNER_CONTEXT");
+  const arg=process.argv[2],match=typeof arg==="string"?/^--native-shape-day=([1-9]|[12][0-9]|3[01])$/.exec(arg):null;
+  if((process.argv.length!==2&&!(process.argv.length===3&&match))||!process.env.DATABASE_URL||process.env.NODE_TLS_REJECT_UNAUTHORIZED==="0")throw Error("OWNER_CONTEXT");
   const {Client}=createRequire(resolve(process.cwd(),"package.json"))("pg");
   c=new Client({connectionString:process.env.DATABASE_URL,connectionTimeoutMillis:8000});
-  await c.connect();const result=await readInventory(c);await c.end();c=null;console.log(JSON.stringify(result));
+  await c.connect();const result=match?await readNativeShapeInventory(c,Number(match[1])):await readInventory(c);await c.end();c=null;console.log(JSON.stringify(result));
  }catch(e){console.error(JSON.stringify({status:"P5B_RETENTION_AND_P7_STORAGE_METADATA_HOLD",sqlstate:/^[0-9A-Z]{5}$/.test(e?.code??"")?e.code:null,providerCalls:0,databaseWrites:0}));process.exitCode=2;}
  finally{if(c)await c.end().catch(()=>{});}
 }

@@ -107,7 +107,7 @@ test("T086 real PostgreSQL 16 parses and executes the actual owner query with pr
 
   await t.test("T118 native field census uses actual PG16, overlapping failures, exact live originals and count parity",async()=>{
    await c.query("ALTER TABLE clean.phase5_fids_original_binding_v39 ADD COLUMN response_hash text, ADD COLUMN source_expires_at_utc timestamptz");
-   await c.query("UPDATE clean.phase5_fids_original_binding_v39 SET response_hash=$1,source_expires_at_utc=$2,bound_at_utc=$3,normalized_members_count=5",[digest("response"),stamp(3),stamp(-1)]);
+   await c.query("UPDATE clean.phase5_fids_original_binding_v39 SET response_hash=$1,source_expires_at_utc=$2,bound_at_utc=$3,normalized_members_count=7",[digest("response"),stamp(3),stamp(-1)]);
    await c.query("CREATE TABLE clean.fids_query_response(population_query_id uuid PRIMARY KEY,response_hash text,raw_payload jsonb,raw_expired_at_utc timestamptz,source_airport_icao text,query_direction text); CREATE TABLE clean.flight_population(id integer PRIMARY KEY,population_query_id uuid,analytic_identity_id text,canonical_flight_instance_id text,source_airport_icao text,dep_airport_icao text,population_role text,scope_classification text,codeshare_resolution_status text,source_type text,response_hash text,provider_content_expired_at_utc timestamptz,query_direction text,population_member_id text,dep_scheduled_utc timestamptz)");
    const pop="00000000-0000-0000-0000-000000000001",expiredPop="00000000-0000-0000-0000-000000000002";
    const response=digest("response");
@@ -121,11 +121,15 @@ test("T086 real PostgreSQL 16 parses and executes the actual owner query with pr
    await row(3,"native-dup","native-dup","WSSS","confirmed_core","confirmed_operating_leg",response,stamp(30));
    await row(4,"native-dup","native-dup","WSSS","confirmed_core","confirmed_operating_leg",response,stamp(30));
    await row(5,"native-other","native-other","WSSS","confirmed_core","confirmed_operating_leg",digest("wrong"),stamp(30));
+   await row(6,"leg:p5v1:invalid","leg:p5v1:invalid","WSSS","confirmed_core","confirmed_operating_leg",response,stamp(30));
+   await c.query("INSERT INTO clean.flight_population VALUES(7,$1,'native-bad','native-bad','KBUF','WSSS','context','confirmed_core','confirmed_operating_leg','other',$2,$3,'Arrival',NULL,$4)",[pop,response,stamp(-1),stamp(30)]);
    const result=await readNativeShapeInventory(c,4);
    assert.equal(result.cells.length,1);
    const cell=result.cells[0];
-   assert.equal(cell.live_originals,1);assert.equal(cell.observed_members,5);assert.equal(cell.expected_members,5);
+   assert.equal(cell.live_originals,1);assert.equal(cell.observed_members,7);assert.equal(cell.expected_members,7);
    assert.equal(cell.all_shape_fields_pass,1);assert.equal(cell.duplicate_identity,2);
+   assert.equal(cell.invalid_identity_shape,1);assert.equal(cell.source_airport_mismatch,1);assert.equal(cell.nonprimary_role,1);
+   assert.equal(cell.nonfids_source,1);assert.equal(cell.expired_member_marker,1);assert.equal(cell.wrong_direction,1);assert.equal(cell.missing_member_id,1);
    assert.equal(cell.canonical_mismatch,1);assert.equal(cell.departure_airport_mismatch,1);
    assert.equal(cell.noncore_scope,1);assert.equal(cell.unconfirmed_operating_leg,1);
    assert.equal(cell.response_mismatch,1);assert.equal(cell.missing_scheduled_time,1);
@@ -133,7 +137,7 @@ test("T086 real PostgreSQL 16 parses and executes the actual owner query with pr
    assert.equal(result.databaseWrites,0);assert.equal(result.providerCalls,0);
    assert.ok(!JSON.stringify(result).includes("native-good"));assert.ok(!JSON.stringify(result).includes(response));
    assert.deepEqual((await readNativeShapeInventory(c,5)).cells,[]);
-   await c.query("UPDATE clean.phase5_fids_original_binding_v39 SET normalized_members_count=6 WHERE population_query_id=$1",[pop]);
+   await c.query("UPDATE clean.phase5_fids_original_binding_v39 SET normalized_members_count=8 WHERE population_query_id=$1",[pop]);
    assert.equal((await readNativeShapeInventory(c,4)).cells[0].member_count_mismatch_originals,1);
    await assert.rejects(readNativeShapeInventory(c,32),/NATIVE_SHAPE_SCOPE/);
    assert.equal((await c.query("SHOW transaction_read_only")).rows[0].transaction_read_only,"off");
