@@ -175,3 +175,6 @@ Read [the permanent seven-priority and seven-requirement F/I/C/T crosswalk](data
 
 
 **Nov27 scientific-first I125/T119:** T24 fresh conditional review must censor individual unavailable members before signing, not discard other still-eligible members; exact ordered signed subset or explicit null only, no retry of attempted members, no relaxed cutoff/identity/witness/independent proof or catch-all structural failure. #981 candidate only; #980 unchanged, no production change. Prioritize real F005/F027/F026 and F029/F042 over cosmetic CI status.
+
+
+**Nov27 I126/T120:** historical owner finalizer already wrote six-policy/31-static bundle (see issue #413 comment 7073928717 and corrected helper blob 3b039908026814238290b7fcb230bc3e3b75bbb0). Inspect existing bounded private directories only, compare one composite commitment with actual protected custody before any proposed install; never reconstruct, export secrets, or claim local match proves protected bytes. I124/T118 exact run 46002504853 passed; I125/T119 exact run 46005309221 passed. No closure promotion or #980 change.

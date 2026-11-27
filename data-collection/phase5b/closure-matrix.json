@@ -406,7 +406,8 @@
         "I108",
         "I121",
         "I123",
-        "I125"
+        "I125",
+        "I126"
       ],
       "next": "Protected policy custody, exact reviewed commissioning, positive conditional signature and PRE; actual protected commitment decision preview and separate authorized install/readback outstanding",
       "closureStatus": "NOT_CLOSED",
