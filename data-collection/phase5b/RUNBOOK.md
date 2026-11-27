@@ -17,3 +17,14 @@ Main `2b9cb404da863aede54d9069e440ff32bcf6d00e`, relay `2d96b22345908aa4334335aa
 Primary relay `45981089260` verified target identity `45981121682`; that exact-main target then completed primary FIDS expiry and Phase7 expiry jobs `140444983503` and `140444983969` successfully. Both independent readbacks showed no due work, zero provider calls and zero object deletions. Backup/PITR and complete-retention proof remain false. Rolling relay `45980961590` acknowledged six safe lanes and explicitly did not prove collection. PRE/T24/enrollment runs `45980989222`, `45980989191`, and `45980985177` returned no-due/no-prospective results; no positive PRE or Packet B exists.
 
 The binary matrix now closes F009 and F035 only for the proven operational heartbeat/retention and fixture/rolling-wake criteria. F005/F010/F026/F027/F029/F042 remain P0 scientific NOT_CLOSED. Do not relax scientific identity, cutoff, physical-label, rights, split or budget safeguards to increase counts.
+
+
+## Live status — Nov27 10:48:50Z
+
+Production main `2b9cb404da863aede54d9069e440ff32bcf6d00e`, relay main `2d96b22345908aa4334335aa899aec71b2fec2cb`, and #980 exact head `c4408c621a84a2549355d935cca7333c5527d3c2` remain unchanged. The owner-reported second exact #980 helper run held `QUIET_AND_GAP / ACTIVE_NO_CANCEL`; do not rerun or cancel it while source children remain active.
+
+The latest Actions read found 12 active P5 SOURCE children, all on the exact production main: `45974512381`, `45974520502`, `45974524731`, `45974527919`, `45981062032`, `45981065565`, `45981068842`, `45981071771`, `45983890725`, `45983893370`, `45983896613`, and `45983899292`. The earlier 09:16Z child had completed. No cancel or replay occurred.
+
+#981 remains open/draft at exact head `9e8cfb67856da586a9a1975cb776909ffb4ebdcd`, stacked on #980. Exact run `45984268175` passed both `fixed-metadata-only` (job `140455741701`) and `conditional-query-owner-real-pg16` (job `140455741288`), including the restricted query against disposable PostgreSQL 16. This proves candidate CI only.
+
+Latest current-main retention evidence remains run `45981121682`; primary relay `45981089260` verified the target identity. Rolling relay `45980961590` acknowledged six safe lanes without collection proof. No positive PRE or Packet B is evidenced. Day4 T24 is scheduled to begin at 11:45Z; let the existing window and active children finish naturally, then allow the existing helper's fresh STOP/task/quiet/full-130-minute checks to decide whether a later safe window exists.
