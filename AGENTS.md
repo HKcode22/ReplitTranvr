@@ -107,3 +107,6 @@ Read [the permanent seven-priority and seven-requirement F/I/C/T crosswalk](data
 
 
 **Nov26 16:19 PST operational isolation:** T086 exact bd6315a6 real PG16 job140235264481 passed, owner retry corrected 30fadfbd608860a059bcc09a17cfd904a0f025de pending. Day3 actual 00:18Z wake and four 00:19Z SOURCE children ACKed, no missed/deferred; do not interrupt during prearm. I093/T087 isolated POST nonpaid actor local process 0 matches existing successful PRE preflight, no global arm/owner or paid job mutation. F042 exact original predicate unknown; don't claim this is proven cause. Keep existing disabled POST parent, exact review/runtime and no-provider boundary.
+
+
+**Nov26 16:47 PST:** F043 actual repaired owner audit passed 384 Day3/4 instructions, all no conditional marker, zero parity drift/invalid/unavailable; F027 remains commissioning, not native acquisition failure. Next unpublished Day5 first 11/29 15:45Z, prep opens 03:45Z. I094/T088 private candidate assembler requires exact existing three policy bytes, distinct actual public pins, explicit reviewed prospective decision, no installation, native/budget unchanged and no standalone. F025 T087 lint fix same ID. Do not rewrite Day3/4 or pause active SOURCE; read [checkpoint](data-collection/phase6/checkpoints/2026-11-26_1647_PST_ACTUAL_MARKER_AND_COMMISSIONING.md).

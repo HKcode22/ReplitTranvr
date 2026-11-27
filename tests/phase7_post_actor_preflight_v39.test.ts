@@ -61,7 +61,7 @@ it("T087 isolated POST actor workflow uses local disarm while existing paid POST
  const i=y.indexOf("  exact-main-post-actors-only:"),j=y.indexOf("  exact-signed-one-v0083-future-post:");
  expect(i).toBeGreaterThan(0);expect(j).toBeGreaterThan(i);
  const actor=y.slice(i,j),paid=y.slice(j);
- expect(actor).toMatch(/^      V39_PHASE6_PROCESS_ARMED: '0'$/m);
+ expect(actor).toMatch(/^ {6}V39_PHASE6_PROCESS_ARMED: '0'$/m);
  expect(actor).not.toMatch(/secrets\.V39_PHASE6_PROCESS_ARMED/);
  expect(actor).toContain("P6_POST_ACTOR_PARENT_ROUTE");
  expect(actor).toContain("test \"$P6_POST_ACTOR_PARENT_ROUTE\" = false");
