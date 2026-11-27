@@ -1,3 +1,4 @@
+import {hasP6NativePreFeatureReview} from "../server/lib/disruption/phase6NativePreFeaturePolicy_v39.mjs";
 import {p6ReviewedPolicyMatchesRuntime} from "../server/lib/disruption/phase6ReviewedRuntimeCode_v39.mjs";
 /**
  * STOP-default, one-day protected GitHub SOURCE preparation/publication
@@ -25,6 +26,7 @@ const PREPARE_LOGIN="phase5_p30_prepare_login_20261107";
 const CONFIRM="ONE_APPROVED_PROSPECTIVE_SOURCE_DAY_NONPAID_PREPARE_PUBLISH";
 const CURRENT_CONFIRM="PREPARE_PUBLISH_NEXT_DUE_SIGNED_SOURCE_DAY_NO_PROVIDER";
 const DAY1_CONFIRM="RECOVER_EXACT_DAY1_T6_T90_NO_PROVIDER";
+const CONDITIONAL_CUSTODY_CONFIRM="VERIFY_FUTURE_CONDITIONAL_POLICY_CUSTODY_NO_PROVIDER";
 const hold=s=>{throw Error("HOLD_P6_NONPAID_SOURCE_DAY_GITHUB_"+s);};
 const h=b=>createHash("sha256").update(b).digest("hex");
 const fp=k=>h(k.export({format:"der",type:"spki"}));
@@ -59,6 +61,7 @@ function url(raw,login){
  }catch{hold("RESTRICTED_TLS_DATABASE_URL_REQUIRED");}
 }
 const modeOf=env=>env.GITHUB_EVENT_NAME==="schedule"?"schedule":
+ env.P6_NONPAID_SOURCE_CONFIRM===CONDITIONAL_CUSTODY_CONFIRM?"conditional_custody":
  env.P6_NONPAID_SOURCE_CONFIRM===CURRENT_CONFIRM?"current_dispatch":env.P6_NONPAID_SOURCE_CONFIRM===DAY1_CONFIRM?"day1_recovery":"manual";
 export function admitP6NonpaidSourceDayGithub(env){
  if(!env||env.GITHUB_ACTIONS!=="true"||env.GITHUB_REPOSITORY!=="HKcode22/ReplitTranvr"||
@@ -73,7 +76,8 @@ export function admitP6NonpaidSourceDayGithub(env){
     env.NODE_TLS_REJECT_UNAUTHORIZED==="0")
   hold("NOT_APPROVED_REAL_MAIN_NONPAID_RUNTIME");
  const mode=modeOf(env);
- if(mode==="day1_recovery"?env.GITHUB_EVENT_NAME!=="workflow_dispatch"||env.P6_NONPAID_SOURCE_REQUESTED_DAY!=="1":mode!=="manual"?env.P6_NONPAID_SOURCE_SCHEDULE_ENABLED!=="true"||Boolean(env.P6_NONPAID_SOURCE_REQUESTED_DAY)||
+ if(mode==="conditional_custody"?env.GITHUB_EVENT_NAME!=="workflow_dispatch"||env.GITHUB_ACTOR!=="HKcode22"||!/^(?:[5-9]|[12][0-9]|3[01])$/.test(env.P6_NONPAID_SOURCE_REQUESTED_DAY??""):
+    mode==="day1_recovery"?env.GITHUB_EVENT_NAME!=="workflow_dispatch"||env.P6_NONPAID_SOURCE_REQUESTED_DAY!=="1":mode!=="manual"?env.P6_NONPAID_SOURCE_SCHEDULE_ENABLED!=="true"||Boolean(env.P6_NONPAID_SOURCE_REQUESTED_DAY)||
     (mode==="schedule"?Boolean(env.P6_NONPAID_SOURCE_CONFIRM):env.P6_NONPAID_SOURCE_CONFIRM!==CURRENT_CONFIRM):
     env.P6_NONPAID_SOURCE_CONFIRM!==CONFIRM||!/^([1-9]|[12][0-9]|3[01])$/.test(env.P6_NONPAID_SOURCE_REQUESTED_DAY??""))
   hold("NO_EXACT_MANUAL_OR_SCHEDULE_APPROVAL");
@@ -125,7 +129,7 @@ export function admitP6NonpaidSourceDayGithub(env){
  const lateRole=mode==="day1_recovery"?env.V39_P5_EARLY_DRAW_EFFECTIVE_ROLE:undefined;
  const late=mode==="day1_recovery"?url(env.V39_P5_EARLY_DRAW_DATABASE_URL,lateRole):undefined;
  if(late&& (lateRole!=="phase5_early_draw_prod20261115"||late.endpoint!==prepare.endpoint||p.manifestSha256!=="a596feb9b3d8a1d75c8856a2f2f6bc559a87d58fd18132bbfa0f48428965118e"||budget.budgetReleaseMode!=="COST_UPPER_BOUND"))hold("EXACT_EXISTING_DAY1_RECOVERY_ROLE_AND_MANIFEST");
- const receipt={mode,mainSha:env.GITHUB_SHA,requestedDay:mode==="manual"||mode==="day1_recovery"?Number(env.P6_NONPAID_SOURCE_REQUESTED_DAY):null,
+ const receipt={mode,mainSha:env.GITHUB_SHA,requestedDay:["manual","day1_recovery","conditional_custody"].includes(mode)?Number(env.P6_NONPAID_SOURCE_REQUESTED_DAY):null,
   providerCalls:0,phase6PaidGo:false};
  Object.defineProperties(receipt,Object.fromEntries(Object.entries({p,q,reviewed,policyBytes,signingPolicyBytes,trust,
   prepareUrl:prepare.raw,readerUrl:reader.raw,publisherUrl:publisher.raw,dailyKey,queryKey,registryKey,lateUrl:late?.raw,lateRole,
@@ -235,6 +239,83 @@ async function indexRead(reader,ctx){
   await reader.query("ROLLBACK");tx=false;return{rows:z.rows,now};
  }finally{if(tx)await reader.query("ROLLBACK").catch(()=>{});}
 }
+/** Owner-only conditional commissioning inspection, not issuance, signing,
+ * installation or new SOURCE authority. Existing admission validates the
+ * protected three policies, real signer identities and exact 31 plan pins.
+ * Do not serialize policy bytes, key material, digests or database URLs. */
+export function projectP6ConditionalPolicyCustody(ctx,plans,calendar,indexRows,observedUtc,preparedCount,env){
+ if(ctx.mode!=="conditional_custody"||!Number.isSafeInteger(ctx.requestedDay)||ctx.requestedDay<5||ctx.requestedDay>31||
+    plans.length!==31||!Number.isSafeInteger(preparedCount)||preparedCount<0)
+  hold("CONDITIONAL_CUSTODY_SCOPE");
+ const selected=selectP6NonpaidSourceDay(ctx,plans,calendar,indexRows,observedUtc);
+ const day=selected.nextFuturePreparation;
+ if(!day||day.runDayIndex!==ctx.requestedDay||day.genesisState!=="ABSENT"||preparedCount!==0||utc(observedUtc)>=utc(day.preparationOpensUtc))
+  hold("CONDITIONAL_CUSTODY_NOT_UNSIGNED_BEFORE_PREPARATION");
+ // The requested day selector is intentionally scoped for ordinary manual
+ // preparation. Commissioning instead needs the next unsigned prospective
+ // conditional day, not a caller-selected later day which skips one.
+ for(const earlier of plans.filter(x=>x.runDayIndex>=5&&x.runDayIndex<ctx.requestedDay&&utc(x.firstRequestUtc)>utc(observedUtc))){
+  const earlierCtx={requestedDay:earlier.runDayIndex,p:ctx.p,reviewed:ctx.reviewed};
+  selectP6NonpaidSourceDay(earlierCtx,plans,calendar,indexRows,observedUtc);
+  const prior=indexRows.find(x=>x.run_day_index===earlier.runDayIndex);
+  if(prior?.claim_n!==1||prior.index_n<1)hold("CONDITIONAL_CUSTODY_EARLIER_UNSIGNED_PROSPECTIVE_DAY");
+ }
+ const p=ctx.p,q=ctx.q,v=p.nativeLaterReview;
+ const fields=[p.conditionalPreFeatureReview,p.conditionalT24PermitReview,p.conditionalLaterPermitReview,
+  q.conditionalServicePolicy,v?.conditionalT24Scope,v?.conditionalLaterDayAppendPolicy,v?.nativeT24PolicyTransition,
+  v?.conditionalLaterDayAppendPolicy?.conditionalLaterPreScope];
+ // The original native append policy must remain unchanged. A marker there
+ // is unexpected even if the separate conditional successor is complete.
+ const unexpectedNativeMarker=v?.dayAppendPolicy?.conditionalLaterPreScope!==undefined;
+ const present=fields.filter(x=>x!==undefined).length;
+ let last=-Infinity;
+ for(const x of plans.filter(z=>z.runDayIndex>=ctx.requestedDay)){
+  const plan=JSON.parse(x.bytes.toString("utf8"));
+  for(const row of plan.templates){const end=utc(row.serviceWindowEndUtc);if(end<=utc(row.scheduledRequestUtc))hold("CONDITIONAL_CUSTODY_PLAN_WINDOW");last=Math.max(last,end);}
+ }
+ const nativePolicyPresent=Boolean(hasP6NativePreFeatureReview(p.nativePreFeatureReview,ctx.trust.rightsSha256)&&v?.approved===true&&v.nativeT24ReviewApproved===true&&
+  v.independentT24WitnessProtocolReviewed===true&&v.dayAppendPolicy?.delegatedAutomatedLaterDayAppendApproved===true);
+ const timePolicies=[p,q,v,v?.dayAppendPolicy];
+ const baseIntervalCoversRemainingStudy=Boolean(nativePolicyPresent&&timePolicies.every(x=>utc(x.validFromUtc)<=utc(day.preparationOpensUtc)&&utc(x.validUntilUtc)>last));
+ let publicActorsVerified=false;
+ try{
+  const lane=createPublicKey(raw64(env.P6_PHASE7_PRE_LANE_EVIDENCE_AUTHORITY_PUBLIC_KEY_BASE64,4096,"CONDITIONAL_LANE_PUBLIC"));
+  const proof=createPublicKey(raw64(env.P6_PHASE7_PRE_PROOF_REVIEWER_PUBLIC_KEY_BASE64,4096,"CONDITIONAL_PROOF_PUBLIC"));
+  const keys=[fp(lane),fp(proof),v?.laterReviewerFingerprintSha256,ctx.trust.dayReviewerFingerprintSha256,ctx.trust.queryReviewerFingerprintSha256];
+  publicActorsVerified=lane.asymmetricKeyType==="ed25519"&&proof.asymmetricKeyType==="ed25519"&&
+   keys.every(k=>SHA.test(k??""))&&new Set(keys).size===5&&keys[0]===env.P6_PHASE7_PRE_LANE_EVIDENCE_AUTHORITY_FINGERPRINT_SHA256&&keys[1]===env.P6_PHASE7_PRE_PROOF_REVIEWER_FINGERPRINT_SHA256;
+ }catch{/* explicitly false; never expose invalid key bytes */}
+ return Object.freeze({status:"P6_ACTUAL_PROTECTED_CONDITIONAL_POLICY_CUSTODY_READONLY",
+  prospective:{runDayIndex:day.runDayIndex,firstRequestUtc:day.firstRequestUtc,preparationOpensUtc:day.preparationOpensUtc,genesisAbsent:true,preparedQueryCount:0},
+  observedDbClockUtc:observedUtc,exactThreePolicyDigestsValidated:true,exact31PlanPinsValidated:true,
+  canonicalNativePredecessorBytes:Buffer.from(JSON.stringify(p)).equals(ctx.policyBytes),
+  nativePolicyPresent,baseIntervalCoversRemainingStudy,remainingServiceEndUtc:new Date(last).toISOString(),
+  conditionalPolicyFieldState:unexpectedNativeMarker?"PARTIAL_HOLD":present===0?"ABSENT":present===fields.length?"ALL_FIELDS_PRESENT_NOT_COMMISSIONED_PROOF":"PARTIAL_HOLD",
+  publicActorsVerified,conditionalMetadataEnabled:env.P6_CONDITIONAL_LATER_METADATA_READ_ENABLED==="1",
+  actualConditionalPolicyInstalledVerified:false,actualConditionalPreCommitVerified:false,
+  providerCalls:0,databaseWrites:0,githubWrites:0,signaturesIssued:0,phase6PaidGo:false});
+}
+export async function conditionalPreparedRead(restricted,ctx){
+ const c=await restricted.connect();let tx=false;
+ try{
+  await c.query("BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY");tx=true;
+  await c.query("SET LOCAL statement_timeout='12000ms'");
+  const z=await c.query("SELECT count(*)::int AS prepared,transaction_timestamp() AS observed,current_setting('transaction_read_only') AS ro FROM clean.phase5_fids_allowed_query_v39 WHERE manifest_sha256=$1 AND run_day_index=$2",[ctx.trust.manifestSha256,ctx.requestedDay]);
+  const r=z.rows[0];
+  if(z.rowCount!==1||r?.ro!=="on"||!Number.isSafeInteger(r.prepared)||r.prepared<0)hold("CONDITIONAL_CUSTODY_PREPARED_READ");
+  return {count:r.prepared,clock:new Date(r.observed).toISOString()};
+ }finally{
+  // An unacknowledged BEGIN or ROLLBACK leaves transaction state unknown.
+  // Discard the pooled connection; never emit a successful custody receipt
+  // if the read-only transaction's cleanup could not be confirmed.
+  if(!tx)c.release(true);
+  else{
+   try{await c.query("ROLLBACK");}
+   catch{c.release(true);hold("CONDITIONAL_CUSTODY_ROLLBACK_UNVERIFIED");}
+   c.release();
+  }
+ }
+}
 /** One explicit owner-approved incident using existing protected credentials.
  * The existing daily reviewer signs the exact late fixed registration scope
  * under the successor code pin. No new key, credential or paid dispatch. */
@@ -294,6 +375,11 @@ export async function runP6NonpaidSourceDayGithub(env){
   await reader.query("SET ROLE phase6_private_frozen_reader_v39");
   const c=await calendarRead(restricted,ctx),i=await indexRead(reader,ctx);
   if(Math.abs(utc(c.clock)-utc(i.now))>120000)hold("CROSS_SNAPSHOT_DB_CLOCK_DRIFT");
+  if(ctx.mode==="conditional_custody"){
+   const count=await conditionalPreparedRead(restricted,ctx);
+   if(Math.abs(utc(count.clock)-utc(i.now))>120000)hold("CONDITIONAL_CUSTODY_CLOCK_DRIFT");
+   return projectP6ConditionalPolicyCustody(ctx,plans,c.calendar,i.rows,count.clock,count.count,env);
+  }
   let selection,lateScope;
   if(ctx.mode==="day1_recovery"){
    const d=c.calendar.find(x=>x.run_day_index===1),idx=i.rows.find(x=>x.run_day_index===1);

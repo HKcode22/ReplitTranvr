@@ -10,7 +10,7 @@ on:
         default: ''
         type: string
       confirm:
-        description: 'Confirm exact reviewed day or PREPARE_PUBLISH_NEXT_DUE_SIGNED_SOURCE_DAY_NO_PROVIDER'
+        description: 'Confirm exact reviewed day, current calendar, or VERIFY_FUTURE_CONDITIONAL_POLICY_CUSTODY_NO_PROVIDER'
         required: true
         type: string
   pull_request:
@@ -70,6 +70,7 @@ jobs:
         ((github.event_name == 'schedule' && vars.P6_NONPAID_SOURCE_SCHEDULE_ENABLED == 'true') ||
          (github.event_name == 'workflow_dispatch' && (inputs.confirm == 'ONE_APPROVED_PROSPECTIVE_SOURCE_DAY_NONPAID_PREPARE_PUBLISH' ||
           (inputs.confirm == 'RECOVER_EXACT_DAY1_T6_T90_NO_PROVIDER' && inputs.run_day_index == '1') ||
+          (inputs.confirm == 'VERIFY_FUTURE_CONDITIONAL_POLICY_CUSTODY_NO_PROVIDER' && github.actor == 'HKcode22') ||
           (inputs.confirm == 'PREPARE_PUBLISH_NEXT_DUE_SIGNED_SOURCE_DAY_NO_PROVIDER' && inputs.run_day_index == '' && vars.P6_NONPAID_SOURCE_SCHEDULE_ENABLED == 'true')))) }}
     runs-on: ubuntu-latest
     timeout-minutes: 15
@@ -130,6 +131,11 @@ jobs:
           P5_V39_PREPARE_DATABASE_URL: ${{ secrets.P5_V39_PREPARE_DATABASE_URL }}
           P6_PRIVATE_READER_DATABASE_URL: ${{ secrets.P6_PRIVATE_READER_DATABASE_URL }}
           P6_PRIVATE_PUBLISHER_DATABASE_URL: ${{ secrets.P6_PRIVATE_PUBLISHER_DATABASE_URL }}
+          P6_PHASE7_PRE_LANE_EVIDENCE_AUTHORITY_PUBLIC_KEY_BASE64: ${{ inputs.confirm == 'VERIFY_FUTURE_CONDITIONAL_POLICY_CUSTODY_NO_PROVIDER' && secrets.P6_PHASE7_PRE_LANE_EVIDENCE_AUTHORITY_PUBLIC_KEY_BASE64 || '' }}
+          P6_PHASE7_PRE_LANE_EVIDENCE_AUTHORITY_FINGERPRINT_SHA256: ${{ inputs.confirm == 'VERIFY_FUTURE_CONDITIONAL_POLICY_CUSTODY_NO_PROVIDER' && secrets.P6_PHASE7_PRE_LANE_EVIDENCE_AUTHORITY_FINGERPRINT_SHA256 || '' }}
+          P6_PHASE7_PRE_PROOF_REVIEWER_PUBLIC_KEY_BASE64: ${{ inputs.confirm == 'VERIFY_FUTURE_CONDITIONAL_POLICY_CUSTODY_NO_PROVIDER' && secrets.P6_PHASE7_PRE_PROOF_REVIEWER_PUBLIC_KEY_BASE64 || '' }}
+          P6_PHASE7_PRE_PROOF_REVIEWER_FINGERPRINT_SHA256: ${{ inputs.confirm == 'VERIFY_FUTURE_CONDITIONAL_POLICY_CUSTODY_NO_PROVIDER' && secrets.P6_PHASE7_PRE_PROOF_REVIEWER_FINGERPRINT_SHA256 || '' }}
+          P6_CONDITIONAL_LATER_METADATA_READ_ENABLED: ${{ inputs.confirm == 'VERIFY_FUTURE_CONDITIONAL_POLICY_CUSTODY_NO_PROVIDER' && vars.P6_CONDITIONAL_LATER_METADATA_READ_ENABLED || '' }}
         run: |
           set -Eeuo pipefail
           set +x

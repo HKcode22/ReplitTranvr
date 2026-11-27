@@ -801,11 +801,31 @@ export async function fetchFidsAirport(
         resp = await fetchImpl(url, {
           headers: headers(),
           signal: opts?.signal ? AbortSignal.any([opts.signal, deadline]) : deadline,
+          // A single JavaScript fetch can otherwise follow a redirect and
+          // make an unreserved second HTTP request (including to another host).
+          // Preserve legacy behavior; V0079/V0083 one-GET lanes never follow.
+          ...(opts?.onePhysicalAttemptOnly===true?{redirect:"manual" as const}:{}),
         });
       } catch (error) {
         if (attempt === maxAttempts) throw error;
         await sleepImpl(RATE_LIMIT_BACKOFF_MS * attempt);
         continue;
+      }
+      if (opts?.onePhysicalAttemptOnly===true &&
+          [301,302,303,307,308].includes(resp.status)) {
+        // A redirect is an unobserved result, not a valid empty population.
+        // Never inspect or log Location, never follow it, never retry.
+        await resp.body?.cancel().catch(()=>undefined);
+        return null;
+      }
+      // The reviewed FIDS operation documents 200 for a full payload and
+      // 204 for no content. 206 or any other unexpected 2xx must not be
+      // accepted as a complete observation in the one-GET research lane.
+      // Keep 204/205 body-unavailable diagnostics and legacy callers intact.
+      if (opts?.onePhysicalAttemptOnly===true && resp.ok &&
+          resp.status!==200 && resp.status!==204 && resp.status!==205) {
+        await resp.body?.cancel().catch(()=>undefined);
+        return null;
       }
       if (resp.ok) {
         // Read exactly the response-body bytes delivered to Node fetch (after

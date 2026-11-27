@@ -3,6 +3,7 @@ on:
   pull_request:
     branches: [main]
     paths:
+      - 'scripts/v39_phase5b_source_only_successor_owner.sh'
       - 'server/lib/disruption/phase5Stage9V0082AtomicSegmentedDayPrepare_v39.ts'
       - 'server/lib/disruption/phase5TypedSourceBudgetBinding_v39.mjs'
       - 'server/lib/disruption/phase5TypedSourceBudgetBinding_v39.d.mts'

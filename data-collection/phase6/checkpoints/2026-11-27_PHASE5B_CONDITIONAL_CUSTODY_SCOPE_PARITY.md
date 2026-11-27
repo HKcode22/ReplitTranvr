@@ -1,0 +1,12 @@
+# Phase5B — conditional custody scope parity (Nov26 late PST / Nov27 UTC)
+
+- Exact #980 parent 7ba7d1eeb76001ab4c0b760680c48b3bf5ae94ab all 23 returned PR workflow runs completed successfully, including offline full safety 45960766281, focused admission 45960766218, and diagnostics 45960766271 both jobs 140377770209 and 140377770746. No protected commissioning or positive PRE is inferred.
+- Live #979 remains open and main c2bb8e18 unchanged at inspection; four previously admitted SOURCE children in progress. Prior owner cutover continues independently. No competing merge, cancellation, resume, dispatch, secret access, provider or DB mutation.
+- F049: I108 reused manual requested-day selection, so a request for Day6 could ignore a still-unsigned future Day5. I110 validates earlier future conditional days via existing selector and requires completed genesis before later candidate inspection. T104 checks unsigned, partial, complete, and actual calendar drift. Earlier elapsed dates are not retroactively repaired; Day1–4 native scope unchanged.
+- F050: custody inventory omitted nested nativeLaterReview.dayAppendPolicy.conditionalLaterPreScope even though I094 candidate assembler explicitly rejects its preexistence. I111 counts it as the eighth additive field. T105 tests nested-only, absent, seven-of-eight, all present with no commissioning claim.
+- F048 clarification: actual Stage28 dedicated adapter always destroys the connection on release; the candidate defect was potentially false successful read receipt after failed cleanup, not actual production pool contamination. Prior direct disposable pool regression verifies generic discard/reuse behavior.
+- No changes to f.8, Packet A/B, Amendment E, C+D, all 16 canonical features, rights/retention, 20/5/6 chronology, existing cutoffs, budget or STOP. Exact new CI required. No new gate. Conditional policy installation and actual positive PRE still outstanding.
+
+## Immediate shape correction
+
+The first staged b2a327e4 implementation counted the native nested field as required. I094 actual assembler preserves the native append policy and adds the marker in conditionalLaterDayAppendPolicy. Corrected I111 to count the successor field and independently classify any unexpected native marker as PARTIAL_HOLD, even with all successor fields present. T105 now verifies both. Same F050/I111/T105, not a new production defect. Exact successor CI required.

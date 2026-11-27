@@ -166,3 +166,46 @@ test("T090 cutover permits only internally reconciled terminal PRE history; bloc
  const afterWait=sourceCutover.slice(sourceCutover.indexOf("stage=QUIET_AND_GAP"),sourceCutover.indexOf("stage=TARGET_MERGE"));
  assert.match(afterWait,/wait_all_quiet[\s\S]*?node "\$TMP\/funnel.cjs"[\s\S]*?cutover_pre_tasks_ok[\s\S]*?node "\$TMP\/census.mjs"[\s\S]*?TASK_CENSUS_CLOCK[\s\S]*?all_main_quiet/);
 });
+
+test("T106 target980 requires every added exact workflow and checks all pin scopes before mutation",()=>{
+ const h="a".repeat(40);
+ const base=["v39-phase0-offline.yml","phase5b-source-diagnostics-offline.yml","phase5b-phase7-role-successor.yml","phase5b-runtime-successor-compatibility.yml","phase5-one-signed-future-post-v0083-main-manual.yml","phase6-source-existing-p5-child-admission-offline-no-provider.yml","phase5-source-upcoming-queue-main-scheduled-readonly.yml","phase5-public-frozen-private-flight-packet-leak-guard.yml","phase5-actual-source-native-flight-candidates-readonly-manual.yml","phase2g-yssy-p25-published-identity-readonly.yml","phase2g-yssy-p25-release-no-provider-ci.yml","phase2g-yssy-p25-release-postgres-ci.yml"];
+ const extra=["phase6-private-later-enrollment.yml","phase6-nonpaid-source-day-prepare-publish.yml","phase5-github-fids-source-release-guard-offline.yml","phase5-cd-github-one-queued-t24-witness-main-manual.yml","phase5-source-login-and-manual-owner-disposable-pg16.yml","phase5-v0080-github-runtime-prearm-real-pg16.yml","phase5-amendment-c-segmented-day-stage6-stage8-offline.yml","phase3-gate4-owned-handoff-ci.yml","phase5-v0082-atomic-segmented-day-pg16-no-provider.yml","phase5-stage9-v0079-db-prepare-offline.yml","phase5-stage8-v0079-daily-prepare-proposals-offline.yml"];
+ const rows=[...base,...extra].map(path=>({path:".github/workflows/"+path,head_sha:h,status:"completed",conclusion:"success",run_attempt:1}));
+ const call=rs=>runSourceGuards("target_980_ci_ok '"+JSON.stringify({total_count:rs.length,workflow_runs:rs})+"' "+h+" && echo PASS");
+ assert.equal(call(rows).status,0);
+ for(let i=0;i<rows.length;i++)assert.notEqual(call(rows.filter((_,j)=>i!==j)).status,0);
+ const pinCase=body=>runSourceGuards("v(){ echo old; }; vars(){ echo ok; }; value(){ echo __ABSENT__; }; "+body);
+ assert.equal(pinCase("pin_candidates_ok repo key old new env").status,0);
+ assert.equal(pinCase("value(){ echo new; }; pin_candidates_ok repo key old new env").status,0);
+ assert.notEqual(pinCase("value(){ echo other; }; pin_candidates_ok repo key old new env").status,0);
+ assert.notEqual(pinCase("vars(){ return 5; }; pin_candidates_ok repo key old new env").status,0);
+ assert.match(sourceCutover,/RECOVER_EXACT_MERGED_SOURCE_ONLY_TARGET_980/);
+ assert.match(sourceCutover,/stage=QUIET_AND_GAP[\s\S]*?target_980_pins_ok "\$OLD" "\$OLD" \|\| hold PIN_SCOPE_DRIFT;fi[\s\S]*?wait_all_quiet[\s\S]*?node "\$TMP\/funnel.cjs"/);
+ assert.match(sourceCutover,/RECOVERY_REQUIRES_EXACT_MERGED_TREE/);
+});
+
+test("T108 required target980 offline workflows trigger on the exact owner release helper",()=>{
+ const required=["phase5-one-signed-future-post-v0083-main-manual.yml","phase6-source-existing-p5-child-admission-offline-no-provider.yml","phase5-source-upcoming-queue-main-scheduled-readonly.yml","phase5-actual-source-native-flight-candidates-readonly-manual.yml","phase6-private-later-enrollment.yml","phase5-github-fids-source-release-guard-offline.yml","phase5-cd-github-one-queued-t24-witness-main-manual.yml","phase5-source-login-and-manual-owner-disposable-pg16.yml","phase5-v0080-github-runtime-prearm-real-pg16.yml","phase5-amendment-c-segmented-day-stage6-stage8-offline.yml","phase5-v0082-atomic-segmented-day-pg16-no-provider.yml","phase5-stage9-v0079-db-prepare-offline.yml","phase5-stage8-v0079-daily-prepare-proposals-offline.yml"];
+ for(const path of required){
+  const yaml=readFileSync(new URL("../.github/workflows/"+path,import.meta.url),"utf8");
+  const pull=yaml.split("  pull_request:\n")[1]?.split(/\n  [a-z_]+:/)[0];
+  assert.ok(pull,"missing pull_request "+path);
+  assert.match(pull,/^      - 'scripts\/v39_phase5b_source_only_successor_owner\.sh'$/m,path);
+ }
+});
+
+test("T110 final 980 merge retains the full 130-minute margin and fresh database evidence after API reads",()=>{
+ const at="2026-11-27T15:40:00.000Z",sec=Date.parse(at)/1000;
+ const base={status:"SIGNED_CALENDAR_PREPARED_QUERY_AND_SPLIT_COUNTS_READONLY",calendarDays:31,providerCalls:0,databaseWrites:0,observedAtUtc:at,
+  cells:[{status:"PREPARED_DENOMINATOR_OBSERVED",open_unreserved:0,future_unreserved:64,next_planned_utc:"2026-11-27T17:50:30.000Z"}]};
+ const call=(elapsed,task=at,data=base)=>runSourceGuards("date(){ if [[ \"$#\" == 2 ]];then echo "+(sec+elapsed)+";else command date \"$@\";fi; }; fresh_980_gap '"+JSON.stringify(data)+"' '"+task+"' && echo PASS");
+ for(const e of [0,30])assert.equal(call(e).status,0,call(e).stderr);
+ for(const e of [-1,31,61])assert.notEqual(call(e).status,0);
+ assert.notEqual(call(0,"2026-11-27T15:38:59.000Z").status,0);
+ assert.notEqual(call(0,"bad-clock").status,0);
+ assert.notEqual(call(0,at,{...base,cells:[{...base.cells[0],open_unreserved:1}]}).status,0);
+ const merge=sourceCutover.slice(sourceCutover.indexOf("merge_exact(){"),sourceCutover.indexOf("\npin(){"));
+ assert.match(merge,/gh pr ready[\s\S]*?all_main_quiet[\s\S]*?fresh_980_gap[\s\S]*?gh pr merge/);
+ assert.match(merge,/FINAL_MERGE_EVIDENCE_STALE_OR_GAP/);
+});

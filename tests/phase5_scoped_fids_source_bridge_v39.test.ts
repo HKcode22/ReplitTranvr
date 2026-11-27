@@ -2,7 +2,7 @@ import { describe,it,expect,vi,beforeEach,afterEach } from "vitest";
 import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import {
-  admitP5ScopedFidsSource,runP5ScopedFidsSource,
+  admitP5ScopedFidsSource,runP5ScopedFidsSource,requireP5ScopedFidsFetchFrame,
   type P5SourceSingleQueryPlan,type P5SourcePorts,
 } from "../server/lib/disruption/phase5ScopedFidsSourceBridge_v39";
 import { verifyPreparedDailyDraw } from "../server/lib/disruption/phase5EarlyPreselectionReadback_v39";
@@ -232,6 +232,44 @@ describe("Phase5 single-GET scoped FIDS source bridge, no network, no DB",()=>{
   expect(result.actualPreCertified).toBe(false);
   expect(result.providerOriginalBound).toBe(true);
   expect(o.calls).toMatchObject({reserve:1,fetch:1,persist:1});
+ });
+ it("T113 actual scoped adapter preserves every frozen FIDS flag on the one outbound GET",async()=>{
+  const f=fixture(),o=ports(),urls:string[]=[];
+  o.p.fetchImpl=async(input,init)=>{
+   o.calls.fetch++;urls.push(String(input));
+   expect(o.calls.reserve).toBe(1);
+   expect(init?.redirect).toBe("manual");
+   expect(init?.method??"GET").toBe("GET");
+   return new Response('{"departures":[],"arrivals":[]}',{status:200});
+  };
+  expect((await runP5ScopedFidsSource(f,o.p)).providerOriginalBound).toBe(true);
+  expect(o.calls).toMatchObject({reserve:1,fetch:1,persist:1});
+  const url=new URL(urls[0]);
+  expect(url.origin).toBe("https://aerodatabox.p.rapidapi.com");
+  expect(url.pathname).toBe("/flights/airports/icao/WSSS/2026-11-09T22%3A00/2026-11-10T02%3A00");
+  expect(Object.fromEntries(url.searchParams)).toEqual({direction:"Departure",withCancelled:"true",withCodeshared:"true",
+   withCargo:"false",withPrivate:"false",withLocation:"false",withLeg:"true"});
+ });
+ it("T113 missing or changed frozen filter or category refuses the adapter before reservation",()=>{
+  const exact={direction:"Departure" as const,strictDepartureList:true,strictArrivalList:false,withLeg:true,
+   withLocation:false,withCancelled:true,withCodeshared:true,withCargo:false,withPrivate:false,category:"fids_base" as const};
+  expect(()=>requireP5ScopedFidsFetchFrame(exact,"fids_base")).not.toThrow();
+  for(const [key,value] of Object.entries(exact)){
+   const bad={...exact,[key]:typeof value==="boolean"?!value:undefined};
+   expect(()=>requireP5ScopedFidsFetchFrame(bad,"fids_base")).toThrow("UNSIGNED_OR_MISROUTED_SOURCE_REQUEST");
+   expect(()=>requireP5ScopedFidsFetchFrame({...exact,[key]:undefined},"fids_base")).toThrow("UNSIGNED_OR_MISROUTED_SOURCE_REQUEST");
+  }
+  expect(()=>requireP5ScopedFidsFetchFrame(exact,"fids_split")).toThrow("UNSIGNED_OR_MISROUTED_SOURCE_REQUEST");
+ });
+ it("T111 complete scoped SOURCE fault matrix cannot bind originals, persist PRE or replay",async()=>{
+  for(const status of [204,205,206,301,302,400,401,403,404,408,429,500,502,503,504]){
+   const f=fixture(),o=ports();
+   o.p.fetchImpl=async()=>{o.calls.fetch++;return new Response([204,205].includes(status)?null:'{"departures":[]}',{status});};
+   const result=await runP5ScopedFidsSource(f,o.p);
+   expect(result.status).toBe("SOURCE_UNOBSERVED_OR_UNPERSISTED");
+   expect(result.actualPreCertified).toBe(false);
+   expect(o.calls).toMatchObject({reserve:1,fetch:1,persist:0});
+  }
  });
  it("never performs a second paid physical GET after retryable 503",async()=>{
   const f=fixture(),o=ports({http:503});

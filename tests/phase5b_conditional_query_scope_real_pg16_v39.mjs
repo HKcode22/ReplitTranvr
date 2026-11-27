@@ -3,6 +3,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {createHash} from "node:crypto";
 import pg from "pg";
+import {conditionalPreparedRead} from "../scripts/v39_phase6_nonpaid_source_day_github_runtime_v39.mjs";
 import {readP6ConditionalQueryScope} from "../scripts/v39_phase5b_conditional_query_scope_owner.mjs";
 import {readP6SourceSlotRows,readP6SourceRunReceiptRows} from "../scripts/v39_phase5b_signed_calendar_coverage_owner.mjs";
 const adminUrl="postgresql://postgres:postgres@127.0.0.1:5432/neondb?sslmode=disable";
@@ -55,6 +56,31 @@ test("T086 real PostgreSQL 16 parses and executes the actual owner query with pr
   assert.deepEqual(counts,{q:9,p:8});
   const who=(await c.query("SELECT current_user=session_user AS same, NOT rolsuper AS non_super FROM pg_roles WHERE rolname=current_user")).rows[0];
   assert.deepEqual(who,{same:true,non_super:true});
+  await t.test("T102 exact protected custody SQL uses a restricted login and always rolls back",async()=>{
+   // Fixture ACL only: no production grant or proof of production permissions.
+   const role="phase5_p30_prepare_login_20261107";
+   await a.query("CREATE ROLE phase5_p30_prepare_login_20261107 LOGIN NOSUPERUSER NOCREATEROLE NOCREATEDB PASSWORD 'ci-only-custody'");
+   await c.query("GRANT USAGE ON SCHEMA clean TO phase5_p30_prepare_login_20261107");
+   await c.query("GRANT SELECT ON clean.phase5_fids_allowed_query_v39 TO phase5_p30_prepare_login_20261107");
+   const pool=new pg.Pool({connectionString:"postgresql://"+role+":ci-only-custody@127.0.0.1:5432/neondb?sslmode=disable",max:1});
+   const ctx={trust:{manifestSha256:m},requestedDay:4};
+   try{
+    const who=(await pool.query("SELECT current_user AS actor, NOT rolsuper AS non_super FROM pg_roles WHERE rolname=current_user")).rows[0];
+    assert.deepEqual(who,{actor:role,non_super:true});
+    const positive=await conditionalPreparedRead(pool,ctx);
+    assert.equal(positive.count,9);assert.equal(new Date(positive.clock).toISOString(),positive.clock);
+    assert.equal((await conditionalPreparedRead(pool,{...ctx,requestedDay:5})).count,0);
+    assert.equal((await conditionalPreparedRead(pool,{...ctx,trust:{manifestSha256:digest("foreign")}})).count,0);
+    // The same reusable connection must leave read-only transaction state.
+    assert.equal((await pool.query("SHOW transaction_read_only")).rows[0].transaction_read_only,"off");
+    await assert.rejects(pool.query("UPDATE clean.phase5_fids_allowed_query_v39 SET run_day_index=5"),e=>e.code==="42501");
+    await c.query("REVOKE SELECT ON clean.phase5_fids_allowed_query_v39 FROM phase5_p30_prepare_login_20261107");
+    await assert.rejects(conditionalPreparedRead(pool,ctx),e=>e.code==="42501");
+    assert.equal((await pool.query("SHOW transaction_read_only")).rows[0].transaction_read_only,"off");
+    await c.query("GRANT SELECT ON clean.phase5_fids_allowed_query_v39 TO phase5_p30_prepare_login_20261107");
+    assert.equal((await conditionalPreparedRead(pool,ctx)).count,9);
+   }finally{await pool.end();}
+  });
   await t.test("T092 execute actual slot aggregate with real PG16, bound and missing reservations separated",async()=>{
    await c.query("ALTER TABLE clean.phase5_fids_allowed_query_v39 ADD COLUMN slot_id text NOT NULL DEFAULT 'HUB', ADD COLUMN airport_icao text NOT NULL DEFAULT 'WSSS', ADD COLUMN state text NOT NULL DEFAULT 'PREPARED', ADD COLUMN hard_latest_dispatch_utc timestamptz, ADD COLUMN prediction_cutoff_utc timestamptz");
    await c.query("UPDATE clean.phase5_fids_allowed_query_v39 SET hard_latest_dispatch_utc=$1,prediction_cutoff_utc=$2",[stamp(4),stamp(5)]);

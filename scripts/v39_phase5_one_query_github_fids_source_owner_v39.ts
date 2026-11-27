@@ -23,7 +23,7 @@ import {runP5ScopedFidsSource,
  type P5SourceSingleQueryPlan}
  from "../server/lib/disruption/phase5ScopedFidsSourceBridge_v39";
 
-import {sourceDiagnosticLine,sourceHttpDiagnosticLabel,sourceDbDiagnosticLabel}
+import {sourceDiagnosticLine,sourceHttpDiagnosticLabel,sourceDbDiagnosticLabel,sourceTransportDiagnosticLabel}
  from "./v39_phase5b_source_diagnostics_v39.mjs";
 const diagnostic=(label:string)=>console.log(sourceDiagnosticLine(label));
 function refuse():never{throw Error("REFUSED_P5_GITHUB_SOURCE_NOT_ADMITTED");}
@@ -128,7 +128,7 @@ async function main():Promise<void>{
      const response=await fetch(...args);
      diagnostic(sourceHttpDiagnosticLabel(response.status,response.ok));
      return response;
-    }catch(e){diagnostic("HTTP_TRANSPORT_FAILED");throw e;}
+    }catch(e){diagnostic(sourceTransportDiagnosticLabel(e));throw e;}
    },
   });
   // Both DB ledger and provider request may have cost even if this fails.

@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import {sourceDiagnosticLine,readSafeSourceDiagnosticLines,sourceHttpDiagnosticLabel,postDiagnostic,sourceDbDiagnosticLabel,sourceChildFailureDiagnostic,readSafeTimestampedSourceDiagnostics,classifyP6PaidChildReceipt} from "../scripts/v39_phase5b_source_diagnostics_v39.mjs";
+import {sourceDiagnosticLine,readSafeSourceDiagnosticLines,sourceHttpDiagnosticLabel,sourceTransportDiagnosticLabel,postDiagnostic,sourceDbDiagnosticLabel,sourceChildFailureDiagnostic,readSafeTimestampedSourceDiagnostics,classifyP6PaidChildReceipt} from "../scripts/v39_phase5b_source_diagnostics_v39.mjs";
 test("only fixed complete diagnostic lines are returned, never arbitrary captured data",()=>{
  const ok=sourceDiagnosticLine("RESERVATION_CONFIRMED");
  const no=sourceDiagnosticLine("HTTP_AUTH_REJECTED");
@@ -10,7 +10,7 @@ test("only fixed complete diagnostic lines are returned, never arbitrary capture
  assert.deepEqual(readSafeSourceDiagnosticLines(null,{}),[]);
 });
 test("HTTP diagnostic labels distinguish auth, rate, client, server, OK and other without body or URL",()=>{
- for(const [code,ok,label] of [[200,true,"HTTP_OK"],[204,true,"HTTP_NO_CONTENT"],[205,true,"HTTP_RESET_CONTENT"],[401,false,"HTTP_AUTH_REJECTED"],[403,false,"HTTP_AUTH_REJECTED"],[429,false,"HTTP_RATE_LIMIT"],[404,false,"HTTP_OTHER_CLIENT_ERROR"],[503,false,"HTTP_SERVER_ERROR"],[302,false,"HTTP_OTHER_STATUS"]])
+ for(const [code,ok,label] of [[200,true,"HTTP_OK"],[204,true,"HTTP_NO_CONTENT"],[205,true,"HTTP_RESET_CONTENT"],[401,false,"HTTP_AUTH_REJECTED"],[403,false,"HTTP_AUTH_REJECTED"],[429,false,"HTTP_RATE_LIMIT"],[404,false,"HTTP_OTHER_CLIENT_ERROR"],[503,false,"HTTP_SERVER_ERROR"],[301,false,"HTTP_REDIRECT_BLOCKED"],[302,false,"HTTP_REDIRECT_BLOCKED"],[303,false,"HTTP_REDIRECT_BLOCKED"],[307,false,"HTTP_REDIRECT_BLOCKED"],[308,false,"HTTP_REDIRECT_BLOCKED"],[304,false,"HTTP_OTHER_STATUS"]])
   assert.equal(sourceHttpDiagnosticLabel(code,ok),label);
 });
 
@@ -78,6 +78,7 @@ test("T080 paid child evidence requires exact job/step and complete actual diagn
  assert.equal(result.status,"TIMELY_ORIGINAL_REPORTED_BY_CHILD");assert.equal(result.providerBillingVerified,false);assert.equal(result.actualPreCommitVerified,false);
  assert.equal(classifyP6PaidChildReceipt(run,[job],log("PREARM_COMMITTED","RESERVATION_CONFIRMED","HTTP_OK","OUTCOME_UNOBSERVED")).status,"HTTP_OK_NO_ORIGINAL_PROOF");
  assert.equal(classifyP6PaidChildReceipt(run,[job],log("PREARM_COMMITTED","RESERVATION_CONFIRMED","HTTP_RATE_LIMIT","OUTCOME_UNOBSERVED")).status,"RATE_LIMIT_NO_ORIGINAL_PROOF");
+ assert.equal(classifyP6PaidChildReceipt(run,[job],log("PREARM_COMMITTED","RESERVATION_CONFIRMED","HTTP_REDIRECT_BLOCKED","OUTCOME_UNOBSERVED")).status,"HTTP_REDIRECT_BLOCKED_NO_ORIGINAL_PROOF");
  assert.equal(classifyP6PaidChildReceipt(run,[job],complete+"\n"+log("OUTCOME_LATE")).status,"CONTRADICTORY_DIAGNOSTICS_REVIEW");
  assert.equal(classifyP6PaidChildReceipt(run,[job],complete.replace("OUTCOME_TIMELY","OUTCOME_LATE")).status,"LATE_ORIGINAL_REPORTED_BY_CHILD");
  assert.equal(classifyP6PaidChildReceipt(run,[job],null).status,"PAID_STEP_LOG_UNAVAILABLE_OR_NO_DIAGNOSTIC");
@@ -170,4 +171,31 @@ test("T093 exact run-level custody corroboration detects missing, duplicate and 
  for(const rows of [[a],[a,a],[a,{...b,reserved:false}],[a,{...b,bound:true}],[{...a,timely:false},b],[a,{...b,run_id:"3"}]])assert.throws(()=>projectP6RunReceiptRows(scope,rows),/RUN_RECEIPT_/);
  assert.throws(()=>selectP6RunReceiptScope([{runId:1,status:positive},{runId:1,status:negative}]),/RUN_RECEIPT_IDENTITY/);
  assert.throws(()=>selectP6RunReceiptScope([{runId:3,status:"RUN_NOT_TERMINAL"}]),/RUN_RECEIPT_SCOPE/);
+});
+
+test("T111 exact response status diagnostics cannot conflate 206 or unexpected 2xx with 200",()=>{
+ assert.equal(sourceHttpDiagnosticLabel(206,true),"HTTP_PARTIAL_CONTENT");
+ for(const status of [201,202,203,207,208,226])assert.equal(sourceHttpDiagnosticLabel(status,true),"HTTP_UNEXPECTED_SUCCESS");
+ assert.equal(sourceHttpDiagnosticLabel(200,true),"HTTP_OK");
+ assert.equal(sourceHttpDiagnosticLabel(204,true),"HTTP_NO_CONTENT");
+ assert.equal(sourceHttpDiagnosticLabel(205,true),"HTTP_RESET_CONTENT");
+});
+test("T112 fixed transport failure categories never echo arbitrary error details",()=>{
+ for(const [error,label] of [
+  [{name:"TimeoutError"},"HTTP_TRANSPORT_TIMEOUT"],[{cause:{code:"UND_ERR_CONNECT_TIMEOUT"}},"HTTP_TRANSPORT_TIMEOUT"],
+  [{cause:{code:"ENOTFOUND"}},"HTTP_TRANSPORT_DNS"],[{cause:{code:"EAI_AGAIN"}},"HTTP_TRANSPORT_DNS"],
+  [{cause:{code:"ERR_TLS_CERT_ALTNAME_INVALID"}},"HTTP_TRANSPORT_TLS"],[{code:"ECONNRESET"},"HTTP_TRANSPORT_SOCKET"],
+  [{cause:{code:"SECRET_URL_OR_ARBITRARY_PROVIDER_TEXT"},message:"private"},"HTTP_TRANSPORT_FAILED"]
+ ]){
+  assert.equal(sourceTransportDiagnosticLabel(error),label);
+  assert.deepEqual(readSafeSourceDiagnosticLines(sourceDiagnosticLine(label),null),["P6_SOURCE_DIAG "+label]);
+ }
+ const run={id:45916017872,head_sha:"c2bb8e18dfcf64ea815745da59ede62f53e448bb",event:"workflow_dispatch",head_branch:"main",run_attempt:1,status:"completed",conclusion:"failure"};
+ const job={name:"exact-private-source-existing-one-get-child",run_id:run.id,head_sha:run.head_sha,run_attempt:1,status:"completed",conclusion:"failure",steps:[
+  {name:"Admission for real actor preflight ONLY (no paid capability)",conclusion:"skipped"},
+  {name:"Authenticate real private PG16 signed index and query, then ORIGINAL one-physical-GET child",conclusion:"failure",started_at:"2026-11-27T00:19:40Z",completed_at:"2026-11-27T01:45:39Z"}]};
+ for(const label of ["HTTP_PARTIAL_CONTENT","HTTP_UNEXPECTED_SUCCESS","HTTP_TRANSPORT_TIMEOUT","HTTP_TRANSPORT_DNS","HTTP_TRANSPORT_TLS","HTTP_TRANSPORT_SOCKET","HTTP_TRANSPORT_FAILED"]){
+  const log=["RESERVATION_CONFIRMED","HTTP_STARTED",label,"OUTCOME_UNOBSERVED"].map(x=>"2026-11-27T01:45:39.4611591Z P6_SOURCE_DIAG "+x).join("\n");
+  const out=classifyP6PaidChildReceipt(run,[job],log);assert.equal(out.status,label+"_NO_ORIGINAL_PROOF");assert.equal(out.providerBillingVerified,false);assert.equal(out.actualPreCommitVerified,false);
+ }
 });

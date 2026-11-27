@@ -19,13 +19,18 @@ if [[ "$MODE" == DEPLOY_EXACT_REVIEWED_SOURCE_ONLY_TARGET_979 ]];then
  TARGET_PR=979
  OLD=c2bb8e18dfcf64ea815745da59ede62f53e448bb
  ROLD=2d96b22345908aa4334335aa899aec71b2fec2cb
+elif [[ "$MODE" == DEPLOY_EXACT_REVIEWED_SOURCE_ONLY_TARGET_980 || "$MODE" == RECOVER_EXACT_MERGED_SOURCE_ONLY_TARGET_980 ]];then
+ TARGET_ONLY=1
+ TARGET_PR=980
+ OLD=2b9cb404da863aede54d9069e440ff32bcf6d00e
+ ROLD=2d96b22345908aa4334335aa899aec71b2fec2cb
 fi
 H="${2:-}"
 ENV=phase6-protected-runtime
 stage=ADMISSION
 hold(){ echo "HOLD_SOURCE_ONLY_CUTOVER stage=$stage reason=$1" >&2;exit 2; }
 trap 'echo "SOURCE_ONLY_CUTOVER_INTERRUPTED stage=$stage; inspect actual main and pins; never blindly replay" >&2' ERR
-[[ ( "$MODE" == DEPLOY_EXACT_REVIEWED_SOURCE_ONLY_SUCCESSOR || "$MODE" == DEPLOY_EXACT_REVIEWED_SOURCE_ONLY_TARGET_979 ) && "$H" =~ ^[a-f0-9]{40}$ && "$#" == 2 ]] || hold EXACT_MODE
+[[ ( "$MODE" == DEPLOY_EXACT_REVIEWED_SOURCE_ONLY_SUCCESSOR || "$MODE" == DEPLOY_EXACT_REVIEWED_SOURCE_ONLY_TARGET_979 || "$MODE" == DEPLOY_EXACT_REVIEWED_SOURCE_ONLY_TARGET_980 || "$MODE" == RECOVER_EXACT_MERGED_SOURCE_ONLY_TARGET_980 ) && "$H" =~ ^[a-f0-9]{40}$ && "$#" == 2 ]] || hold EXACT_MODE
 [[ "$(gh api user --jq .login)" == HKcode22 ]] || hold OWNER
 main(){ gh api "repos/$1/git/ref/heads/main" --jq .object.sha; }
 tree(){ gh api "repos/$1/git/commits/$2" --jq .tree.sha; }
@@ -63,7 +68,11 @@ ci(){
  j="$(gh api "repos/$repo/actions/runs?head_sha=$head&event=pull_request&per_page=100")"
  jq -e --arg h "$head" --argjson n "$minimum" '.total_count<=100 and (.workflow_runs|length)==.total_count and .total_count>=$n and all(.workflow_runs[];.head_sha==$h and .status=="completed" and .conclusion=="success" and .run_attempt==1)' <<<"$j" >/dev/null || hold EXACT_CI_NOT_ALL_GREEN
  if [[ "$repo" == "$R" && "$TARGET_ONLY" == 1 ]];then
-  target_only_ci_ok "$j" "$head" || hold MANDATORY_CI_MISSING
+  if [[ "$TARGET_PR" == 980 ]];then
+   target_980_ci_ok "$j" "$head" || hold MANDATORY_980_CI_MISSING
+  else
+   target_only_ci_ok "$j" "$head" || hold MANDATORY_CI_MISSING
+  fi
  elif [[ "$repo" == "$R" ]];then
   jq -e '([.workflow_runs[].name] as $n | ["V3.9 Offline Safety","Phase5B source diagnostics offline tests","Phase5B conditional T24 existing witness path real PG16 (NO paid)","Phase5 V0091 genuine-source-to-V0087 scoped enrollment PG16 (NO PROVIDER)","Phase5B exact executable successor compatibility","Phase5B Phase7 actual role executable admission"] | all(. as $x|$n|index($x)!=null))' <<<"$j" >/dev/null || hold MANDATORY_CI_MISSING
  fi
@@ -75,9 +84,17 @@ merge_exact(){
  j="$(pr "$repo" "$num")"
  jq -e '.mergeable=="MERGEABLE" and (.statusCheckRollup|length)>0 and all(.statusCheckRollup[];.status=="COMPLETED" and (.conclusion=="SUCCESS" or .conclusion=="SKIPPED" or .conclusion=="NEUTRAL"))' <<<"$j" >/dev/null || hold CHECK_ROLLUP
  if [[ "$(jq -r .isDraft <<<"$j")" == true ]];then gh pr ready "$num" -R "$repo";fi
- if [[ "$(gh api "repos/$repo" --jq .allow_merge_commit)" == true ]];then gh pr merge "$num" -R "$repo" --merge --match-head-commit "$head"
- elif [[ "$(gh api "repos/$repo" --jq .allow_squash_merge)" == true ]];then gh pr merge "$num" -R "$repo" --squash --match-head-commit "$head"
+ local method
+ if [[ "$(gh api "repos/$repo" --jq .allow_merge_commit)" == true ]];then method=--merge
+ elif [[ "$(gh api "repos/$repo" --jq .allow_squash_merge)" == true ]];then method=--squash
  else hold NO_REVIEWED_MERGE_METHOD;fi
+ # Metadata reads and draft promotion may consume the original time margin.
+ # For #980, recertify quiet and fresh evidence at the final merge boundary.
+ if [[ "$repo" == "$R" && "$num" == 980 ]];then
+  all_main_quiet || hold ACTIVE_NO_CANCEL
+  fresh_980_gap "$(cat "$TMP/census")" "$funnel_observed" || hold FINAL_MERGE_EVIDENCE_STALE_OR_GAP
+ fi
+ gh pr merge "$num" -R "$repo" "$method" --match-head-commit "$head"
  [[ "$(statecheck "$repo" "$num" "$old" "$head")" == MERGED ]] || hold MERGE_NOT_PROVEN
 }
 pin(){
@@ -117,6 +134,44 @@ target_only_ci_ok(){
  ".github/workflows/phase2g-yssy-p25-release-no-provider-ci.yml",
  ".github/workflows/phase2g-yssy-p25-release-postgres-ci.yml"
  ] | all(. as $x|$p|index($x)!=null))' <<<"$j" >/dev/null
+}
+# #980 adds real policy custody/redirect regressions: require their exact
+# workflow paths in addition to the proven #979 set.
+target_980_ci_ok(){
+ local j="$1" h="$2"
+ target_only_ci_ok "$j" "$h" &&
+ jq -e '([.workflow_runs[].path] as $p | [
+ ".github/workflows/phase6-private-later-enrollment.yml",
+ ".github/workflows/phase6-nonpaid-source-day-prepare-publish.yml",
+ ".github/workflows/phase5-github-fids-source-release-guard-offline.yml",
+ ".github/workflows/phase5-cd-github-one-queued-t24-witness-main-manual.yml",
+ ".github/workflows/phase5-source-login-and-manual-owner-disposable-pg16.yml",
+ ".github/workflows/phase5-v0080-github-runtime-prearm-real-pg16.yml",
+ ".github/workflows/phase5-amendment-c-segmented-day-stage6-stage8-offline.yml",
+ ".github/workflows/phase3-gate4-owned-handoff-ci.yml",
+ ".github/workflows/phase5-v0082-atomic-segmented-day-pg16-no-provider.yml",
+ ".github/workflows/phase5-stage9-v0079-db-prepare-offline.yml",
+ ".github/workflows/phase5-stage8-v0079-daily-prepare-proposals-offline.yml"
+ ] | all(. as $x|$p|index($x)!=null))' <<<"$j" >/dev/null
+}
+# Check all explicit scopes before the first mutation, not while partially
+# converging a release. An absent environment override inherits.
+pin_candidates_ok(){
+ local repo="$1" key="$2" old="$3" new="$4" x e j;shift 4
+ x="$(v "$repo" "$key")" || return 3
+ [[ "$x" == "$old" || "$x" == "$new" ]] || return 4
+ for e in "$@";do
+  j="$(vars "$repo" "$e")" || return 3
+  x="$(value "$j" "$key")" || return 3
+  [[ "$x" == __ABSENT__ || "$x" == "$old" || "$x" == "$new" ]] || return 4
+ done
+}
+target_980_pins_ok(){
+ local old="$1" new="$2" k
+ for k in P6_PHASE5B_RUNTIME_EXECUTABLE_SHA P5_PRIMARY_FIDS_EXPIRY_APPROVED_MAIN_SHA P7_EXPIRY_APPROVED_MAIN_SHA;do
+  pin_candidates_ok "$R" "$k" "$old" "$new" "$ENV" || return 1
+ done
+ pin_candidates_ok "$L" TRAVNR_APPROVED_TARGET_MAIN_SHA "$old" "$new" travnr-target-forward travnr-cron-audit travnr-cron-management travnr-cron-lease-renewal
 }
 # Database time, not runner wall clock, determines the prospective no-cutover gap.
 # 90-minute stored prearm + 40-minute deployment reserve. Open due work is fatal.
@@ -190,13 +245,32 @@ cutover_pre_tasks_ok(){
      (.state=="MISSED" and .tasks_with_snapshot_ref==0 and .linked_cutoff_safe_verified==0)))
  ' <<<"$j" >/dev/null
 }
+# #980 final local wall clock is only a conservative freshness guard;
+# the prospective schedule and initial gap remain bound to actual DB time.
+fresh_980_gap(){
+ local j="$1" task_at="$2" now observed task next
+ gap_ok "$j" || return 1
+ now="$(date -u +%s)" || return 1
+ observed="$(jq -er '.observedAtUtc' <<<"$j")" || return 1
+ observed="$(date -u -d "$observed" +%s)" || return 1
+ task="$(date -u -d "$task_at" +%s)" || return 1
+ next="$(jq -er '[.cells[]|select(.future_unreserved!=null and .future_unreserved>0)|.next_planned_utc]|min' <<<"$j")" || return 1
+ next="$(date -u -d "$next" +%s)" || return 1
+ [[ "$now" =~ ^[0-9]+$ && "$observed" =~ ^[0-9]+$ && "$task" =~ ^[0-9]+$ && "$next" =~ ^[0-9]+$ ]] || return 1
+ (( now>=observed && now-observed<=60 && now>=task && now-task<=60 && next-now>=7800 ))
+}
 # END SOURCE ONLY TESTED GUARDS
 blob(){ gh api "repos/$R/git/blobs/$1" --jq .content | base64 --decode > "$2"; [[ "$(git hash-object "$2")" == "$1" ]] || hold BLOB_MISMATCH; }
 stage=EXACT_CI
 if [[ "$TARGET_ONLY" == 1 ]];then
- ci "$R" "$H" 12
+ if [[ "$TARGET_PR" == 980 ]];then ci "$R" "$H" 23;else ci "$R" "$H" 12;fi
  [[ "$(main "$L")" == "$ROLD" ]] || hold RELAY_BASE_DRIFT
- [[ "$(statecheck "$R" "$TARGET_PR" "$OLD" "$H")" == OPEN ]] || hold NO_BLIND_REPLAY
+ STATE="$(statecheck "$R" "$TARGET_PR" "$OLD" "$H")"
+ if [[ "$MODE" == RECOVER_EXACT_MERGED_SOURCE_ONLY_TARGET_980 ]];then
+  [[ "$STATE" == MERGED ]] || hold RECOVERY_REQUIRES_EXACT_MERGED_TREE
+ else
+  [[ "$STATE" == OPEN ]] || hold NO_BLIND_REPLAY
+ fi
 else
  ci "$R" "$H" 31
  ci "$L" "$RH" 1
@@ -207,6 +281,20 @@ blob 018a350036ebe0f2b326e322b586d4ef9b343dd1 "$TMP/census.mjs"
 blob cc7121bbb91715ce066ae2c84e5656227853a473 "$TMP/funnel.cjs"
 blob 8df852a34c08ba91a6b3a0441b2718579901a5ca "$TMP/retention.sh"
 bash -n "$TMP/pins.sh";bash -n "$TMP/retention.sh";node --check "$TMP/census.mjs";node --check "$TMP/funnel.cjs"
+if [[ "$MODE" == RECOVER_EXACT_MERGED_SOURCE_ONLY_TARGET_980 ]];then
+ stage=EXACT_MERGED_980_RECOVERY
+ NEW="$(main "$R")"
+ target_980_pins_ok "$OLD" "$NEW" || hold PIN_SCOPE_DRIFT
+ guard "$R" P6_PRIVATE_SOURCE_STORED_DISPATCH_ENABLED true "$ENV"
+ guard "$R" P6_PRIVATE_POST_PARENT_ENABLED false "$ENV"
+ # Already-merged recovery converges exact pins; it never merges again,
+ # pauses SOURCE, or widens a paid window. No active job cancellation.
+ wait_all_quiet
+ node "$TMP/funnel.cjs" > "$TMP/funnel"
+ cutover_pre_tasks_ok "$(cat "$TMP/funnel")" || hold STOP_OR_UNSETTLED_PRE_TASKS
+ [[ "$(statecheck "$R" "$TARGET_PR" "$OLD" "$H")" == MERGED && "$(main "$L")" == "$ROLD" ]] || hold RECOVERY_TREE_DRIFT
+ target_980_pins_ok "$OLD" "$NEW" || hold PIN_SCOPE_DRIFT
+else
 stage=EXACT_SOURCE_ONLY_OWNER_READBACK
 bash "$TMP/pins.sh" "$OLD" "$ROLD" SOURCE_ONLY > "$TMP/pin-output"
 grep -Fxq P6_POST_CUTOVER_VARIABLE_READBACK_PASS_SOURCE_ONLY_NO_WRITES "$TMP/pin-output" || hold OLD_PIN_READBACK
@@ -216,6 +304,8 @@ cutover_pre_tasks_ok "$(cat "$TMP/funnel")" || hold STOP_OR_UNSETTLED_PRE_TASKS
 stage=PREMERGE_RETENTION
 bash "$TMP/retention.sh" ENSURE_EXACT_CURRENT_MAIN_FULL_RETENTION_BASELINE "$OLD"
 stage=QUIET_AND_GAP
+# Do the potentially slow scoped pin enumeration before the final DB census.
+if [[ "$TARGET_PR" == 980 ]];then target_980_pins_ok "$OLD" "$OLD" || hold PIN_SCOPE_DRIFT;fi
 wait_all_quiet
 # Recheck STOP and task state after the retention baseline and wait. A
 # pre-wait census is not evidence that no new task has appeared.
@@ -235,6 +325,7 @@ stage=TARGET_MERGE
 [[ "$(main "$L")" == "$ROLD" ]] || hold RELAY_BASE_DRIFT
 merge_exact "$R" "$TARGET_PR" "$OLD" "$H"
 NEW="$(main "$R")"
+fi
 stage=TARGET_RUNTIME_AND_RETENTION_PINS
 pin "$R" P6_PHASE5B_RUNTIME_EXECUTABLE_SHA "$OLD" "$NEW" "$ENV"
 pin "$R" P5_PRIMARY_FIDS_EXPIRY_APPROVED_MAIN_SHA "$OLD" "$NEW" "$ENV"
