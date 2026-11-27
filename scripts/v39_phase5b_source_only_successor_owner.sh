@@ -101,7 +101,7 @@ pin(){
 target_only_ci_ok(){
  local j="$1" h="$2"
  jq -e --arg h "$h" '
- .total_count<=100 and (.workflow_runs|length)==.total_count and .total_count>=10 and
+ .total_count<=100 and (.workflow_runs|length)==.total_count and .total_count>=12 and
  all(.workflow_runs[];.head_sha==$h and .status=="completed" and .conclusion=="success" and .run_attempt==1) and
  ([.workflow_runs[].path] as $p | [
  ".github/workflows/v39-phase0-offline.yml",
@@ -109,6 +109,8 @@ target_only_ci_ok(){
  ".github/workflows/phase5b-phase7-role-successor.yml",
  ".github/workflows/phase5b-runtime-successor-compatibility.yml",
  ".github/workflows/phase5-one-signed-future-post-v0083-main-manual.yml",
+ ".github/workflows/phase6-source-existing-p5-child-admission-offline-no-provider.yml",
+ ".github/workflows/phase5-source-upcoming-queue-main-scheduled-readonly.yml",
  ".github/workflows/phase5-public-frozen-private-flight-packet-leak-guard.yml",
  ".github/workflows/phase5-actual-source-native-flight-candidates-readonly-manual.yml",
  ".github/workflows/phase2g-yssy-p25-published-identity-readonly.yml",
@@ -168,7 +170,7 @@ wait_all_quiet(){
 blob(){ gh api "repos/$R/git/blobs/$1" --jq .content | base64 --decode > "$2"; [[ "$(git hash-object "$2")" == "$1" ]] || hold BLOB_MISMATCH; }
 stage=EXACT_CI
 if [[ "$TARGET_ONLY" == 1 ]];then
- ci "$R" "$H" 10
+ ci "$R" "$H" 12
  [[ "$(main "$L")" == "$ROLD" ]] || hold RELAY_BASE_DRIFT
  [[ "$(statecheck "$R" "$TARGET_PR" "$OLD" "$H")" == OPEN ]] || hold NO_BLIND_REPLAY
 else
