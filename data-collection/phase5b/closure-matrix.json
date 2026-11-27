@@ -15,7 +15,11 @@
       "implementations": [
         "I001"
       ],
-      "next": "Preserve narrow correction; reopen only on material new evidence"
+      "next": "Preserve narrow correction; reopen only on material new evidence",
+      "closureStatus": "CLOSED",
+      "scientificRisk": "OPERATIONAL",
+      "workstream": "release_reliability",
+      "closureEvidence": "Nov3 cron and job predicate drift, plus independently missed GitHub schedule. [Checkpoint](../phase4/2026-11-03_GATE5_G5A_MISSED_T24_REAL_ACTIONS_RECOVERY.md)"
     },
     {
       "id": "F002",
@@ -23,7 +27,11 @@
       "implementations": [
         "I002"
       ],
-      "next": "Preserve narrow correction; reopen only on material new evidence"
+      "next": "Preserve narrow correction; reopen only on material new evidence",
+      "closureStatus": "CLOSED",
+      "scientificRisk": "OPERATIONAL",
+      "workstream": "release_reliability",
+      "closureEvidence": "Nov4 idle PG 57P01 and prearm cancellation. [Checkpoint](../phase4/2026-11-04_G5A_T24_CANCELLED_RUN_HEARTBEAT_RECOVERY.md)"
     },
     {
       "id": "F003",
@@ -39,7 +47,10 @@
         "I098",
         "I099"
       ],
-      "next": "Reconcile terminal paid child receipt to exact reservation/binding; preserve missingness"
+      "next": "Reconcile terminal paid child receipt to exact reservation/binding; preserve missingness",
+      "closureStatus": "NOT_CLOSED",
+      "scientificRisk": "P1_SCIENTIFIC",
+      "workstream": "source_effectiveness"
     },
     {
       "id": "F004",
@@ -47,7 +58,11 @@
       "implementations": [
         "I004"
       ],
-      "next": "Preserve narrow correction; reopen only on material new evidence"
+      "next": "Preserve narrow correction; reopen only on material new evidence",
+      "closureStatus": "CLOSED",
+      "scientificRisk": "OPERATIONAL",
+      "workstream": "release_reliability",
+      "closureEvidence": "Nov4 expired foreign cohort blocked PREPARED owner; empty DB tests missed this. [Checkpoint](../phase4/2026-11-04_G5A_PREARM_FOREIGN_COHORT_ROOT_CAUSE_AND_BOUNDARY_REPAIR.md)"
     },
     {
       "id": "F005",
@@ -60,7 +75,10 @@
         "I034",
         "I059"
       ],
-      "next": "Actual prospective conditional PRE commit; never relabel prior native-only data"
+      "next": "Actual prospective conditional PRE commit; never relabel prior native-only data",
+      "closureStatus": "NOT_CLOSED",
+      "scientificRisk": "P0_SCIENTIFIC",
+      "workstream": "preservation_admission"
     },
     {
       "id": "F006",
@@ -68,7 +86,11 @@
       "implementations": [
         "I001"
       ],
-      "next": "Preserve narrow correction; reopen only on material new evidence"
+      "next": "Preserve narrow correction; reopen only on material new evidence",
+      "closureStatus": "CLOSED",
+      "scientificRisk": "OPERATIONAL",
+      "workstream": "release_reliability",
+      "closureEvidence": "Nov12 unreachable T24 scheduling branch. [Checkpoint](../phase5/2026-11-12_T24_SCHEDULE_UNREACHABLE_BRANCH_AND_EXCLUSIVE_AUTOMATION_REPAIR.md)"
     },
     {
       "id": "F007",
@@ -80,7 +102,10 @@
         "I062",
         "I100"
       ],
-      "next": "Verify actual bounded rolling execution and history under load"
+      "next": "Verify actual bounded rolling execution and history under load",
+      "closureStatus": "NOT_CLOSED",
+      "scientificRisk": "OPERATIONAL",
+      "workstream": "release_reliability"
     },
     {
       "id": "F008",
@@ -88,7 +113,10 @@
       "implementations": [
         "I006"
       ],
-      "next": "Verify actual failure receipt lineage, not ACK"
+      "next": "Verify actual failure receipt lineage, not ACK",
+      "closureStatus": "NOT_CLOSED",
+      "scientificRisk": "OPERATIONAL",
+      "workstream": "release_reliability"
     },
     {
       "id": "F009",
@@ -96,7 +124,10 @@
       "implementations": [
         "I007"
       ],
-      "next": "Verify heartbeat and both retention jobs at current pin"
+      "next": "Verify heartbeat and both retention jobs at current pin",
+      "closureStatus": "NOT_CLOSED",
+      "scientificRisk": "OPERATIONAL",
+      "workstream": "release_reliability"
     },
     {
       "id": "F010",
@@ -104,7 +135,10 @@
       "implementations": [
         "I008"
       ],
-      "next": "Preserve historical loss and prevent prospective recurrence"
+      "next": "Preserve historical loss and prevent prospective recurrence",
+      "closureStatus": "NOT_CLOSED",
+      "scientificRisk": "P0_SCIENTIFIC",
+      "workstream": "release_reliability"
     },
     {
       "id": "F011",
@@ -112,7 +146,10 @@
       "implementations": [
         "I009"
       ],
-      "next": "Positive scoped SOURCE/POST actor execution under least privilege"
+      "next": "Positive scoped SOURCE/POST actor execution under least privilege",
+      "closureStatus": "NOT_CLOSED",
+      "scientificRisk": "OPERATIONAL",
+      "workstream": "source_effectiveness"
     },
     {
       "id": "F012",
@@ -120,7 +157,10 @@
       "implementations": [
         "I009"
       ],
-      "next": "Actual durable paid source commit with trigger/sequence ACL"
+      "next": "Actual durable paid source commit with trigger/sequence ACL",
+      "closureStatus": "NOT_CLOSED",
+      "scientificRisk": "P1_SCIENTIFIC",
+      "workstream": "source_effectiveness"
     },
     {
       "id": "F013",
@@ -128,7 +168,11 @@
       "implementations": [
         "I009"
       ],
-      "next": "Preserve narrow correction; reopen only on material new evidence"
+      "next": "Preserve narrow correction; reopen only on material new evidence",
+      "closureStatus": "CLOSED",
+      "scientificRisk": "OPERATIONAL",
+      "workstream": "release_reliability",
+      "closureEvidence": "Nov24 role entry conflated with SQL permission; wrong V0078 constraint assumption. [Checkpoint](checkpoints/2026-11-24_1744_PST_PHASE5B_POST_ACL_PASS_SOURCE_V0078_MISMATCH.md)"
     },
     {
       "id": "F014",
@@ -136,7 +180,10 @@
       "implementations": [
         "I010"
       ],
-      "next": "Exact runtime pin readback and positive child at deployed revision"
+      "next": "Exact runtime pin readback and positive child at deployed revision",
+      "closureStatus": "NOT_CLOSED",
+      "scientificRisk": "OPERATIONAL",
+      "workstream": "release_reliability"
     },
     {
       "id": "F015",
@@ -144,7 +191,10 @@
       "implementations": [
         "I011"
       ],
-      "next": "Exact independent retention baseline pre/post cutover"
+      "next": "Exact independent retention baseline pre/post cutover",
+      "closureStatus": "NOT_CLOSED",
+      "scientificRisk": "OPERATIONAL",
+      "workstream": "release_reliability"
     },
     {
       "id": "F016",
@@ -154,7 +204,10 @@
         "I086",
         "I087"
       ],
-      "next": "Observe future 429 rate with signed pacing unchanged"
+      "next": "Observe future 429 rate with signed pacing unchanged",
+      "closureStatus": "NOT_CLOSED",
+      "scientificRisk": "OPERATIONAL",
+      "workstream": "source_effectiveness"
     },
     {
       "id": "F017",
@@ -170,7 +223,10 @@
         "I103",
         "I105"
       ],
-      "next": "Current free-feed check safe gap; historical provider cause unresolved"
+      "next": "Current free-feed check safe gap; historical provider cause unresolved",
+      "closureStatus": "NOT_CLOSED",
+      "scientificRisk": "P1_SCIENTIFIC",
+      "workstream": "source_effectiveness"
     },
     {
       "id": "F018",
@@ -183,7 +239,10 @@
         "I079",
         "I080"
       ],
-      "next": "Migration episode resolved; actual restricted conditional task remains"
+      "next": "Migration episode resolved; actual restricted conditional task remains",
+      "closureStatus": "NOT_CLOSED",
+      "scientificRisk": "P1_SCIENTIFIC",
+      "workstream": "preservation_admission"
     },
     {
       "id": "F019",
@@ -191,7 +250,10 @@
       "implementations": [
         "I017"
       ],
-      "next": "Actual conditional candidate read respects availability and signed cutoff"
+      "next": "Actual conditional candidate read respects availability and signed cutoff",
+      "closureStatus": "NOT_CLOSED",
+      "scientificRisk": "P1_SCIENTIFIC",
+      "workstream": "preservation_admission"
     },
     {
       "id": "F020",
@@ -199,7 +261,10 @@
       "implementations": [
         "I018"
       ],
-      "next": "Verify no duplicate retimed PRE in actual prospective task"
+      "next": "Verify no duplicate retimed PRE in actual prospective task",
+      "closureStatus": "NOT_CLOSED",
+      "scientificRisk": "P1_SCIENTIFIC",
+      "workstream": "preservation_admission"
     },
     {
       "id": "F021",
@@ -207,7 +272,10 @@
       "implementations": [
         "I019"
       ],
-      "next": "Recover actual failure category; no-due success not closure"
+      "next": "Recover actual failure category; no-due success not closure",
+      "closureStatus": "NOT_CLOSED",
+      "scientificRisk": "OPERATIONAL",
+      "workstream": "release_reliability"
     },
     {
       "id": "F022",
@@ -216,7 +284,11 @@
         "I020",
         "I120"
       ],
-      "next": "Actual 09:07:06Z I120/T114 inventory proves 52 expired metadata correctly distinguished; preserve regression"
+      "next": "Actual 09:07:06Z I120/T114 inventory proves 52 expired metadata correctly distinguished; preserve regression",
+      "closureStatus": "CLOSED",
+      "scientificRisk": "OPERATIONAL",
+      "workstream": "evidence_integrity",
+      "closureEvidence": "Audit incorrectly classified eight expired original hashes as mismatches. [Checkpoint](checkpoints/2026-11-26_0152_PST_PHASE5B_OWNER_CENSUS_AND_QUEUE_REPAIR.md)"
     },
     {
       "id": "F023",
@@ -224,7 +296,10 @@
       "implementations": [
         "I021"
       ],
-      "next": "Verify idle path and actual nonempty publisher path"
+      "next": "Verify idle path and actual nonempty publisher path",
+      "closureStatus": "NOT_CLOSED",
+      "scientificRisk": "OPERATIONAL",
+      "workstream": "preservation_admission"
     },
     {
       "id": "F024",
@@ -232,7 +307,10 @@
       "implementations": [
         "I022"
       ],
-      "next": "Verify actual FIDS-only permit independent of optional weather"
+      "next": "Verify actual FIDS-only permit independent of optional weather",
+      "closureStatus": "NOT_CLOSED",
+      "scientificRisk": "P1_SCIENTIFIC",
+      "workstream": "preservation_admission"
     },
     {
       "id": "F025",
@@ -244,7 +322,11 @@
         "I082",
         "I094"
       ],
-      "next": "Preserve narrow correction; reopen only on material new evidence"
+      "next": "Preserve narrow correction; reopen only on material new evidence",
+      "closureStatus": "CLOSED",
+      "scientificRisk": "OPERATIONAL",
+      "workstream": "release_reliability",
+      "closureEvidence": "Superseded V0112 predecessor mismatch 45796497453; seven workflows on 6572192 failed same TS18048; two on 41d5d38f failed synthetic Phase7 digest shape. Successor #976 exact 454349c9 passed 46/46, including TypeScript, focused proof/registration, PG16 and full offline safety. Production install separate. Four #977 runs on 427411f4 failed one TS2345 legacy-child union mismatch; 433082ba focused diagnostics and V0094 PG16 passed, full offline pending at 03:50 PST. Recurrence exact 88188823: four workflows 45895855329/45895855211/45895855254/45895855318 failed the same TS18048 optional response wire type narrowing; no production fault. Exact 6be1b51a T076 shell mock JSON overwritten by real RELAY variable; fixture repair within I082/T076. Exact 61f677b6 full safety 45916151587 failed only ESLint no-regex-spaces in T087 line64; corrected quantifier, no production impact."
     },
     {
       "id": "F026",
@@ -268,7 +350,10 @@
         "I090",
         "I120"
       ],
-      "next": "Day2 4902 historical observations; 52 expired originals, no global durable P7 fragments or bundles at 09:07Z. Prevent recurrence through prospective actual PRE/Packet B commit, never backfill"
+      "next": "Day2 4902 historical observations; 52 expired originals, no global durable P7 fragments or bundles at 09:07Z. Prevent recurrence through prospective actual PRE/Packet B commit, never backfill",
+      "closureStatus": "NOT_CLOSED",
+      "scientificRisk": "P0_SCIENTIFIC",
+      "workstream": "preservation_admission"
     },
     {
       "id": "F027",
@@ -319,7 +404,10 @@
         "I108",
         "I121"
       ],
-      "next": "Protected policy custody, exact reviewed commissioning, positive conditional signature and PRE"
+      "next": "Protected policy custody, exact reviewed commissioning, positive conditional signature and PRE",
+      "closureStatus": "NOT_CLOSED",
+      "scientificRisk": "P0_SCIENTIFIC",
+      "workstream": "preservation_admission"
     },
     {
       "id": "F028",
@@ -327,7 +415,11 @@
       "implementations": [
         "I023"
       ],
-      "next": "Preserve narrow correction; reopen only on material new evidence"
+      "next": "Preserve narrow correction; reopen only on material new evidence",
+      "closureStatus": "CLOSED",
+      "scientificRisk": "OPERATIONAL",
+      "workstream": "release_reliability",
+      "closureEvidence": "Stacked PR excluded full offline CI; trigger fixed. [Checkpoint](checkpoints/2026-11-25_1730_PST_PHASE5B_DRAIN_AND_STACKED_CI_COVERAGE.md)"
     },
     {
       "id": "F029",
@@ -336,7 +428,10 @@
         "I005",
         "I081"
       ],
-      "next": "Independent same-leg same-milestone physical label or report insufficient"
+      "next": "Independent same-leg same-milestone physical label or report insufficient",
+      "closureStatus": "NOT_CLOSED",
+      "scientificRisk": "P0_SCIENTIFIC",
+      "workstream": "outcome_truth"
     },
     {
       "id": "F030",
@@ -344,7 +439,10 @@
       "implementations": [
         "I024"
       ],
-      "next": "Actual raw/normalized conditional matching parity"
+      "next": "Actual raw/normalized conditional matching parity",
+      "closureStatus": "NOT_CLOSED",
+      "scientificRisk": "P1_SCIENTIFIC",
+      "workstream": "preservation_admission"
     },
     {
       "id": "F031",
@@ -352,7 +450,10 @@
       "implementations": [
         "I026"
       ],
-      "next": "Actual timestamp parsing and missingness; no guessed zone"
+      "next": "Actual timestamp parsing and missingness; no guessed zone",
+      "closureStatus": "NOT_CLOSED",
+      "scientificRisk": "P1_SCIENTIFIC",
+      "workstream": "preservation_admission"
     },
     {
       "id": "F032",
@@ -360,9 +461,13 @@
       "implementations": [
         "I027",
         "I063",
-        "I065"
+        "I065",
+        "I122"
       ],
-      "next": "Exact traceability check passed; keep reciprocal register"
+      "next": "Binary closure and scientific severity projection must reconcile against immutable canonical IDs and exact regression; prior repair remains recorded, no new closure before CI.",
+      "closureStatus": "NOT_CLOSED",
+      "scientificRisk": "OPERATIONAL",
+      "workstream": "evidence_integrity"
     },
     {
       "id": "F033",
@@ -370,7 +475,10 @@
       "implementations": [
         "I028"
       ],
-      "next": "Actual final-clock safe candidate/permit publication"
+      "next": "Actual final-clock safe candidate/permit publication",
+      "closureStatus": "NOT_CLOSED",
+      "scientificRisk": "P1_SCIENTIFIC",
+      "workstream": "preservation_admission"
     },
     {
       "id": "F034",
@@ -380,7 +488,10 @@
         "I062",
         "I083"
       ],
-      "next": "Relay execution reconciliation distinct from webhook ACK"
+      "next": "Relay execution reconciliation distinct from webhook ACK",
+      "closureStatus": "NOT_CLOSED",
+      "scientificRisk": "OPERATIONAL",
+      "workstream": "release_reliability"
     },
     {
       "id": "F035",
@@ -388,7 +499,10 @@
       "implementations": [
         "I032"
       ],
-      "next": "Exact relay fixture and actual rolling wake"
+      "next": "Exact relay fixture and actual rolling wake",
+      "closureStatus": "NOT_CLOSED",
+      "scientificRisk": "OPERATIONAL",
+      "workstream": "release_reliability"
     },
     {
       "id": "F036",
@@ -396,7 +510,10 @@
       "implementations": [
         "I035"
       ],
-      "next": "Actual relay cancellation history and bounded successor execution"
+      "next": "Actual relay cancellation history and bounded successor execution",
+      "closureStatus": "NOT_CLOSED",
+      "scientificRisk": "OPERATIONAL",
+      "workstream": "release_reliability"
     },
     {
       "id": "F037",
@@ -405,7 +522,10 @@
         "I036",
         "I100"
       ],
-      "next": "Actual bounded parallel SOURCE history and relay latency"
+      "next": "Actual bounded parallel SOURCE history and relay latency",
+      "closureStatus": "NOT_CLOSED",
+      "scientificRisk": "OPERATIONAL",
+      "workstream": "release_reliability"
     },
     {
       "id": "F038",
@@ -414,7 +534,10 @@
         "I037",
         "I042"
       ],
-      "next": "Positive immutable source acceptance in production"
+      "next": "Positive immutable source acceptance in production",
+      "closureStatus": "NOT_CLOSED",
+      "scientificRisk": "P1_SCIENTIFIC",
+      "workstream": "preservation_admission"
     },
     {
       "id": "F039",
@@ -422,7 +545,10 @@
       "implementations": [
         "I044"
       ],
-      "next": "Actual signed bytes/parsed object parity"
+      "next": "Actual signed bytes/parsed object parity",
+      "closureStatus": "NOT_CLOSED",
+      "scientificRisk": "P1_SCIENTIFIC",
+      "workstream": "preservation_admission"
     },
     {
       "id": "F040",
@@ -434,7 +560,10 @@
         "I096",
         "I112"
       ],
-      "next": "Exact #980 owner cutover and post-pin readback"
+      "next": "Exact #980 owner cutover and post-pin readback",
+      "closureStatus": "NOT_CLOSED",
+      "scientificRisk": "OPERATIONAL",
+      "workstream": "release_reliability"
     },
     {
       "id": "F041",
@@ -444,7 +573,10 @@
         "I057",
         "I083"
       ],
-      "next": "Actual current-main heartbeat and due early draw"
+      "next": "Actual current-main heartbeat and due early draw",
+      "closureStatus": "NOT_CLOSED",
+      "scientificRisk": "OPERATIONAL",
+      "workstream": "release_reliability"
     },
     {
       "id": "F042",
@@ -454,7 +586,10 @@
         "I089",
         "I093"
       ],
-      "next": "Protected actual POST actor admission + positive authorized POST (no new spend)"
+      "next": "Protected actual POST actor admission + positive authorized POST (no new spend)",
+      "closureStatus": "NOT_CLOSED",
+      "scientificRisk": "P0_SCIENTIFIC",
+      "workstream": "outcome_truth"
     },
     {
       "id": "F043",
@@ -462,7 +597,11 @@
       "implementations": [
         "I092"
       ],
-      "next": "Preserve narrow correction; reopen only on material new evidence"
+      "next": "Preserve narrow correction; reopen only on material new evidence",
+      "closureStatus": "CLOSED",
+      "scientificRisk": "OPERATIONAL",
+      "workstream": "evidence_integrity",
+      "closureEvidence": "I091 owner audit executed twice on live PG16, SQLSTATE 42601, no provider calls or database writes. Prior mocked query test never executed SQL; exact parser token not exposed. I092/T086 real PG16 passed and actual owner corrected blob 00:47:29Z 384 instructions read successfully, no calls/writes."
     },
     {
       "id": "F044",
@@ -470,7 +609,10 @@
       "implementations": [
         "I101"
       ],
-      "next": "Actual additive conditional policy native predecessor readback"
+      "next": "Actual additive conditional policy native predecessor readback",
+      "closureStatus": "NOT_CLOSED",
+      "scientificRisk": "P1_SCIENTIFIC",
+      "workstream": "preservation_admission"
     },
     {
       "id": "F045",
@@ -478,7 +620,10 @@
       "implementations": [
         "I102"
       ],
-      "next": "Earlier native unaffected, future conditional clock applies only to prospective scope"
+      "next": "Earlier native unaffected, future conditional clock applies only to prospective scope",
+      "closureStatus": "NOT_CLOSED",
+      "scientificRisk": "P1_SCIENTIFIC",
+      "workstream": "preservation_admission"
     },
     {
       "id": "F046",
@@ -488,7 +633,10 @@
         "I106",
         "I112"
       ],
-      "next": "#979 incident resolved; verify #980 safe cutover and recovery"
+      "next": "#979 incident resolved; verify #980 safe cutover and recovery",
+      "closureStatus": "NOT_CLOSED",
+      "scientificRisk": "OPERATIONAL",
+      "workstream": "release_reliability"
     },
     {
       "id": "F047",
@@ -496,7 +644,10 @@
       "implementations": [
         "I107"
       ],
-      "next": "Deploy manual redirect guard; no extra paid attempt"
+      "next": "Deploy manual redirect guard; no extra paid attempt",
+      "closureStatus": "NOT_CLOSED",
+      "scientificRisk": "OPERATIONAL",
+      "workstream": "source_effectiveness"
     },
     {
       "id": "F048",
@@ -504,7 +655,10 @@
       "implementations": [
         "I109"
       ],
-      "next": "Deploy fail-closed custody transaction cleanup; actual protected readback"
+      "next": "Deploy fail-closed custody transaction cleanup; actual protected readback",
+      "closureStatus": "NOT_CLOSED",
+      "scientificRisk": "OPERATIONAL",
+      "workstream": "preservation_admission"
     },
     {
       "id": "F049",
@@ -512,7 +666,10 @@
       "implementations": [
         "I110"
       ],
-      "next": "Deploy next unsigned-day guard; actual Day5 readback"
+      "next": "Deploy next unsigned-day guard; actual Day5 readback",
+      "closureStatus": "NOT_CLOSED",
+      "scientificRisk": "P1_SCIENTIFIC",
+      "workstream": "preservation_admission"
     },
     {
       "id": "F050",
@@ -520,7 +677,10 @@
       "implementations": [
         "I111"
       ],
-      "next": "Deploy complete marker inventory; actual protected policy state"
+      "next": "Deploy complete marker inventory; actual protected policy state",
+      "closureStatus": "NOT_CLOSED",
+      "scientificRisk": "P1_SCIENTIFIC",
+      "workstream": "preservation_admission"
     },
     {
       "id": "F051",
@@ -528,7 +688,10 @@
       "implementations": [
         "I113"
       ],
-      "next": "Deploy proof actor key binding; verify actual distinct key pins"
+      "next": "Deploy proof actor key binding; verify actual distinct key pins",
+      "closureStatus": "NOT_CLOSED",
+      "scientificRisk": "P1_SCIENTIFIC",
+      "workstream": "preservation_admission"
     },
     {
       "id": "F052",
@@ -536,7 +699,11 @@
       "implementations": [
         "I114"
       ],
-      "next": "Preserve narrow correction; reopen only on material new evidence"
+      "next": "Preserve narrow correction; reopen only on material new evidence",
+      "closureStatus": "CLOSED",
+      "scientificRisk": "OPERATIONAL",
+      "workstream": "release_reliability",
+      "closureEvidence": "After #979 merge ancestry reconciliation, exact #980 head 0f1cfca4 triggered only 10 of 23 mandatory offline workflows because 13 pull_request path filters did not match the new release helper. No production failure."
     },
     {
       "id": "F053",
@@ -544,7 +711,10 @@
       "implementations": [
         "I115"
       ],
-      "next": "Deploy shared native feature predicate; actual rights-bound readiness"
+      "next": "Deploy shared native feature predicate; actual rights-bound readiness",
+      "closureStatus": "NOT_CLOSED",
+      "scientificRisk": "P1_SCIENTIFIC",
+      "workstream": "preservation_admission"
     },
     {
       "id": "F054",
@@ -552,7 +722,10 @@
       "implementations": [
         "I116"
       ],
-      "next": "Deploy exact final clock/quiet guard; actual safe cutover"
+      "next": "Deploy exact final clock/quiet guard; actual safe cutover",
+      "closureStatus": "NOT_CLOSED",
+      "scientificRisk": "OPERATIONAL",
+      "workstream": "release_reliability"
     },
     {
       "id": "F055",
@@ -560,7 +733,10 @@
       "implementations": [
         "I117"
       ],
-      "next": "Deploy reject partial/unexpected 2xx; observe actual fault if any"
+      "next": "Deploy reject partial/unexpected 2xx; observe actual fault if any",
+      "closureStatus": "NOT_CLOSED",
+      "scientificRisk": "P1_SCIENTIFIC",
+      "workstream": "source_effectiveness"
     },
     {
       "id": "F056",
@@ -568,7 +744,10 @@
       "implementations": [
         "I118"
       ],
-      "next": "Deploy safe transport diagnostic categories"
+      "next": "Deploy safe transport diagnostic categories",
+      "closureStatus": "NOT_CLOSED",
+      "scientificRisk": "OPERATIONAL",
+      "workstream": "source_effectiveness"
     },
     {
       "id": "F057",
@@ -576,7 +755,20 @@
       "implementations": [
         "I119"
       ],
-      "next": "Deploy complete signed frame guard; actual exact request path"
+      "next": "Deploy complete signed frame guard; actual exact request path",
+      "closureStatus": "NOT_CLOSED",
+      "scientificRisk": "P1_SCIENTIFIC",
+      "workstream": "source_effectiveness"
     }
-  ]
+  ],
+  "binaryClosure": {
+    "closed": 10,
+    "notClosed": 47,
+    "definition": "CLOSED only for an explicitly evidenced, narrowly defined correction already recorded; no broader component or future recurrence guarantee. Partial, candidate-only, historical loss with unverified recurrence prevention, and missing positive production proof are NOT_CLOSED. No previously closed ID reopened."
+  },
+  "riskDefinition": {
+    "P0_SCIENTIFIC": "Confirmed loss or primary preservation/outcome blocker; fix before avoidable additional loss",
+    "P1_SCIENTIFIC": "Potential direct study loss, biased coverage, leakage, incorrect linkage or invalid acceptance",
+    "OPERATIONAL": "Operational or evidence integrity; may indirectly cause scientific loss"
+  }
 }

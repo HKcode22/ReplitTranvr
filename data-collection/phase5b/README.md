@@ -10,3 +10,5 @@ Phase 5B is an engineering workstream alongside Phase 6, **not a scientific rebo
 Historical Phase 6 checkpoints stay in place to preserve links and hashes. New operational consolidation work belongs here. Existing executable paths stay unchanged; do not move live scripts or workflows solely for organization. Keep tested #980 head c4408c62 untouched until release; this follow-on branch is separate to avoid invalidating exact CI.
 
 Latest actual owner checkpoint: [01:07 PST confirmed Packet B empty and custody isolation](checkpoints/2026-11-27_0107_PST_ACTUAL_PACKET_B_EMPTY_AND_CUSTODY_ISOLATION.md). I120/T114 real owner 4/4 and SQL passed. I121/T115 follow-on staging; not part of #980.
+
+Latest [binary closure and scientific priority checkpoint](checkpoints/2026-11-27_0141_PST_BINARY_CLOSURE_AND_SCIENCE_PRIORITY.md): 10 prior scoped corrections CLOSED, 47 NOT_CLOSED. Every failure has explicit risk and workstream; CI is not proof of production closure. I122/T116 guard the matrix against premature promotion and drift.

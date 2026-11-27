@@ -89,3 +89,46 @@ test("T060 each named failure in a multi-failure T must match its own implementa
  const mislabeled=both.replace("F001 | I001 | C001 | tests/example","F001, F002 | I001 | C001 | tests/example");
  assert.throws(()=>validateRegister(parseRegister(mislabeled)),/T001 unrelated failure F002/);
 });
+
+const matrixPath=new URL("../data-collection/phase5b/closure-matrix.json",import.meta.url);
+function validateClosure(m,rows){
+ const fs=rows.filter(r=>r[0].startsWith("F"));
+ assert.equal(m.failures.length,fs.length,"lost failure");
+ const seen=new Set();
+ const counts={narrowCorrected:0,exactCiGreenPendingDeployment:0,partialOrOpen:0,historicalLoss:0};
+ const cls={NARROW_CORRECTION_RECORDED:"narrowCorrected",EXACT_CI_GREEN_DEPLOYMENT_PENDING:"exactCiGreenPendingDeployment",PARTIAL_OR_OPEN:"partialOrOpen",HISTORICAL_LOSS_NO_BACKFILL:"historicalLoss"};
+ let closed=0;
+ for(const f of m.failures){
+  assert.ok(!seen.has(f.id),"duplicate failure");seen.add(f.id);
+  const r=fs.find(x=>x[0]===f.id);assert.ok(r,"unknown failure");
+  assert.deepEqual(f.implementations,refs(r[3]),"mapping drift "+f.id);
+  assert.ok(Object.hasOwn(cls,f.classification),"unknown classification");
+  counts[cls[f.classification]]++;
+  const eligible=f.classification==="NARROW_CORRECTION_RECORDED";
+  assert.equal(f.closureStatus,eligible?"CLOSED":"NOT_CLOSED","partial promotion or lost scoped closure "+f.id);
+  if(eligible){closed++;assert.equal(f.closureEvidence,r[2],"closed evidence drift "+f.id);}
+  assert.ok(["P0_SCIENTIFIC","P1_SCIENTIFIC","OPERATIONAL"].includes(f.scientificRisk),"missing scientific risk");
+  assert.ok(["preservation_admission","outcome_truth","source_effectiveness","release_reliability","evidence_integrity"].includes(f.workstream),"missing workstream");
+  assert.ok(typeof f.next==="string"&&f.next.trim().length>0,"missing acceptance");
+ }
+ assert.deepEqual(m.counts,counts,"classification count mismatch");
+ assert.equal(m.binaryClosure.closed,closed);
+ assert.equal(m.binaryClosure.notClosed,fs.length-closed);
+ for(const id of ["F005","F010","F026","F027","F029","F042"])assert.equal(m.failures.find(f=>f.id===id)?.scientificRisk,"P0_SCIENTIFIC","critical scientific risk "+id);
+}
+test("T116 actual matrix has binary closure, immutable IDs, evidence and scientific severity",()=>{
+ // The dedicated Phase5B folder is introduced only on the follow-on branch.
+ const m=JSON.parse(readFileSync(matrixPath,"utf8"));
+ validateClosure(m,parseRegister(doc));
+});
+test("T116 refuses premature closure, duplicates, omissions, count and risk drift",()=>{
+ const original=JSON.parse(readFileSync(matrixPath,"utf8")),rows=parseRegister(doc);
+ const bad=change=>{const m=structuredClone(original);change(m);assert.throws(()=>validateClosure(m,rows));};
+ bad(m=>{m.failures.find(f=>f.id==="F027").closureStatus="CLOSED";});
+ bad(m=>{m.failures[1]=structuredClone(m.failures[0]);});
+ bad(m=>{m.failures.pop();});
+ bad(m=>{m.binaryClosure.closed++;});
+ bad(m=>{m.failures.find(f=>f.id==="F026").scientificRisk="OPERATIONAL";});
+ bad(m=>{m.failures.find(f=>f.id==="F022").closureEvidence="unsupported";});
+ bad(m=>{m.failures.find(f=>f.id==="F032").implementations.pop();});
+});
