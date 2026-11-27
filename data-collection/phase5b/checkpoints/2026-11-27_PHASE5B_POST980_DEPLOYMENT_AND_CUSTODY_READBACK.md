@@ -35,6 +35,6 @@ This is positive evidence that the read-only guard and its evidence reporting wo
 
 ## PR/CI state
 
-PR #980 is merged. PR #981 remains a draft stacked recovery PR at `f7990b1b0c2f9ea8221dfdc7f1f2bd791de11c62`; exact run `46015420628` passed both restricted-PG16 and fixed-metadata/full-offline jobs. Production main is `24df876fc612c0e4fdfb6f69585ed90bcc56f9b8`. CI and deployment show engineering readiness of the released code and guard execution; they do not show that scientific repair is effective.
+PR #980 is merged. PR #981 remains a draft at `5f438cf4e47ae63337ac4edb3478b383ef5d9089`, now correctly based on `main`. Exact run `46067130674` passed both restricted-PG16 and fixed-metadata/full-offline jobs on that head, including `npm run check`, full offline suite, and current F/I/C/T/report tests. Earlier exact executable head `f7990b1b` also passed both jobs in `46015420628`. Production main is `24df876fc612c0e4fdfb6f69585ed90bcc56f9b8`. CI and deployment show engineering readiness of the released code and guard execution; they do not show that scientific repair is effective.
 
 No Replit AI Agent was used. No provider call, conditional install, policy/secret export, or paid replay was part of the protected custody check. The owner-run deployment command did perform the explicitly guarded Git merge and production pin/retention coordination.

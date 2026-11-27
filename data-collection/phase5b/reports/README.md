@@ -14,7 +14,7 @@
 | Same60 GitHub job logs |60 incorrectly unavailable |30 timely-original and30 no-content receipts classified |Visibility repair demonstrated; no billing/PRE proof |
 | Guarded release |#980 frozen c4408c62 |Main24df876f; exact merge and both expiry jobs passed run46061597861 |Release and retention workflow ran; not a science outcome |
 | Day5 conditional custody |No protected readback |Run46065789071 passed; conditional fields ABSENT, metadata disabled |Confirms missing commissioning rather than a failed policy install |
-| Exact candidate validation |4,616 full-suite tests passed,259 skipped |Exact #981 head f7990b1 CI46015420628 passed both jobs |Software acceptance; no production PRE or causal accuracy proof |
+| Exact candidate validation |4,616 full-suite tests passed,259 skipped |Current #981 head5f438cf4 CI46067130674 passed PG16 + fixed-metadata/full-offline jobs |Software acceptance; no production PRE or causal accuracy proof |
 
 [Owner storage inventory](2026-11-27_owner_storage_inventory.json) · [Day4 shape census](2026-11-27_owner_day4_native_shape.json) · [same-run log comparison](2026-11-27_log_visibility_comparison.json) · [exact hosted CI](2026-11-27_exact_ci_a115.json) · [post-cutover workflow snapshot](2026-11-27_post_cutover_workflow_evidence.json) · [all59 families and priorities](2026-11-27_RECOVERY_PROGRESS.md) · [post-cutover checkpoint](../checkpoints/2026-11-27_PHASE5B_POST980_DEPLOYMENT_AND_CUSTODY_READBACK.md) · [post-cutover register/report test](2026-11-27_POST980_FOCUSED_TESTS.txt).
 

@@ -7,7 +7,7 @@ Phase5B simplifies recovery operations alongside Phase6. It does not restart the
 - **Production:** #980 merged as `24df876fc612c0e4fdfb6f69585ed90bcc56f9b8`; owner verified exact runtime/retention pins and relay executable unchanged. Current-main primary FIDS + Phase7 retention run `46061597861` passed both jobs.
 - **Science:** latest owner inventory remains 134 timely bindings, zero linked/cutoff-safe PRE and zero global Packet B fragments/bundles/links. Day5 protected read-only custody run `46065789071` passed and found the future conditional fields ABSENT, metadata disabled, and no installation/precommit. No positive PRE, Packet B, POST or physical label is evidenced.
 - **Register:** 59 failure families;16 narrow corrections closed,43 not closed. All P0 families F005/F010/F026/F027/F029/F042 and all ten complete component objectives remain open. Failure families are not counts of newly active incidents.
-- **PR:** #981 remains a stacked draft on the existing recovery branch. Exact head `f7990b1b0c2f9ea8221dfdc7f1f2bd791de11c62` passed both jobs in run `46015420628`; its changes are not all deployed by #980.
+- **PR:** #981 remains a draft based on current `main`. Exact head `5f438cf4e47ae63337ac4edb3478b383ef5d9089` passed both restricted-PG16 and fixed-metadata/full-offline jobs in run `46067130674`; its changes are not all deployed by #980.
 
 ## Start here
 

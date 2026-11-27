@@ -13,3 +13,5 @@ Coverage confirmed:
 - F/I/C/T mappings and exact fixture paths remain valid.
 
 `git diff --check` passed. The dated post-cutover report and workflow sample were regenerated from current main snapshot through20:46:08Z. These are documentation/integrity checks, not full-repository CI or scientific validation.
+
+Exact #981 head `5f438cf4e47ae63337ac4edb3478b383ef5d9089`, based on main after #980 merge, passed run `46067130674`: restricted PostgreSQL16 job and fixed-metadata job both successful. Fixed-metadata job included `npm run check`, full offline suite, science-focused tests, T/owner/report tests, and owner-shell syntax checks. The CI Node20 action deprecation annotation is informational; both jobs concluded success.
