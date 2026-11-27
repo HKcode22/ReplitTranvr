@@ -127,4 +127,4 @@ jobs:
           node-version: '20'
           cache: npm
       - run: npm ci --include=dev --no-audit --no-fund
-      - run: node --test tests/phase5b_conditional_query_scope_real_pg16_v39.mjs
+      - run: npx --no-install tsx --test tests/phase5b_conditional_query_scope_real_pg16_v39.mjs
