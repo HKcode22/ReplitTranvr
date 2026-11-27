@@ -369,9 +369,13 @@ export async function issueP5ConditionalT24SignedReviewPage(pool:P5EReadOnlyPgPo
   drafts=new Map(actual.privateFeatureDrafts.map(d=>[d.flightInstanceId,d]));
  if(proposals.size!==actual.memberReview.privateReviewProposals.length||drafts.size!==actual.privateFeatureDrafts.length)
   return hold("AMBIGUOUS_PAGE_SOURCE");
- const reviews=requestedFlightIds.map(flightInstanceId=>{
+ // A member may lose eligibility between page selection and this fresh
+ // source read. Censor only that member before any signature; structural
+ // custody, policy, signature and permit errors still abort the page.
+ const reviews:P5ConditionalReviewPage["reviews"]=[];
+ for(const flightInstanceId of requestedFlightIds){
   const member=proposals.get(flightInstanceId),draft=drafts.get(flightInstanceId);
-  if(!member||!draft||time(member.predictionCutoffUtc)>=time(v.delegation.validUntilUtc))return hold("CURRENT_ELIGIBLE_MEMBER_REQUIRED");
+  if(!member||!draft||time(member.predictionCutoffUtc)>=time(v.delegation.validUntilUtc))continue;
   const evidence=digestP5ConditionalPermitEvidence(member,draft,actual.privateSourceBoundAtUtc);
   const review:Review={schema:"v39.phase5.external-conditional-pre-permit-review.v1",reviewedCodeSha:input.expectedReviewedCodeSha,
    reviewedProtocolSha256:scope.protocolSha256,reviewedMemberEvidenceSha256:evidence,reviewedAtUtc:actual.observedDbClockUtc,
@@ -385,8 +389,9 @@ export async function issueP5ConditionalT24SignedReviewPage(pool:P5EReadOnlyPgPo
   // before signing the review. No PRE/witness claim is issued here.
   constructFromBound(scope,actual,member,draft,review,{expectedReviewArtifactSha256:hash(b),expectedReviewedCodeSha:input.expectedReviewedCodeSha,
    expectedConditionalProtocolSha256:scope.protocolSha256,expectedExternalContentUseReviewSha256:scope.externalContentUseReviewSha256});
-  return {flightInstanceId,reviewArtifactBase64:b.toString("base64"),reviewArtifactSha256:hash(b)};
- });
+  reviews.push({flightInstanceId,reviewArtifactBase64:b.toString("base64"),reviewArtifactSha256:hash(b)});
+ }
+ if(!reviews.length)return null;
  const page:P5ConditionalReviewPage={schema:"v39.phase5.conditional-pre-external-review-page.v1",reviewedCodeSha:input.expectedReviewedCodeSha,
   manifestSha256:q.manifestSha256,rightsSha256:q.rightsReviewSha256,protocolSha256:scope.protocolSha256,externalContentUseReviewSha256:scope.externalContentUseReviewSha256,
   queryDigestSha256:q.queryDigestSha256,populationQueryId:scope.expectedPopulationQueryId,responseSha256:scope.expectedResponseSha256,runDayIndex:q.runDayIndex,

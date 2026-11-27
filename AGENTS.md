@@ -172,3 +172,6 @@ Read [the permanent seven-priority and seven-requirement F/I/C/T crosswalk](data
 
 
 **Nov27 04:50 PST I124/T118:** Existing native censor class combines canonical, scope, operating-leg and other predicates; use the explicit day-scoped live native shape inventory only after exact real PG16 CI. Overlapping counts are not eligible flights or causal evidence; no expired payload, identity output, timing/physical proof or PRE claim. Preserve #980 exact candidate, never merge #981 into it, no active cancellation. F005/C008 remain open.
+
+
+**Nov27 scientific-first I125/T119:** T24 fresh conditional review must censor individual unavailable members before signing, not discard other still-eligible members; exact ordered signed subset or explicit null only, no retry of attempted members, no relaxed cutoff/identity/witness/independent proof or catch-all structural failure. #981 candidate only; #980 unchanged, no production change. Prioritize real F005/F027/F026 and F029/F042 over cosmetic CI status.

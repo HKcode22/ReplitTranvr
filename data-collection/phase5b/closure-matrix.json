@@ -405,7 +405,8 @@
         "I095",
         "I108",
         "I121",
-        "I123"
+        "I123",
+        "I125"
       ],
       "next": "Protected policy custody, exact reviewed commissioning, positive conditional signature and PRE; actual protected commitment decision preview and separate authorized install/readback outstanding",
       "closureStatus": "NOT_CLOSED",
@@ -477,7 +478,8 @@
       "id": "F033",
       "classification": "PARTIAL_OR_OPEN",
       "implementations": [
-        "I028"
+        "I028",
+        "I125"
       ],
       "next": "Actual final-clock safe candidate/permit publication",
       "closureStatus": "NOT_CLOSED",
