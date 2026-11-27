@@ -15,3 +15,8 @@ Observed time reduction between these two hosted runs: 4m37s (about53%). This is
 Separate unresolved release check: run46070328722 / job140745459788 ran eight files/30 callback build test cases successfully, then correctly stopped at PHASE5_CALLBACK_REVIEWED_SOURCE_BUILD_HOLD because executable source differs from the immutable reviewed build pin. No callback build or deployment is claimed.
 
 Local verification on the post-repair source tree: workflow and Phase0 tests24/24; npm run v39:typecheck passed; git diff --check passed.
+
+Current PR head report-only commit: 8970f5169ab774f93d6562fafdd3a0ec6b0220c8.
+Exact-head offline-safety run: 46070993652 — PASS. Fresh B0062 bootstrap, durable history, restart no-op, pending-migration check, Drizzle reconciliation, schema/trigger verification, staged V0065 on disposable PG16, aggregate Phase0 preflight, and separate disposable-PG16 Gate3 behavior all passed.
+Current exact-head matrix non-source-build jobs passed or skipped by protected/provider gates. Callback reviewed-source check run 46070993556 remains held after all eight test files/30 cases pass because guarded executable source differs from immutable pin c3c3050e12c4e327f9c82c35c95f856f3c1cbd20. This is a deliberate release hold, not a science result.
+PR #981 remains draft and is not mergeable/deployed. The only measured repair benefit is shorter CI turnaround. Scientific PRE and Packet B output remain zero in the last reconciled production inventory.
