@@ -141,3 +141,28 @@ test("T084 target-only successor requires all exact mandatory CI paths and prese
  assert.match(tail,/if \[\[ "\$TARGET_ONLY" == 1 \]\];then[\s\S]*?FINAL_TARGET_ONLY_READBACK[\s\S]*?relay_unchanged=\$ROLD[\s\S]*?exit 0[\s\S]*?stage=RELAY_MERGE/);
  assert.ok(tail.indexOf("NEW_TARGET_RETENTION")<tail.indexOf("FINAL_TARGET_ONLY_READBACK"));
 });
+
+
+test("T090 cutover permits only internally reconciled terminal PRE history; blocks unknown writes and STOP",()=>{
+ const at="2026-11-27T15:40:00.000Z";
+ const stop={status:"P6_SOURCE_RESERVATION_AND_STOP_READONLY",at,unresolvedStops:0,providerCalls:0,productionWrites:0};
+ const packet={status:"P6_PRIVATE_PACKET_AND_PRE_TASK_CUSTODY_READONLY",at,tasks:[],providerCalls:0,productionWrites:0};
+ const verified={horizon:"T-6h",state:"VERIFIED_ON_TIME",tasks:2,tasks_with_snapshot_ref:2,linked_cutoff_safe_verified:2};
+ const missed={horizon:"T-24h",state:"MISSED",tasks:1,tasks_with_snapshot_ref:0,linked_cutoff_safe_verified:0};
+ const call=(rows)=>runSourceGuards("cutover_pre_tasks_ok '"+rows.map(x=>JSON.stringify(x)).join("\n")+"' && echo PASS");
+ for(const tasks of [[],[verified,missed]]){
+  const x=call([stop,{...packet,tasks}]);assert.equal(x.status,0,x.stderr+x.stdout);assert.match(x.stdout,/PASS/);
+ }
+ for(const rows of [
+  [{...stop,unresolvedStops:1},packet],[stop,{...packet,at:"2026-11-27T15:39:00.000Z"}],[stop,{...packet,productionWrites:1}],
+  [stop,{...packet,tasks:[{...verified,linked_cutoff_safe_verified:1}]}],[stop,{...packet,tasks:[{...verified,tasks_with_snapshot_ref:1}]}],
+  [stop,{...packet,tasks:[{...missed,tasks_with_snapshot_ref:1}]}],[stop,{...packet,tasks:[verified,verified]}],
+  [stop,{...packet,tasks:[{...missed,tasks:0}]}],[stop,{...packet,tasks:[{...missed,horizon:"OTHER"}]}],
+  ...["READY","CLAIMED","WRITE_STARTED_UNKNOWN","QUARANTINED","UNRECOGNIZED"].map(state=>[stop,{...packet,tasks:[{...missed,state}]}]),
+  [stop,{...packet,tasks:null}],[stop,stop,packet],[packet]
+ ]){
+  const x=call(rows);assert.notEqual(x.status,0,x.stdout);assert.doesNotMatch(x.stdout,/PASS/);
+ }
+ const afterWait=sourceCutover.slice(sourceCutover.indexOf("stage=QUIET_AND_GAP"),sourceCutover.indexOf("stage=TARGET_MERGE"));
+ assert.match(afterWait,/wait_all_quiet[\s\S]*?node "\$TMP\/funnel.cjs"[\s\S]*?cutover_pre_tasks_ok[\s\S]*?node "\$TMP\/census.mjs"[\s\S]*?TASK_CENSUS_CLOCK[\s\S]*?all_main_quiet/);
+});

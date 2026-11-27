@@ -166,6 +166,30 @@ wait_all_quiet(){
   sleep 10
  done
 }
+# The durable queue retains terminal history; requiring an empty table
+# would prohibit every future safe deployment after the first genuine PRE.
+# Do not waive ambiguous writes or quarantined tasks.
+cutover_pre_tasks_ok(){
+ local j="$1"
+ jq -es '
+  ([.[]|select(.status=="P6_SOURCE_RESERVATION_AND_STOP_READONLY")]) as $s |
+  ([.[]|select(.status=="P6_PRIVATE_PACKET_AND_PRE_TASK_CUSTODY_READONLY")]) as $t |
+  ($s|length)==1 and ($t|length)==1 and
+  $s[0].unresolvedStops==0 and
+  $s[0].providerCalls==0 and $s[0].productionWrites==0 and
+  $t[0].providerCalls==0 and $t[0].productionWrites==0 and
+  ($s[0].at|type=="string") and $s[0].at==$t[0].at and
+  ($t[0].tasks|type=="array") and
+  ([$t[0].tasks[]|[.horizon,.state]]|unique|length)==($t[0].tasks|length) and
+  all($t[0].tasks[];
+    (.horizon=="T-24h" or .horizon=="T-6h" or .horizon=="T-90m") and
+    (.tasks|type=="number" and .>0 and .==floor) and
+    (.tasks_with_snapshot_ref|type=="number" and .>=0 and .==floor) and
+    (.linked_cutoff_safe_verified|type=="number" and .>=0 and .==floor) and
+    ((.state=="VERIFIED_ON_TIME" and .tasks_with_snapshot_ref==.tasks and .linked_cutoff_safe_verified==.tasks) or
+     (.state=="MISSED" and .tasks_with_snapshot_ref==0 and .linked_cutoff_safe_verified==0)))
+ ' <<<"$j" >/dev/null
+}
 # END SOURCE ONLY TESTED GUARDS
 blob(){ gh api "repos/$R/git/blobs/$1" --jq .content | base64 --decode > "$2"; [[ "$(git hash-object "$2")" == "$1" ]] || hold BLOB_MISMATCH; }
 stage=EXACT_CI
@@ -188,16 +212,24 @@ bash "$TMP/pins.sh" "$OLD" "$ROLD" SOURCE_ONLY > "$TMP/pin-output"
 grep -Fxq P6_POST_CUTOVER_VARIABLE_READBACK_PASS_SOURCE_ONLY_NO_WRITES "$TMP/pin-output" || hold OLD_PIN_READBACK
 # No raw originals, no writes; check actual STOP and any existing queue tasks.
 node "$TMP/funnel.cjs" > "$TMP/funnel"
-jq -es '([.[]|select(.status=="P6_SOURCE_RESERVATION_AND_STOP_READONLY")]|length)==1 and ([.[]|select(.status=="P6_SOURCE_RESERVATION_AND_STOP_READONLY")][0].unresolvedStops==0) and ([.[]|select(.status=="P6_PRIVATE_PACKET_AND_PRE_TASK_CUSTODY_READONLY")]|length)==1 and ([.[]|select(.status=="P6_PRIVATE_PACKET_AND_PRE_TASK_CUSTODY_READONLY")][0].tasks|length)==0' "$TMP/funnel" >/dev/null || hold STOP_OR_EXISTING_PRE_TASKS
+cutover_pre_tasks_ok "$(cat "$TMP/funnel")" || hold STOP_OR_UNSETTLED_PRE_TASKS
 stage=PREMERGE_RETENTION
 bash "$TMP/retention.sh" ENSURE_EXACT_CURRENT_MAIN_FULL_RETENTION_BASELINE "$OLD"
 stage=QUIET_AND_GAP
 wait_all_quiet
+# Recheck STOP and task state after the retention baseline and wait. A
+# pre-wait census is not evidence that no new task has appeared.
+node "$TMP/funnel.cjs" > "$TMP/funnel"
+cutover_pre_tasks_ok "$(cat "$TMP/funnel")" || hold STOP_OR_UNSETTLED_PRE_TASKS
+funnel_observed="$(jq -ser '.[]|select(.status=="P6_SOURCE_RESERVATION_AND_STOP_READONLY")|.at' "$TMP/funnel")"
 node "$TMP/census.mjs" > "$TMP/census"
 gap_ok "$(cat "$TMP/census")" || hold NO_SAFE_PROSPECTIVE_GAP
 # Also require clock freshness to prevent stale census reuse after the quiet wait.
 observed="$(jq -r .observedAtUtc "$TMP/census")"
 [[ "$(date -u +%s)" -ge "$(date -u -d "$observed" +%s)" && "$(( $(date -u +%s)-$(date -u -d "$observed" +%s) ))" -le 60 ]] || hold CENSUS_CLOCK
+now_epoch="$(date -u +%s)"
+funnel_epoch="$(date -u -d "$funnel_observed" +%s)" || hold TASK_CENSUS_CLOCK
+[[ "$now_epoch" -ge "$funnel_epoch" && "$((now_epoch-funnel_epoch))" -le 60 ]] || hold TASK_CENSUS_CLOCK
 all_main_quiet || hold ACTIVE_NO_CANCEL
 stage=TARGET_MERGE
 [[ "$(main "$L")" == "$ROLD" ]] || hold RELAY_BASE_DRIFT
