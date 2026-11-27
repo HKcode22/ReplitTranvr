@@ -77,3 +77,8 @@ F058/I129/T123: current gh refuses escape-bearing job logs unless the privately 
 
 
 Actual owner05:58PST readback:134 timely bindings,82 live,52 expired metadata-only,0 linkedPRE,0 globalP7 fragments/bundles/links. Day4 native shape1053/1053 member observations rejected for canonical/core/operating confirmations; all other reported field checks pass. See reports/2026-11-27_owner_day4_native_shape.json and reports/2026-11-27_owner_storage_inventory.json. Existing F005/F027 remain open; no optional feature rule implicated. New F059/I131/T125 corrects the callback test's ancestry-only assumption while preserving production refusal. Current register59F/131I/125T/10C;13 prior closures preserved,46 not closed pending exact acceptance. No repeated census needed.
+
+
+## Single bounded owner deployment attempt after natural Day4 drain
+
+I132/T126 `scripts/v39_phase5b_owner_wait_once_980.sh WAIT_ONCE_EXACT_REVIEWED_980` waits read-only until Nov27 15:30Z and no active/queued SOURCE children. It stops on changed main/PR/metadata uncertainty or Nov27 22:00Z expiry, then invokes existing helper1bbec6f1 for exact #980 c4408c62 once. No helper retry or cancellation. Original exactCI/STOP/task/quiet/full130minute guards remain. Use only after exact candidate CI and immutable wrapper hash are published; not actually run by agent. It coordinates #980 only, never merges stacked #981 or installs conditional policy.

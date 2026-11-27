@@ -54,7 +54,7 @@ Workflow failures count executions, not unique failure families. In-progress/que
 | F034 | OPERATIONAL | PARTIAL_OR_OPEN | I032, I062, I083, I130 | Relay execution reconciliation distinct from webhook ACK |
 | F036 | OPERATIONAL | PARTIAL_OR_OPEN | I035 | Actual relay cancellation history and bounded successor execution |
 | F037 | OPERATIONAL | PARTIAL_OR_OPEN | I036, I100 | Actual bounded parallel SOURCE history and relay latency |
-| F040 | OPERATIONAL | PARTIAL_OR_OPEN | I045, I084, I090, I096, I112 | Exact #980 owner cutover and post-pin readback |
+| F040 | OPERATIONAL | PARTIAL_OR_OPEN | I045, I084, I090, I096, I112, I132 | Exact #980 owner cutover and post-pin readback |
 | F041 | OPERATIONAL | PARTIAL_OR_OPEN | I049, I057, I083 | Actual current-main heartbeat and due early draw |
 | F046 | OPERATIONAL | PARTIAL_OR_OPEN | I104, I106, I112 | #979 incident resolved; verify #980 safe cutover and recovery |
 | F047 | OPERATIONAL | EXACT_CI_GREEN_DEPLOYMENT_PENDING | I107 | Deploy manual redirect guard; no extra paid attempt |

@@ -37,7 +37,9 @@ describe("Phase5 V5 reviewed callback receiver / mode-separated expiry release",
    "vite.config.ts","tsconfig.json","postcss.config.js","tailwind.config.ts","tailwind.config.js",
    "components.json","drizzle.config.ts"],{encoding:"utf8",timeout:10000});
   if(ancestor.status!==0||reviewedInputs.status!==0){
-   expect(result.status).not.toBe(0);
+   expect(result.status).toBe(2);
+   expect(result.stderr).toContain("PHASE5_CALLBACK_REVIEWED_SOURCE_BUILD_HOLD");
+   expect(result.stdout).not.toContain("SOURCE_EQUIVALENCE_VERIFIED");
   }else{
    expect(result.status).toBe(0);
    expect(result.stdout.trim()).toBe("PHASE5_V5_CALLBACK_SOURCE_EQUIVALENCE_VERIFIED_NOT_PUBLISHED");

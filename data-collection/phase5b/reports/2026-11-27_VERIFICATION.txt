@@ -80,3 +80,5 @@ AssertionError: expected 2 to be +0 // Object.is equality
       Tests  3 failed | 4608 passed | 259 skipped (4870)
    Start at  05:42:09
    Duration  26.25s (transform 17.52s, setup 0ms, import 51.55s, tests 42.19s, environment 74ms)
+
+Exact clean successor f85f71cef401730a960fb56a519099f4c99ca487 full local Vitest:653files passed,51skipped;4616tests passed,259skipped,0failed. Prior failures in this file are superseded by source restoration and corrected test expectation; no guard bypass. New I132/T126 owner wait runs nine shell scenarios, no actual deployment. Exact latest-head GitHub checks still required.

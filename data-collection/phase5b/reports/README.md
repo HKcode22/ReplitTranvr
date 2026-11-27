@@ -41,3 +41,7 @@ Owner explicitly authorized integration, commit and push to existing #981 and st
 [Storage inventory](2026-11-27_owner_storage_inventory.json):134 timely bindings,82 live originals,52 expired metadata-only,8307 historical member observations; zero linked/cutoff-safe PRE; global Phase7 fragments/bundles/links0,policy1. Day3 now64 bindings,Day4 18; source acquisition increased since the earlier readback but causality to repairs is not established. Scientific usability still not demonstrated. Do not repeat the same census without a new reason.
 
 F059/I131/T125 separately tracks the preexisting callback test's false ancestry-equals-source-equivalence assumption. The production wrapper stays unchanged and rejects drift. Original frozen implementation log restored, current update in a separate addendum. No original failure reopened.
+
+## Full clean-suite result and owner cutover convenience
+
+Published f85f71ce passed full local suite4616/4616 executed tests,259skipped; immutable-source checks and callback refusal preserved. Exact hosted CI is separate. I132/T126 adds tested read-only Day4 drain wait and one invocation of the existing exact #980 owner helper, no cancel/retry/changed guard or #981 merge. Do not repeat the already completed Day4 census; policy/positivePRE/PacketB evidence is still outstanding.
