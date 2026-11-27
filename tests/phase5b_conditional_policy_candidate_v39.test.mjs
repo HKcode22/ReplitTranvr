@@ -20,7 +20,10 @@ const dailyBytes=buf(p),signingBytes=buf(q),transportBytes=buf({schema:"v39.phas
 const baseDigests={daily:sha(dailyBytes),signing:sha(signingBytes),transport:sha(transportBytes)};
 const review={schema:"v39.phase5b.prospective-conditional-commissioning-review.v1",ownerDelegatedTechnicalScopeReviewed:true,protocolSha256:h("protocol"),externalContentUseReviewSha256:h("external"),manifestSha256:trust.manifestSha256,rightsSha256:trust.rightsSha256,baseDigests,firstEligibleRunDayIndex:5,effectiveUtc:effective,validUntilUtc:end,standaloneNoT24ProtocolSha256:null};
 const prospective={runDayIndex:5,firstRequestUtc:"2026-11-29T15:45:00.000Z",preparationOpensUtc:"2026-11-29T03:45:00.000Z",genesisAbsent:true,preparedQueryCount:0};
-const publicPins={laneFingerprintSha256:fp,proofFingerprintSha256:h("proof"),lanePublicKeyBase64:key.export({type:"spki",format:"pem"}).toString().length?Buffer.from(key.export({type:"spki",format:"pem"})).toString("base64"):""};
+const proofKey=generateKeyPairSync("ed25519").publicKey;
+const publicPins={laneFingerprintSha256:fp,proofFingerprintSha256:sha(proofKey.export({type:"spki",format:"der"})),
+ lanePublicKeyBase64:Buffer.from(key.export({type:"spki",format:"pem"})).toString("base64"),
+ proofPublicKeyBase64:Buffer.from(proofKey.export({type:"spki",format:"pem"})).toString("base64")};
 const inputs={dailyBytes,signingBytes,transportBytes,baseDigests,trust,reviewBytes:buf(review),reviewSha256:sha(buf(review)),publicPins,prospective,observedUtc:now,reviewedPlanBytes};
 test("T088 candidate preserves native and budget bytes, exact review and distinct actual public admissions; no install",()=>{
  const x=prepare(inputs),d=JSON.parse(x.privatePolicyBytes.daily),s=JSON.parse(x.privatePolicyBytes.signing),t=JSON.parse(x.privatePolicyBytes.transport);
@@ -96,4 +99,13 @@ test("T095 actual registry verifier retains an intact Ed25519 native predecessor
  assert.throws(()=>verifyP6T24PrivateRegistry({...args,trust:{...newTrust,nativeT24PolicyTransition:undefined}}),/REGISTRY_WIRE_OR_STUDY_SCOPE_DRIFT/);
  assert.throws(()=>verifyP6T24PrivateRegistry({...args,trust:newTrust,wire:{...wire,review:{...reviewWire,policySha256:candidate.dailySha256}}}),/REGISTRY_SIGNATURE_INVALID/);
  assert.throws(()=>verifyP6T24PrivateRegistry({...args,trust:newTrust,observedDbClockUtc:reviewWire.validUntilUtc}),/REGISTRY_SIGNATURE_EXPIRED_OR_FUTURE/);
+});
+
+test("T107 candidate validates actual proof public key, not an arbitrary distinct digest",()=>{
+ assert.equal(prepare(inputs).paidGo,false);
+ const wrong=generateKeyPairSync("ed25519").publicKey;
+ for(const delta of [{proofPublicKeyBase64:undefined},{proofPublicKeyBase64:"not-base64"},{proofFingerprintSha256:h("unbound-proof")},
+  {proofPublicKeyBase64:Buffer.from(wrong.export({type:"spki",format:"pem"})).toString("base64")},
+  {proofPublicKeyBase64:publicPins.lanePublicKeyBase64}])
+  assert.throws(()=>prepare({...inputs,publicPins:{...publicPins,...delta}}),/EXISTING_PUBLIC_ACTOR_PINS/);
 });

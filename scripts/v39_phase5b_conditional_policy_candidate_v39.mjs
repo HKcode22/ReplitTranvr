@@ -91,10 +91,11 @@ export function prepareP6ConditionalPolicyCandidate({dailyBytes,signingBytes,tra
     Object.hasOwn(day,"conditionalLaterPreScope"))hold("EXACT_BASE_POLICY");
  if(!Buffer.from(JSON.stringify(p)).equals(dailyBytes))hold("NONCANONICAL_PREDECESSOR_BYTES");
  const reviewedConditionalThroughUtc=requirePlanCoverage(p,r,reviewedPlanBytes,prospective,decision);
- const fp=publicPins?.laneFingerprintSha256,proof=publicPins?.proofFingerprintSha256,raw=publicPins?.lanePublicKeyBase64;
+ const fp=publicPins?.laneFingerprintSha256,proof=publicPins?.proofFingerprintSha256,raw=publicPins?.lanePublicKeyBase64,proofRaw=publicPins?.proofPublicKeyBase64;
+ const publicKeyMatches=(b,f)=>typeof b==="string"&&b.length<=5500&&Buffer.from(b,"base64").toString("base64")===b&&pin(Buffer.from(b,"base64"),f);
  if(![fp,proof,v.laterReviewerFingerprintSha256,trust.dayReviewerFingerprintSha256,trust.queryReviewerFingerprintSha256].every(x=>H.test(x??""))||
     new Set([fp,proof,v.laterReviewerFingerprintSha256,trust.dayReviewerFingerprintSha256,trust.queryReviewerFingerprintSha256]).size!==5||
-    typeof raw!=="string"||raw.length>5500||Buffer.from(raw,"base64").toString("base64")!==raw||!pin(Buffer.from(raw,"base64"),fp))hold("EXISTING_PUBLIC_ACTOR_PINS");
+    !publicKeyMatches(raw,fp)||!publicKeyMatches(proofRaw,proof))hold("EXISTING_PUBLIC_ACTOR_PINS");
  const scope={protocolSha256:decision.protocolSha256,externalContentUseReviewSha256:decision.externalContentUseReviewSha256};
  const interval={validFromUtc:decision.effectiveUtc,validUntilUtc:decision.validUntilUtc};
  const delegation={approved:true,...scope,reviewerFingerprintSha256:fp,reportedScheduleSemanticsSha256:v.selectedTConfig.semanticsEvidenceSha256,...interval};

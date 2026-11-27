@@ -166,3 +166,21 @@ test("T090 cutover permits only internally reconciled terminal PRE history; bloc
  const afterWait=sourceCutover.slice(sourceCutover.indexOf("stage=QUIET_AND_GAP"),sourceCutover.indexOf("stage=TARGET_MERGE"));
  assert.match(afterWait,/wait_all_quiet[\s\S]*?node "\$TMP\/funnel.cjs"[\s\S]*?cutover_pre_tasks_ok[\s\S]*?node "\$TMP\/census.mjs"[\s\S]*?TASK_CENSUS_CLOCK[\s\S]*?all_main_quiet/);
 });
+
+test("T106 target980 requires every added exact workflow and checks all pin scopes before mutation",()=>{
+ const h="a".repeat(40);
+ const base=["v39-phase0-offline.yml","phase5b-source-diagnostics-offline.yml","phase5b-phase7-role-successor.yml","phase5b-runtime-successor-compatibility.yml","phase5-one-signed-future-post-v0083-main-manual.yml","phase6-source-existing-p5-child-admission-offline-no-provider.yml","phase5-source-upcoming-queue-main-scheduled-readonly.yml","phase5-public-frozen-private-flight-packet-leak-guard.yml","phase5-actual-source-native-flight-candidates-readonly-manual.yml","phase2g-yssy-p25-published-identity-readonly.yml","phase2g-yssy-p25-release-no-provider-ci.yml","phase2g-yssy-p25-release-postgres-ci.yml"];
+ const extra=["phase6-private-later-enrollment.yml","phase6-nonpaid-source-day-prepare-publish.yml","phase5-github-fids-source-release-guard-offline.yml","phase5-cd-github-one-queued-t24-witness-main-manual.yml","phase5-source-login-and-manual-owner-disposable-pg16.yml","phase5-v0080-github-runtime-prearm-real-pg16.yml","phase5-amendment-c-segmented-day-stage6-stage8-offline.yml","phase3-gate4-owned-handoff-ci.yml","phase5-v0082-atomic-segmented-day-pg16-no-provider.yml","phase5-stage9-v0079-db-prepare-offline.yml","phase5-stage8-v0079-daily-prepare-proposals-offline.yml"];
+ const rows=[...base,...extra].map(path=>({path:".github/workflows/"+path,head_sha:h,status:"completed",conclusion:"success",run_attempt:1}));
+ const call=rs=>runSourceGuards("target_980_ci_ok '"+JSON.stringify({total_count:rs.length,workflow_runs:rs})+"' "+h+" && echo PASS");
+ assert.equal(call(rows).status,0);
+ for(let i=0;i<rows.length;i++)assert.notEqual(call(rows.filter((_,j)=>i!==j)).status,0);
+ const pinCase=body=>runSourceGuards("v(){ echo old; }; vars(){ echo ok; }; value(){ echo __ABSENT__; }; "+body);
+ assert.equal(pinCase("pin_candidates_ok repo key old new env").status,0);
+ assert.equal(pinCase("value(){ echo new; }; pin_candidates_ok repo key old new env").status,0);
+ assert.notEqual(pinCase("value(){ echo other; }; pin_candidates_ok repo key old new env").status,0);
+ assert.notEqual(pinCase("vars(){ return 5; }; pin_candidates_ok repo key old new env").status,0);
+ assert.match(sourceCutover,/RECOVER_EXACT_MERGED_SOURCE_ONLY_TARGET_980/);
+ assert.match(sourceCutover,/target_980_pins_ok "\$OLD" "\$OLD" \|\| hold PIN_SCOPE_DRIFT;fi\nmerge_exact/);
+ assert.match(sourceCutover,/RECOVERY_REQUIRES_EXACT_MERGED_TREE/);
+});
