@@ -5,6 +5,9 @@ on:
       - 'data-collection/phase6/RECOVERY_REGISTER.md'
       - 'AGENTS.md'
       - 'tests/phase5b_recovery_register_v39.test.mjs'
+      - 'tests/phase5b_maintenance_and_f017_owner_v39.test.mjs'
+      - 'tests/phase5b_maintenance_979_mock_v39.py'
+      - 'data-collection/phase6/owner-recovery/20261126-979/**'
       - 'scripts/v39_phase5b_source_diagnostics_v39.mjs'
       - 'server/lib/disruption/phase5V0079DailyPreparedQueryProposals_v39.ts'
       - 'scripts/v39_gate05_free_airport_feed_coverage_v39.mjs'
@@ -82,7 +85,7 @@ jobs:
         with:
           node-version: '20'
       - run: node --check scripts/v39_phase5b_paid_child_audit_owner.mjs && node --check scripts/v39_phase5b_signed_calendar_coverage_owner.mjs && node --check scripts/v39_phase5b_conditional_query_scope_owner.mjs
-      - run: node --test tests/phase5b_source_diagnostics_v39.test.mjs tests/phase5b_recovery_register_v39.test.mjs tests/phase5b_cutover_quiet_v39.test.mjs tests/phase5b_conditional_query_scope_owner_v39.test.mjs
+      - run: node --test tests/phase5b_source_diagnostics_v39.test.mjs tests/phase5b_recovery_register_v39.test.mjs tests/phase5b_cutover_quiet_v39.test.mjs tests/phase5b_conditional_query_scope_owner_v39.test.mjs tests/phase5b_maintenance_and_f017_owner_v39.test.mjs
       - run: npm ci --include=dev --no-audit --no-fund
       - run: npm run check
       - run: npx vitest run tests/phase3_gate05_free_feed_429_pacing_contract_v39.test.ts tests/phase5b_fids_response_diagnostics_v39.test.ts tests/phase5_no_provider_prearm_clock_v39.test.ts tests/phase5_conditional_fids_service_recovery_v39.test.ts tests/phase5_conditional_bound_source_review_v39.test.ts tests/phase5_signed_later_pre_day_registry_v39.test.ts tests/phase5_amendment_e_real_fids_original_feature_compiler_v39.test.ts tests/phase5_conditional_signed_schedule_pair_v39.test.ts tests/phase5_amendment_e_gateout_label_v39.test.ts tests/phase5_scoped_fids_source_bridge_v39.test.ts tests/phase4_gate5_g5a_native_fids_identity_v39.test.ts tests/phase5b_conditional_source_signer_scope_v39.test.ts tests/phase5_prospective_fids_identity_custody_v39.test.ts tests/phase6_stored_source_native_candidate_audit_v39.test.ts tests/phase7_local_private_pre_handoff_v39.test.ts
