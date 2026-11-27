@@ -27,13 +27,25 @@ test("T085 owner query uses only retained private instructions, explicit readonl
  const c={async query(sql,params){calls.push([sql,params]);
   if(sql.startsWith("SELECT current_database"))return {rows:[{db:true,owner:true,login:true,primary:true,ro:true,at:new Date("2026-11-27T00:00:00.000Z")}]};
   if(sql.startsWith("SELECT manifest_sha256"))return {rows:[{manifest_sha256:"a".repeat(64),calendar_hash:"b".repeat(64)}]};
-  if(sql.startsWith("WITH packets"))return {rows:[r]};
+  if(sql.trimStart().startsWith("WITH packets"))return {rows:[r]};
   return {rows:[]};
  }};
  const x=await read(c);assert.equal(x.cells[3].prepared,1);
  assert.match(calls[0][0],/READ ONLY/);assert.equal(calls.at(-1)[0],"ROLLBACK");
- const q=calls.find(([s])=>s.startsWith("WITH packets"))[0];
+ const q=calls.find(([s])=>s.trimStart().startsWith("WITH packets"))[0];
  assert.match(q,/p.kind='SOURCE_QUERY_PACKET'/);assert.match(q,/p.retention_not_after_utc>transaction_timestamp\(\)/);
  assert.match(q,/q.run_day_index IN \(3,4\) LIMIT 577/);
  assert.doesNotMatch(q,/clean\.fids_query_response|clean\.flight_population|INSERT INTO|UPDATE phase6_private|DELETE FROM/);
+});
+
+test("T086 real SQL errors return a safe stage and position, never raw SQL or secret text",async()=>{
+ const calls=[];
+ const c={async query(sql){calls.push(sql);
+  if(sql.startsWith("SELECT current_database"))return {rows:[{db:true,owner:true,login:true,primary:true,ro:true,at:new Date("2026-11-27T00:00:00.000Z")}]};
+  if(sql.startsWith("SELECT manifest_sha256"))return {rows:[{manifest_sha256:"a".repeat(64),calendar_hash:"b".repeat(64)}]};
+  if(sql.trimStart().startsWith("WITH packets"))throw Object.assign(new Error("private value"),{code:"42601",position:"42"});
+  return {rows:[]};
+ }};
+ await assert.rejects(()=>read(c),e=>e.message==="HOLD_P6_CONDITIONAL_QUERY_SCOPE_QUERY_PROJECTION"&&e.stage==="QUERY_PROJECTION"&&e.code==="42601"&&e.position==="42");
+ assert.equal(calls.at(-1),"ROLLBACK");
 });

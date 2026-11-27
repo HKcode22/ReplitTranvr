@@ -101,3 +101,6 @@ Read [the permanent seven-priority and seven-requirement F/I/C/T crosswalk](data
 
 
 **Prospective conditional scope inventory (I091/T085):** Before claiming Day3/4 conditional PRE can execute, read the actual still-live signed query instruction marker inventory, not only generic native actor readiness. New owner read-only count tool does not certify signatures or protected policy; missing marker cannot be retrofitted into a published signed query. Use the existing policy/signer and independently approved witness path for a future unsigned day; never rewrite current packets or invent a standalone T24 exception.
+
+
+**Nov26 16:12 PST F043:** owner I091 audit failed twice with SQLSTATE 42601; green mock tests were insufficient. I092/T086 actual same owner SQL on disposable PostgreSQL16 with non-superuser role plus safe error stage/position. Never claim a SQL path is verified from mocked query responses alone; real SQL regression and then actual owner readback required. No production route changes. Read [checkpoint](data-collection/phase6/checkpoints/2026-11-26_1612_PST_OWNER_SQL_PARITY_REPAIR.md).
