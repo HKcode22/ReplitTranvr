@@ -818,6 +818,15 @@ export async function fetchFidsAirport(
         await resp.body?.cancel().catch(()=>undefined);
         return null;
       }
+      // The reviewed FIDS operation documents 200 for a full payload and
+      // 204 for no content. 206 or any other unexpected 2xx must not be
+      // accepted as a complete observation in the one-GET research lane.
+      // Keep 204/205 body-unavailable diagnostics and legacy callers intact.
+      if (opts?.onePhysicalAttemptOnly===true && resp.ok &&
+          resp.status!==200 && resp.status!==204 && resp.status!==205) {
+        await resp.body?.cancel().catch(()=>undefined);
+        return null;
+      }
       if (resp.ok) {
         // Read exactly the response-body bytes delivered to Node fetch (after
         // transparent HTTP decompression). Never call these HTTP wire bytes.

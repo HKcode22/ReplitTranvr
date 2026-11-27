@@ -103,3 +103,32 @@ it("T101 refused durable reservation makes zero HTTP requests",async()=>{
  expect(reserve).toHaveBeenCalledTimes(1);
  expect(fetchImpl).not.toHaveBeenCalled();
 });
+
+it("T111 exact one-GET rejects parseable partial or unexpected successful responses without another reservation",async()=>{
+ for(const status of [201,202,203,206,207,208,226]){
+  const reserve=vi.fn(async()=> "a".repeat(64)),sleepImpl=vi.fn(async()=>undefined),onResponseDiagnostic=vi.fn();
+  const fetchImpl=vi.fn(async()=>new Response('{"departures":[]}',{status}));
+  expect(await fetchFidsAirport("WSSS","2026-11-25T00:00","2026-11-25T02:00",{direction:"Departure",strictDepartureList:true,onePhysicalAttemptOnly:true,budgetOwner:{reserve},fetchImpl,sleepImpl,onResponseDiagnostic})).toBeNull();
+  expect(reserve).toHaveBeenCalledTimes(1);expect(fetchImpl).toHaveBeenCalledTimes(1);
+  expect(sleepImpl).not.toHaveBeenCalled();expect(onResponseDiagnostic).not.toHaveBeenCalled();
+ }
+});
+it("T111 real HTTP 206 valid JSON cannot become a complete original",async()=>{
+ let hits=0;
+ const server=createServer((_req,res)=>{hits++;res.writeHead(206,{"Content-Type":"application/json","Content-Range":"bytes 0-16/1024"});res.end('{"departures":[]}');});
+ await new Promise<void>((resolve,reject)=>{server.once("error",reject);server.listen(0,"127.0.0.1",resolve);});
+ try{
+  const address=server.address();if(!address||typeof address==="string")throw Error("LOCAL_FIXTURE_ADDRESS");
+  const reserve=vi.fn(async()=> "a".repeat(64)),fetchImpl:typeof fetch=async(_input,init)=>fetch("http://127.0.0.1:"+address.port,{redirect:init?.redirect,signal:init?.signal});
+  const result=await fetchFidsAirport("WSSS","2026-11-25T00:00","2026-11-25T02:00",{direction:"Departure",strictDepartureList:true,onePhysicalAttemptOnly:true,budgetOwner:{reserve},fetchImpl});
+  expect(result).toBeNull();expect(hits).toBe(1);expect(reserve).toHaveBeenCalledTimes(1);
+ }finally{server.closeAllConnections();await new Promise<void>(resolve=>server.close(()=>resolve()));}
+});
+it("T111 incomplete streaming response cannot bind a partial JSON body",async()=>{
+ const reserve=vi.fn(async()=> "a".repeat(64)),seen:string[]=[];
+ const fetchImpl=vi.fn(async()=>new Response(new ReadableStream<Uint8Array>({
+  start(controller){controller.enqueue(new TextEncoder().encode('{"departures":[]}'));controller.error(Error("fixture socket failed"));}
+ }),{status:200}));
+ expect(await fetchFidsAirport("WSSS","2026-11-25T00:00","2026-11-25T02:00",{direction:"Departure",strictDepartureList:true,onePhysicalAttemptOnly:true,budgetOwner:{reserve},fetchImpl,onResponseDiagnostic:x=>seen.push(x)})).toBeNull();
+ expect(seen).toEqual(["BODY_READ_FAILED"]);expect(reserve).toHaveBeenCalledTimes(1);expect(fetchImpl).toHaveBeenCalledTimes(1);
+});
