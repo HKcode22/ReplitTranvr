@@ -69,6 +69,7 @@ F = failure family or evidenced defect; I = corrective implementation; C = incom
 | F051 | Candidate-only proof actor pin validation gap; staged | Candidate assembler checked the lane public key but only a distinct digest for the proof reviewer; no actual proof key binding at candidate assembly. No production commissioning or recurrence. | I113 |
 | F052 | Actual candidate CI scheduling coverage defect; corrected; exact 65611b8d 24/24 passed | After #979 merge ancestry reconciliation, exact #980 head 0f1cfca4 triggered only 10 of 23 mandatory offline workflows because 13 pull_request path filters did not match the new release helper. No production failure. | I114 |
 | F053 | Candidate-only native readiness parity defect; staged | Candidate assembly accepted missing or invalid native feature review; protected custody checked approved flag alone rather than actual native postcommit rights-bound predicate. No production recurrence. | I115 |
+| F054 | Candidate-only next release freshness defect; staged | #980 final clock/quiet check preceded potentially slow scoped pin reads and draft/merge-method API reads; full 130-minute margin could be consumed before merge. No actual occurrence. | I116 |
 
 ## Implementations
 
@@ -225,6 +226,7 @@ F = failure family or evidenced defect; I = corrective implementation; C = incom
 | I113 | Exact 65611b8d 24/24 passed; production pending | Require canonical actual Ed25519 proof public key bytes matching the existing fingerprint at candidate assembly, same as lane key. No signer generation or install. | F051 |
 | I114 | Exact 65611b8d 24/24 passed; production pending | Add the exact owner successor helper path to the 13 missing pull_request filters, without altering main schedule/dispatch jobs or credentials. Retain all 23 mandatory exact CI paths. | F052 |
 | I115 | Staged; exact CI required | Extract exact existing native feature-review predicate, preserve optional behavior in actual native audit, require valid rights-bound review in candidate assembly and custody readiness. No new rights, policy bytes, or native route changes. | F053 |
+| I116 | Staged; exact CI required | Move scoped pin checks before final DB census; immediately before exact #980 merge recheck all active lanes and require both clocks <=60s old plus full 7800s remaining. No new pause or window modification. | F054 |
 
 ## Completion components (not gates)
 
@@ -238,9 +240,9 @@ F = failure family or evidenced defect; I = corrective implementation; C = incom
 | C006 | Open | Prospective SOURCE effectiveness and status/body custody | F003, F016, F017, F047 | I012, I013, I086, I087, I097, I098, I099, I103, I105, I107 |
 | C007 | Coordinated deployment complete; actual paid capture open | Owner exact pins and budget/STOP audit passed 19:47:58Z, SOURCE switch enabled, first actual stored parent 45886377755 NO_DUE_WORK; POST remains paused. Do not treat routing as paid capture. Owner 23:20Z quiet hold followed by successful exact coordinated retry: target c2bb8e18, relay 2d96b223, retention 45910885837 both jobs success and final pin readback. No paid capture inferred. | F026, F040 | I008, I011, I023, I057, I082, I084, I086, I087, I090, I096 |
 | C008 | Partial; actual owner coverage readback passed | I059/T054 verified 31 days, 512 prepared queries, 92 reservations, 52 timely bindings, 292 elapsed unreserved, 128 future, zero linked PRE; leakage not assessable. I060 explicit empty status staged. Labels, feature completeness, actual split collision evaluation remain open. | F003, F005, F017, F026, F029 | I018, I020, I059, I060, I086, I087, I097, I098, I099, I103, I105 |
-| C009 | Open | Remove redundant runtime dependencies and isolate failures without weakening custody | F007, F021, F023, F024, F037, F040, F041, F042, F043, F044, F045, F046, F047, F052 | I006, I019, I021, I022, I049, I088, I089, I092, I093, I094, I096, I100, I101, I102, I104, I106, I107, I112, I114 |
+| C009 | Open | Remove redundant runtime dependencies and isolate failures without weakening custody | F007, F021, F023, F024, F037, F040, F041, F042, F043, F044, F045, F046, F047, F052, F054 | I006, I019, I021, I022, I049, I088, I089, I092, I093, I094, I096, I100, I101, I102, I104, I106, I107, I112, I114, I116 |
 
-| C010 | Coordinated deployment, rolling and actual primary due sweep verified | Relay #30 merged to 91888916, target f4fe806d; independent primary relay 45816236626 and target retention child 45816293783 passed. New relay rolling wake 45816860550 passed and six target child workflows completed; scientific execution remains separate. 23:19Z retention cleared 6 originals; cron audit 23:20Z detected older preflight defer. New-main 23:28Z and 23:38Z rolling six lanes passed; primary 23:34Z self-admitted and intentionally deferred recent retention, not new deletion. Actual 23:49Z independent retention 45913171519 cleared 6 originals/576 population/582 tombstones, zero hard due, private/P7 zero due. | F007, F034, F035, F036, F037, F041, F046 | I032, I035, I036, I049, I083, I084, I090, I100, I104, I106, I112 |
+| C010 | Coordinated deployment, rolling and actual primary due sweep verified | Relay #30 merged to 91888916, target f4fe806d; independent primary relay 45816236626 and target retention child 45816293783 passed. New relay rolling wake 45816860550 passed and six target child workflows completed; scientific execution remains separate. 23:19Z retention cleared 6 originals; cron audit 23:20Z detected older preflight defer. New-main 23:28Z and 23:38Z rolling six lanes passed; primary 23:34Z self-admitted and intentionally deferred recent retention, not new deletion. Actual 23:49Z independent retention 45913171519 cleared 6 originals/576 population/582 tombstones, zero hard due, private/P7 zero due. | F007, F034, F035, F036, F037, F041, F046, F054 | I032, I035, I036, I049, I083, I084, I090, I100, I104, I106, I112, I116 |
 
 ## Regression tests
 
@@ -392,6 +394,7 @@ T IDs are permanent scenarios, not claims of passing CI. Each references existin
 | T107 | Exact 65611b8d 24/24 passed; production pending | Reject missing, mismatched, malformed or reused proof key; existing Ed25519 lane/proof key pair must match exact fingerprints. | F051 | I113 | C001 | tests/phase5b_conditional_policy_candidate_v39.test.mjs |
 | T108 | Exact 65611b8d 24/24 passed; production pending | Verify each of the 13 formerly missing workflows explicitly includes the successor helper in pull_request paths, not production triggers. | F052 | I114 | C009 | tests/phase5b_cutover_quiet_v39.test.mjs |
 | T109 | Staged; exact CI required | Missing, malformed, wrong-rights, or unapproved native review rejected by candidate even with recomputed digests; custody readiness false; valid review preserved unchanged. | F053 | I115 | C001 | tests/phase5b_conditional_policy_candidate_v39.test.mjs; tests/phase6_nonpaid_source_day_github_runtime_v39.test.mjs |
+| T110 | Staged; exact CI required | Final merge clock guard rejects stale/future task or census timestamps, lost margin, malformed clock and open work; exact check after draft/method reads and quiet scan. | F054 | I116 | C009, C010 | tests/phase5b_cutover_quiet_v39.test.mjs |
 
 ## Scientific and retention authorities
 
@@ -723,3 +726,6 @@ F052 actual 0f1cfca4 candidate returned 10 PR runs rather than required 23 after
 
 
 [Nov27 native feature readiness parity](checkpoints/2026-11-27_PHASE5B_NATIVE_FEATURE_READINESS_PARITY.md): exact 65611b8d 24/24 passed; F052 corrected. Actual protected ordinary preparation 08:19Z confirms Day5 genesis ABSENT draw0, no missed/at-risk, next early draw not due. F053/I115/T109 native feature review predicate parity; no production recurrence or new authority. F53 I115 T109 C10.
+
+
+[Nov27 final merge evidence freshness](checkpoints/2026-11-27_PHASE5B_FINAL_MERGE_EVIDENCE_FRESHNESS.md): F054/I116/T110 stages #980 final merge freshness and full 130m margin after API reads; no actual production incident. F54 I116 T110 C10.

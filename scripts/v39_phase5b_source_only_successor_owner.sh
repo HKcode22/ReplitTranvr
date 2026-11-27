@@ -84,9 +84,17 @@ merge_exact(){
  j="$(pr "$repo" "$num")"
  jq -e '.mergeable=="MERGEABLE" and (.statusCheckRollup|length)>0 and all(.statusCheckRollup[];.status=="COMPLETED" and (.conclusion=="SUCCESS" or .conclusion=="SKIPPED" or .conclusion=="NEUTRAL"))' <<<"$j" >/dev/null || hold CHECK_ROLLUP
  if [[ "$(jq -r .isDraft <<<"$j")" == true ]];then gh pr ready "$num" -R "$repo";fi
- if [[ "$(gh api "repos/$repo" --jq .allow_merge_commit)" == true ]];then gh pr merge "$num" -R "$repo" --merge --match-head-commit "$head"
- elif [[ "$(gh api "repos/$repo" --jq .allow_squash_merge)" == true ]];then gh pr merge "$num" -R "$repo" --squash --match-head-commit "$head"
+ local method
+ if [[ "$(gh api "repos/$repo" --jq .allow_merge_commit)" == true ]];then method=--merge
+ elif [[ "$(gh api "repos/$repo" --jq .allow_squash_merge)" == true ]];then method=--squash
  else hold NO_REVIEWED_MERGE_METHOD;fi
+ # Metadata reads and draft promotion may consume the original time margin.
+ # For #980, recertify quiet and fresh evidence at the final merge boundary.
+ if [[ "$repo" == "$R" && "$num" == 980 ]];then
+  all_main_quiet || hold ACTIVE_NO_CANCEL
+  fresh_980_gap "$(cat "$TMP/census")" "$funnel_observed" || hold FINAL_MERGE_EVIDENCE_STALE_OR_GAP
+ fi
+ gh pr merge "$num" -R "$repo" "$method" --match-head-commit "$head"
  [[ "$(statecheck "$repo" "$num" "$old" "$head")" == MERGED ]] || hold MERGE_NOT_PROVEN
 }
 pin(){
@@ -237,6 +245,20 @@ cutover_pre_tasks_ok(){
      (.state=="MISSED" and .tasks_with_snapshot_ref==0 and .linked_cutoff_safe_verified==0)))
  ' <<<"$j" >/dev/null
 }
+# #980 final local wall clock is only a conservative freshness guard;
+# the prospective schedule and initial gap remain bound to actual DB time.
+fresh_980_gap(){
+ local j="$1" task_at="$2" now observed task next
+ gap_ok "$j" || return 1
+ now="$(date -u +%s)" || return 1
+ observed="$(jq -er '.observedAtUtc' <<<"$j")" || return 1
+ observed="$(date -u -d "$observed" +%s)" || return 1
+ task="$(date -u -d "$task_at" +%s)" || return 1
+ next="$(jq -er '[.cells[]|select(.future_unreserved!=null and .future_unreserved>0)|.next_planned_utc]|min' <<<"$j")" || return 1
+ next="$(date -u -d "$next" +%s)" || return 1
+ [[ "$now" =~ ^[0-9]+$ && "$observed" =~ ^[0-9]+$ && "$task" =~ ^[0-9]+$ && "$next" =~ ^[0-9]+$ ]] || return 1
+ (( now>=observed && now-observed<=60 && now>=task && now-task<=60 && next-now>=7800 ))
+}
 # END SOURCE ONLY TESTED GUARDS
 blob(){ gh api "repos/$R/git/blobs/$1" --jq .content | base64 --decode > "$2"; [[ "$(git hash-object "$2")" == "$1" ]] || hold BLOB_MISMATCH; }
 stage=EXACT_CI
@@ -282,6 +304,8 @@ cutover_pre_tasks_ok "$(cat "$TMP/funnel")" || hold STOP_OR_UNSETTLED_PRE_TASKS
 stage=PREMERGE_RETENTION
 bash "$TMP/retention.sh" ENSURE_EXACT_CURRENT_MAIN_FULL_RETENTION_BASELINE "$OLD"
 stage=QUIET_AND_GAP
+# Do the potentially slow scoped pin enumeration before the final DB census.
+if [[ "$TARGET_PR" == 980 ]];then target_980_pins_ok "$OLD" "$OLD" || hold PIN_SCOPE_DRIFT;fi
 wait_all_quiet
 # Recheck STOP and task state after the retention baseline and wait. A
 # pre-wait census is not evidence that no new task has appeared.
@@ -299,7 +323,6 @@ funnel_epoch="$(date -u -d "$funnel_observed" +%s)" || hold TASK_CENSUS_CLOCK
 all_main_quiet || hold ACTIVE_NO_CANCEL
 stage=TARGET_MERGE
 [[ "$(main "$L")" == "$ROLD" ]] || hold RELAY_BASE_DRIFT
-if [[ "$TARGET_PR" == 980 ]];then target_980_pins_ok "$OLD" "$OLD" || hold PIN_SCOPE_DRIFT;fi
 merge_exact "$R" "$TARGET_PR" "$OLD" "$H"
 NEW="$(main "$R")"
 fi

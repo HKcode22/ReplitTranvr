@@ -181,7 +181,7 @@ test("T106 target980 requires every added exact workflow and checks all pin scop
  assert.notEqual(pinCase("value(){ echo other; }; pin_candidates_ok repo key old new env").status,0);
  assert.notEqual(pinCase("vars(){ return 5; }; pin_candidates_ok repo key old new env").status,0);
  assert.match(sourceCutover,/RECOVER_EXACT_MERGED_SOURCE_ONLY_TARGET_980/);
- assert.match(sourceCutover,/target_980_pins_ok "\$OLD" "\$OLD" \|\| hold PIN_SCOPE_DRIFT;fi\nmerge_exact/);
+ assert.match(sourceCutover,/stage=QUIET_AND_GAP[\s\S]*?target_980_pins_ok "\$OLD" "\$OLD" \|\| hold PIN_SCOPE_DRIFT;fi[\s\S]*?wait_all_quiet[\s\S]*?node "\$TMP\/funnel.cjs"/);
  assert.match(sourceCutover,/RECOVERY_REQUIRES_EXACT_MERGED_TREE/);
 });
 
@@ -193,4 +193,19 @@ test("T108 required target980 offline workflows trigger on the exact owner relea
   assert.ok(pull,"missing pull_request "+path);
   assert.match(pull,/^      - 'scripts\/v39_phase5b_source_only_successor_owner\.sh'$/m,path);
  }
+});
+
+test("T110 final 980 merge retains the full 130-minute margin and fresh database evidence after API reads",()=>{
+ const at="2026-11-27T15:40:00.000Z",sec=Date.parse(at)/1000;
+ const base={status:"SIGNED_CALENDAR_PREPARED_QUERY_AND_SPLIT_COUNTS_READONLY",calendarDays:31,providerCalls:0,databaseWrites:0,observedAtUtc:at,
+  cells:[{status:"PREPARED_DENOMINATOR_OBSERVED",open_unreserved:0,future_unreserved:64,next_planned_utc:"2026-11-27T17:50:30.000Z"}]};
+ const call=(elapsed,task=at,data=base)=>runSourceGuards("date(){ if [[ \"$#\" == 2 ]];then echo "+(sec+elapsed)+";else command date \"$@\";fi; }; fresh_980_gap '"+JSON.stringify(data)+"' '"+task+"' && echo PASS");
+ for(const e of [0,30])assert.equal(call(e).status,0,call(e).stderr);
+ for(const e of [-1,31,61])assert.notEqual(call(e).status,0);
+ assert.notEqual(call(0,"2026-11-27T15:38:59.000Z").status,0);
+ assert.notEqual(call(0,"bad-clock").status,0);
+ assert.notEqual(call(0,at,{...base,cells:[{...base.cells[0],open_unreserved:1}]}).status,0);
+ const merge=sourceCutover.slice(sourceCutover.indexOf("merge_exact(){"),sourceCutover.indexOf("\npin(){"));
+ assert.match(merge,/gh pr ready[\s\S]*?all_main_quiet[\s\S]*?fresh_980_gap[\s\S]*?gh pr merge/);
+ assert.match(merge,/FINAL_MERGE_EVIDENCE_STALE_OR_GAP/);
 });

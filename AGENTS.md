@@ -153,3 +153,6 @@ Read [the permanent seven-priority and seven-requirement F/I/C/T crosswalk](data
 
 
 **Nov27 actual #980 CI and native feature readiness:** 65611b8d exact 24/24 PR runs green, all 23 mandatory paths present; T106/T107/T108 actual focused logs green, T102 PG16 green. Actual 08:19Z ordinary protected Day5 preparation ABSENT draw0, no missed/risk; no actual conditional commissioning. F053/I115/T109 shares existing native rights-bound feature-review predicate among native audit, custody and candidate assembly. Native audit optionality unchanged; candidate must preserve valid review. No rights or signed scope change, no new paid action. [Checkpoint](data-collection/phase6/checkpoints/2026-11-27_PHASE5B_NATIVE_FEATURE_READINESS_PARITY.md).
+
+
+**Nov27 final #980 merge boundary:** F054/I116/T110 moves scoped pin enumeration ahead of final database clock census, and requires fresh DB/task clocks and full 130-minute margin after final GitHub draft/method and quiet scans immediately before exact merge. No pause, cancellation, changed cutoff, or historical owner helper rewrite. Fresh exact CI required. [Checkpoint](data-collection/phase6/checkpoints/2026-11-27_PHASE5B_FINAL_MERGE_EVIDENCE_FRESHNESS.md).
