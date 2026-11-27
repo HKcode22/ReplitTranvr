@@ -1,0 +1,5 @@
+# Nov27 04:50 PST — native shape count-only diagnostic
+
+Current production main 2b9cb404da863aede54d9069e440ff32bcf6d00e; relay 2d96b22345908aa4334335aa899aec71b2fec2cb. #980 exact c4408c621a84a2549355d935cca7333c5527d3c2 remains 26/26 green, open and draft. Current #981 predecessor 5b7e6a035fe5b52cf36f18c32a1bb19970e5825b exact run 45998944621 both jobs successful. Actual live list includes active/queued P5 SOURCE; do not cancel or rerun held owner deployment. No production changes.
+
+F005/I124/T118/C008: extend existing owner inventory with --native-shape-day=N, fixed count-only cells by signed slot and horizon for exact currently live bound originals. Counters overlap; expected vs observed population parity is explicit. No raw values/flight IDs, no historical expired payload access, no independent retained alias, clock/cutoff or actual candidate/commit proof. Synthetic real PG16 test added to existing non-superuser job; exact CI pending. No new F, no closure promotion. Matrix remains 13 closed / 44 not closed. No paid, DB mutation, policy, rights, split or schedule changes.

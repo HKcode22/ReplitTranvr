@@ -73,9 +73,10 @@
         "I015",
         "I016",
         "I034",
-        "I059"
+        "I059",
+        "I124"
       ],
-      "next": "Actual prospective conditional PRE commit; never relabel prior native-only data",
+      "next": "Actual day-scoped native shape census, then prospective conditional PRE commit; never relabel prior native-only data",
       "closureStatus": "NOT_CLOSED",
       "scientificRisk": "P0_SCIENTIFIC",
       "workstream": "preservation_admission"
