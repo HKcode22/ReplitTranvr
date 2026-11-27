@@ -1,3 +1,4 @@
+import {hasP6NativePreFeatureReview} from "../server/lib/disruption/phase6NativePreFeaturePolicy_v39.mjs";
 import {p6ReviewedPolicyMatchesRuntime} from "../server/lib/disruption/phase6ReviewedRuntimeCode_v39.mjs";
 /**
  * STOP-default, one-day protected GitHub SOURCE preparation/publication
@@ -272,7 +273,7 @@ export function projectP6ConditionalPolicyCustody(ctx,plans,calendar,indexRows,o
   const plan=JSON.parse(x.bytes.toString("utf8"));
   for(const row of plan.templates){const end=utc(row.serviceWindowEndUtc);if(end<=utc(row.scheduledRequestUtc))hold("CONDITIONAL_CUSTODY_PLAN_WINDOW");last=Math.max(last,end);}
  }
- const nativePolicyPresent=Boolean(p.nativePreFeatureReview?.approved===true&&v?.approved===true&&v.nativeT24ReviewApproved===true&&
+ const nativePolicyPresent=Boolean(hasP6NativePreFeatureReview(p.nativePreFeatureReview,ctx.trust.rightsSha256)&&v?.approved===true&&v.nativeT24ReviewApproved===true&&
   v.independentT24WitnessProtocolReviewed===true&&v.dayAppendPolicy?.delegatedAutomatedLaterDayAppendApproved===true);
  const timePolicies=[p,q,v,v?.dayAppendPolicy];
  const baseIntervalCoversRemainingStudy=Boolean(nativePolicyPresent&&timePolicies.every(x=>utc(x.validFromUtc)<=utc(day.preparationOpensUtc)&&utc(x.validUntilUtc)>last));

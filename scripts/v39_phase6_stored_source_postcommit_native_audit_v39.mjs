@@ -1,3 +1,4 @@
+import {hasP6NativePreFeatureReview} from "../server/lib/disruption/phase6NativePreFeaturePolicy_v39.mjs";
 import {p6ReviewedPolicyMatchesRuntime} from "../server/lib/disruption/phase6ReviewedRuntimeCode_v39.mjs";
 /** NONPAID follow-on to the same actual stored SOURCE child. The existing
  * transport return is not proof of HTTP or COMMIT. Re-authenticate original
@@ -94,9 +95,7 @@ export function admitP6PostcommitNativeAudit(env,read=readFileSync,mode="committ
     Object.keys(conditionalPreFeatureReview).sort().join(",")!==["approved","externalContentUseReviewSha256","protocolSha256","rightsSha256","schema"].sort().join(",")))
   hold("CONDITIONAL_FEATURE_REVIEW_POLICY_OR_RIGHTS_DRIFT");
  const featureReview=p.nativePreFeatureReview;
- if(featureReview!==undefined&&(!featureReview||featureReview.approved!==true||
-    !SHA.test(featureReview.externalContentUseReviewSha256??"")||
-    featureReview.rightsSha256!==trust.rightsSha256))
+ if(featureReview!==undefined&&!hasP6NativePreFeatureReview(featureReview,trust.rightsSha256))
   hold("FEATURE_REVIEW_POLICY_OR_RIGHTS_DRIFT");
  return {trust,readerUrl:env.P6_PRIVATE_READER_DATABASE_URL,sourceUrl:env.V39_P5_SOURCE_DATABASE_URL,
   nativePreFeatureReview:featureReview===undefined?null:Object.freeze({...featureReview}),

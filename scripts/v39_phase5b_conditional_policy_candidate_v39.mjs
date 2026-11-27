@@ -1,3 +1,4 @@
+import {hasP6NativePreFeatureReview} from "../server/lib/disruption/phase6NativePreFeaturePolicy_v39.mjs";
 /** Private candidate assembly only. No signing, provider, DB, GitHub
  * mutation or implicit scientific approval. Existing exact daily/signing/
  * transport bytes are the base, not reconstructed placeholder policies.
@@ -79,6 +80,7 @@ export function prepareP6ConditionalPolicyCandidate({dailyBytes,signingBytes,tra
     !sameP5TypedSourceBudgetBinding(p,q)||p.expectedPrepareRole!==q.expectedPrepareRole||
     q.queryReviewerFingerprintSha256!==trust.queryReviewerFingerprintSha256||q.registryReviewerFingerprintSha256!==trust.dayReviewerFingerprintSha256||
     r.expectedReaderSessionLogin!==trust.expectedReaderSessionLogin||
+    !hasP6NativePreFeatureReview(p.nativePreFeatureReview,trust.rightsSha256)||
     v?.approved!==true||v.nativeT24ReviewApproved!==true||v.independentT24WitnessProtocolReviewed!==true||
     !day||day.delegatedAutomatedLaterDayAppendApproved!==true||
     ![p.validFromUtc,p.validUntilUtc,q.validFromUtc,q.validUntilUtc,v.validFromUtc,v.validUntilUtc,day.validFromUtc,day.validUntilUtc].every(iso)||

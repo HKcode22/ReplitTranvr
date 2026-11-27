@@ -270,3 +270,21 @@ test("T105 custody accounts for the nested day-append conditional scope",()=>{
  p.nativeLaterReview.dayAppendPolicy.conditionalLaterPreScope=marker;
  assert.equal(run().conditionalPolicyFieldState,"PARTIAL_HOLD");
 });
+
+test("T109 custody native readiness requires rights-bound actual feature review, not approved flag alone",()=>{
+ const f=fixture(),e={...f.env,GITHUB_EVENT_NAME:"workflow_dispatch",GITHUB_ACTOR:"HKcode22",
+  P6_NONPAID_SOURCE_CONFIRM:"VERIFY_FUTURE_CONDITIONAL_POLICY_CUSTODY_NO_PROVIDER",P6_NONPAID_SOURCE_REQUESTED_DAY:"5"};
+ const ctx=admitP6NonpaidSourceDayGithub(e),plans=loadP6ReviewedDayPlans(ctx,f.read);
+ const v={approved:true,nativeT24ReviewApproved:true,independentT24WitnessProtocolReviewed:true,
+  validFromUtc:ctx.p.validFromUtc,validUntilUtc:ctx.p.validUntilUtc,
+  dayAppendPolicy:{delegatedAutomatedLaterDayAppendApproved:true,validFromUtc:ctx.p.validFromUtc,validUntilUtc:ctx.p.validUntilUtc}};
+ const run=feature=>projectP6ConditionalPolicyCustody({mode:ctx.mode,requestedDay:5,p:{...ctx.p,nativeLaterReview:v,nativePreFeatureReview:feature},
+  q:ctx.q,reviewed:ctx.reviewed,trust:ctx.trust,policyBytes:ctx.policyBytes},plans,f.calendar,f.indexes,iso(now),0,e);
+ for(const feature of [undefined,{approved:true},{approved:true,rightsSha256:sha("0"),externalContentUseReviewSha256:sha("e")},
+  {approved:true,rightsSha256:ctx.trust.rightsSha256,externalContentUseReviewSha256:"bad"}]){
+  assert.equal(run(feature).nativePolicyPresent,false);assert.equal(run(feature).baseIntervalCoversRemainingStudy,false);
+ }
+ const good=run({approved:true,rightsSha256:ctx.trust.rightsSha256,externalContentUseReviewSha256:sha("e")});
+ assert.equal(good.nativePolicyPresent,true);
+ assert.equal(good.actualConditionalPolicyInstalledVerified,false);
+});

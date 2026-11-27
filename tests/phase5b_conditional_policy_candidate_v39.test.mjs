@@ -14,7 +14,7 @@ const shared={approvedCodeSha:trust.reviewedCodeSha,manifestSha256:trust.manifes
 const day={schema:"v39.phase6.delegated-later-day-append-review-policy.v1",delegatedAutomatedLaterDayAppendApproved:true,approvedCodeSha:trust.reviewedCodeSha,manifestSha256:trust.manifestSha256,calendarSha256:trust.calendarSha256,rightsSha256:trust.rightsSha256,releaseSha256:trust.releaseSha256,laterReviewerFingerprintSha256:laterFingerprint,dayReviewerFingerprintSha256:trust.dayReviewerFingerprintSha256,queryReviewerFingerprintSha256:trust.queryReviewerFingerprintSha256,maximumIndexRevision:64,validFromUtc:start,validUntilUtc:end};
 const reviewedPlanBytes=Array.from({length:31},(_,i)=>readFileSync(new URL("../data-collection/phase5/planning/phase6-source-day-"+String(i+1).padStart(2,"0")+".json",import.meta.url)));
 const dayPlanSha256s=reviewedPlanBytes.map((bytes,i)=>({runDayIndex:i+1,sha256:sha(bytes)}));
-const p={...shared,dayPlanSha256s,schema:"v39.phase6.delegated-daily-source-review-policy.v1",delegatedDailyPacketProductionApproved:true,nativeLaterReview:{approved:true,nativeT24ReviewApproved:true,independentT24WitnessProtocolReviewed:true,reviewedWitnessOnlyRole:"phase5_fids_t24_witness_prod_20261107",laterReviewerFingerprintSha256:laterFingerprint,validFromUtc:start,validUntilUtc:end,frameSha256:shared.frameSha256,configSha256:shared.configSha256,maximumPrivateRetentionHours:24,selectedTConfig:{semanticsEvidenceSha256:h("semantics"),verifiedProviderNativeSchedule:true,milestone:"departure.scheduledTime.utc",version:"v1",artifactHash:h("artifact")},dayAppendPolicy:day}};
+const p={...shared,dayPlanSha256s,schema:"v39.phase6.delegated-daily-source-review-policy.v1",delegatedDailyPacketProductionApproved:true,nativePreFeatureReview:{approved:true,rightsSha256:trust.rightsSha256,externalContentUseReviewSha256:h("native-external")},nativeLaterReview:{approved:true,nativeT24ReviewApproved:true,independentT24WitnessProtocolReviewed:true,reviewedWitnessOnlyRole:"phase5_fids_t24_witness_prod_20261107",laterReviewerFingerprintSha256:laterFingerprint,validFromUtc:start,validUntilUtc:end,frameSha256:shared.frameSha256,configSha256:shared.configSha256,maximumPrivateRetentionHours:24,selectedTConfig:{semanticsEvidenceSha256:h("semantics"),verifiedProviderNativeSchedule:true,milestone:"departure.scheduledTime.utc",version:"v1",artifactHash:h("artifact")},dayAppendPolicy:day}};
 const q={...shared,schema:"v39.phase6.delegated-source-review-policy.v1",delegatedAutomatedSourceSigningApproved:true,queryReviewerFingerprintSha256:trust.queryReviewerFingerprintSha256,registryReviewerFingerprintSha256:trust.dayReviewerFingerprintSha256};
 const dailyBytes=buf(p),signingBytes=buf(q),transportBytes=buf({schema:"v39.phase6.approved-nonpaid-source-transport-trust.v1",independentTransportAndSigningScopeApproved:true,reviewedMainSha:trust.reviewedCodeSha,dailyPolicySha256:sha(dailyBytes),signingPolicySha256:sha(signingBytes),expectedReaderSessionLogin:trust.expectedReaderSessionLogin,minimumPreparationLeadMinutes:20,maximumPreparationLookaheadMinutes:720});
 const baseDigests={daily:sha(dailyBytes),signing:sha(signingBytes),transport:sha(transportBytes)};
@@ -108,4 +108,18 @@ test("T107 candidate validates actual proof public key, not an arbitrary distinc
   {proofPublicKeyBase64:Buffer.from(wrong.export({type:"spki",format:"pem"})).toString("base64")},
   {proofPublicKeyBase64:publicPins.lanePublicKeyBase64}])
   assert.throws(()=>prepare({...inputs,publicPins:{...publicPins,...delta}}),/EXISTING_PUBLIC_ACTOR_PINS/);
+});
+
+test("T109 candidate must preserve an actually valid native feature review",()=>{
+ for(const feature of [undefined,null,{approved:true,rightsSha256:h("wrong"),externalContentUseReviewSha256:h("native-external")},
+  {approved:true,rightsSha256:trust.rightsSha256,externalContentUseReviewSha256:"invalid"},
+  {...p.nativePreFeatureReview,approved:false}]){
+  const changed={...p,nativePreFeatureReview:feature},daily=buf(changed),dailySha=sha(daily);
+  const transport=buf({...JSON.parse(transportBytes),dailyPolicySha256:dailySha});
+  const digests={...baseDigests,daily:dailySha,transport:sha(transport)};
+  const wire=buf({...review,baseDigests:digests});
+  assert.throws(()=>prepare({...inputs,dailyBytes:daily,transportBytes:transport,baseDigests:digests,reviewBytes:wire,reviewSha256:sha(wire)}),/EXACT_BASE_POLICY/);
+ }
+ const result=prepare(inputs);
+ assert.deepEqual(JSON.parse(result.privatePolicyBytes.daily).nativePreFeatureReview,p.nativePreFeatureReview);
 });
