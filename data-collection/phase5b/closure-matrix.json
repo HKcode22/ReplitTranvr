@@ -1,11 +1,11 @@
 {
-  "asOfUtc": "2026-11-27T11:05:28Z",
+  "asOfUtc": "2026-11-27T12:04:56Z",
   "exactCandidate": "c4408c621a84a2549355d935cca7333c5527d3c2",
   "canonicalRegister": "../phase6/RECOVERY_REGISTER.md",
   "counts": {
-    "narrowCorrected": 12,
+    "narrowCorrected": 13,
     "exactCiGreenPendingDeployment": 10,
-    "partialOrOpen": 33,
+    "partialOrOpen": 32,
     "historicalLoss": 2
   },
   "failures": [
@@ -459,17 +459,18 @@
     },
     {
       "id": "F032",
-      "classification": "PARTIAL_OR_OPEN",
+      "classification": "NARROW_CORRECTION_RECORDED",
       "implementations": [
         "I027",
         "I063",
         "I065",
         "I122"
       ],
-      "next": "Binary closure and scientific severity projection must reconcile against immutable canonical IDs and exact regression; prior repair remains recorded, no new closure before CI.",
-      "closureStatus": "NOT_CLOSED",
+      "next": "Preserve narrow correction; reopen only on material new evidence",
+      "closureStatus": "CLOSED",
       "scientificRisk": "OPERATIONAL",
-      "workstream": "evidence_integrity"
+      "workstream": "evidence_integrity",
+      "closureEvidence": "Register crosswalk parser failure 45800099500 and T038 invalid test-path metadata 45810213223 corrected; exact 454349c9 46/46. Recurrence 45880797152 (missing reciprocal F026/I057 link) repaired in d39097d2; focused 45880957835 and full exact 20/20 passed. On Nov27, T116 caught a separate F009 register/matrix evidence drift in run 45988378322; the canonical F009 row was synchronized without changing its closure label. Exact #981 runs 45989825020 (head 51267a1b16d5cf76f04c5f65a8fa940a2772aa6d) and 45993869374 (head 94aa1f6c1c1d7e078cc7ac1d1e8148cca903e366) passed T116 and both workflow jobs, including disposable PostgreSQL 16. This closes only register/closure-matrix integrity; it is not production SOURCE, retention, or scientific-data closure."
     },
     {
       "id": "F033",
@@ -765,8 +766,8 @@
     }
   ],
   "binaryClosure": {
-    "closed": 12,
-    "notClosed": 45,
+    "closed": 13,
+    "notClosed": 44,
     "definition": "CLOSED only for an explicitly evidenced, narrowly defined correction already recorded; no broader component or future recurrence guarantee. Partial, candidate-only, historical loss with unverified recurrence prevention, and missing positive production proof are NOT_CLOSED. No previously closed ID reopened."
   },
   "riskDefinition": {

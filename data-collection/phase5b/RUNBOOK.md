@@ -49,3 +49,12 @@ Latest scheduled checks on main:
 No positive PRE, durable Packet B, positive POST, or independent same-leg physical label is evidenced. The owner inventory remains 100 timely bindings, 52 expired Day2 originals/4,902 historical observations, 48 live Day3 originals/2,000 observations, zero cutoff-safe or linked PRE rows, and zero global Phase7 fragments/bundles/links at its 09:07Z readback. The global 64-original retention count is a newer operational count, not a study-attributed inventory.
 
 Day4 T24 is scheduled to begin at 11:45Z and run through 15:30Z. After its natural drain, use only the existing helper with its fresh STOP, task, quiet and full 130-minute guard. Do not bypass it, merge #980 early, or change signed scope.
+
+
+## Live readback — Nov27 12:04Z
+
+Exact #981 run `45993869374` passed both fixed-metadata and disposable PostgreSQL 16 jobs on head `94aa1f6c1c1d7e078cc7ac1d1e8148cca903e366`; T116 passed after it caught and verified the correction of F009 evidence drift. F032 is closed narrowly for register/matrix integrity. Matrix counts are 13 closed, 10 candidate fixes pending production, 32 partial/open, and 2 historical losses; all P0 scientific families remain open.
+
+Production main `2b9cb404da863aede54d9069e440ff32bcf6d00e` remains unchanged. At 12:04:56Z, 20 P5 SOURCE children were active. The latest 11:47Z nonpaid checks returned no due later PRE, T24, enrollment, or native POST work. Day5 draw count remains zero and genesis absent; prospective preparation opens Nov28 19:45 PST. The 11:47Z source parent acknowledged eight child run IDs but certified zero paid GET receipts. No positive PRE or Packet B is established.
+
+Keep admitted work running and preserve the existing helper guard. No helper rerun, cancel, merge, deployment, policy installation, provider action, production database write, or retention change is indicated while the current SOURCE runs are active.
