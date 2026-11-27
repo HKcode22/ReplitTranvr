@@ -104,3 +104,6 @@ Read [the permanent seven-priority and seven-requirement F/I/C/T crosswalk](data
 
 
 **Nov26 16:12 PST F043:** owner I091 audit failed twice with SQLSTATE 42601; green mock tests were insufficient. I092/T086 actual same owner SQL on disposable PostgreSQL16 with non-superuser role plus safe error stage/position. Never claim a SQL path is verified from mocked query responses alone; real SQL regression and then actual owner readback required. No production route changes. Read [checkpoint](data-collection/phase6/checkpoints/2026-11-26_1612_PST_OWNER_SQL_PARITY_REPAIR.md).
+
+
+**Nov26 16:19 PST operational isolation:** T086 exact bd6315a6 real PG16 job140235264481 passed, owner retry corrected 30fadfbd608860a059bcc09a17cfd904a0f025de pending. Day3 actual 00:18Z wake and four 00:19Z SOURCE children ACKed, no missed/deferred; do not interrupt during prearm. I093/T087 isolated POST nonpaid actor local process 0 matches existing successful PRE preflight, no global arm/owner or paid job mutation. F042 exact original predicate unknown; don't claim this is proven cause. Keep existing disabled POST parent, exact review/runtime and no-provider boundary.

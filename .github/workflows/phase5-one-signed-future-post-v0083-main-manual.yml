@@ -128,7 +128,10 @@ jobs:
       V39_P5_MANIFEST_SHA256: ${{ secrets.V39_P5_MANIFEST_SHA256 }}
       V39_P5_RIGHTS_SHA256: ${{ secrets.V39_P5_RIGHTS_SHA256 }}
       V39_P5_RELEASE_SHA256: ${{ secrets.V39_P5_RELEASE_SHA256 }}
-      V39_PHASE6_PROCESS_ARMED: ${{ secrets.V39_PHASE6_PROCESS_ARMED }}
+      # This exact actor-only job has no provider/reservation capability.
+      # Match the already-deployed PRE actor-only local disarm; do not read
+      # or mutate the global paid SOURCE process arm for this nonpaid check.
+      V39_PHASE6_PROCESS_ARMED: '0'
       V39_PHASE6_OWNER_APPROVED: ${{ secrets.V39_PHASE6_OWNER_APPROVED }}
       P6_PHASE7_POST_RECOVERY_APPROVED: ${{ secrets.P6_PHASE7_POST_RECOVERY_APPROVED }}
       P6_PHASE7_POST_RECOVERY_REVIEWER_APPROVED: ${{ secrets.P6_PHASE7_POST_RECOVERY_REVIEWER_APPROVED }}

@@ -55,3 +55,19 @@ it("T082 cleanup is safe on absent/empty scratch after partial startup and refus
   expect(()=>cleanupP7PostActorScratch(dir)).toThrow();expect(existsSync(join(dir,"unrelated"))).toBe(true);
  }finally{rmSync(root,{recursive:true,force:true})}
 });
+
+it("T087 isolated POST actor workflow uses local disarm while existing paid POST keeps global arm",()=>{
+ const y=readFileSync(".github/workflows/phase5-one-signed-future-post-v0083-main-manual.yml","utf8");
+ const i=y.indexOf("  exact-main-post-actors-only:"),j=y.indexOf("  exact-signed-one-v0083-future-post:");
+ expect(i).toBeGreaterThan(0);expect(j).toBeGreaterThan(i);
+ const actor=y.slice(i,j),paid=y.slice(j);
+ expect(actor).toMatch(/^      V39_PHASE6_PROCESS_ARMED: '0'$/m);
+ expect(actor).not.toMatch(/secrets\.V39_PHASE6_PROCESS_ARMED/);
+ expect(actor).toContain("P6_POST_ACTOR_PARENT_ROUTE");
+ expect(actor).toContain("test \"$P6_POST_ACTOR_PARENT_ROUTE\" = false");
+ expect(actor).toContain("inputs.confirm == 'ONLY_POST_INDEPENDENT_ACTOR_PREFLIGHT_NO_PROVIDER'");
+ expect(actor).not.toMatch(/secrets\.(AERODATABOX_API_KEY|RAPIDAPI_KEY|P5_V39_OTHER_REST_RESERVE_DATABASE_URL)/);
+ expect(paid).toMatch(/V39_PHASE6_PROCESS_ARMED: \$\{\{ secrets\.V39_PHASE6_PROCESS_ARMED \}\}/);
+ expect(paid).toContain("inputs.confirm == 'ONE_SIGNED_FUTURE_POST_V0083_MAX_2_UNITS_NO_RETRY'");
+ expect(()=>admitP7ActorOnlyPost({...reviewer,V39_PHASE6_PROCESS_ARMED:"1"},"reviewer")).toThrow("SCOPE");
+});
