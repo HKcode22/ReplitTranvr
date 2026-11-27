@@ -1,0 +1,3 @@
+# T100 shell mock CI correction
+
+Exact PR #980 head d68f858ef39ffff7019c7b1e6705fdff7ee1a0fc; run 45957311340 job 140366658743 failed at T098/T099/T100 archive suite, jq parse error Invalid numeric literal, status 3. Root cause: I106 shell printf strings had doubly escaped newline, affecting four mock JSON responses and progress output. Original owner I104 execution is unaffected. Preserve original archived blob bd4a11ee7d95753ba3b293dd592b8a7882fa630f for provenance; corrected successor e0415a53d5aa2fd2636d2df8609216834fa582d6. Exact archive hashes and corrected self-test remain in CI. No production route, migration, provider request or policy change. Follow-on exact CI required. #979 untouched.

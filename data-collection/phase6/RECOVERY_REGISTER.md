@@ -676,3 +676,8 @@ Exact 28e86964 all 12 PR workflows successful. Latest failed workflow census sin
 ## Nov26 23:04 PST — active maintenance and detached follow-on
 
 [Checkpoint](checkpoints/2026-11-26_2304_PST_PHASE5B_ACTIVE_MAINTENANCE_AND_NEXT_PERMANENT_REPAIRS.md). #979 bce39a3d all 21 green; actual owner maintenance started, new admissions paused and existing SOURCE drain 23→20→16, no post-pause SOURCE creations observed. Do not move current head, start concurrent owner process or cancel children. F017 40 actual no-content logs, actual I105 comparison no geometry drift. F047/I107/T101 redirect prevention and F027/I108/T102 protected future custody read-only staged in detached successor; no new gate, no production mutation or provider calls. Archive I104/I105/I106 and tests in this successor only. F47 I108 T102 C10.
+
+
+## Nov26 continuation — T100 actual CI correction
+
+[Checkpoint](checkpoints/2026-11-26_PHASE5B_T100_SHELL_MOCK_CI_CORRECTION.md). Actual #980 focused red run 45957311340, job 140366658743: escaped newline in I106 mock produced invalid JSON. Preserve original archival blob; correct successor printf and test exact hash. Existing F046/I106/T100, no new family. Exact successor CI required, #979 unaffected.
