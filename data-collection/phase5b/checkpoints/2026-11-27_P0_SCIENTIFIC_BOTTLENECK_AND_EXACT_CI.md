@@ -29,3 +29,11 @@ A fresh Replit read-only inventory can update counts. It cannot commission condi
 ## Rule cross-check
 
 This action follows Packet A custody/expiry and approved Packet B distinction; the original16 feature dispositions and purpose-bound reference lane; f.8, signed calendar, draw, cutoff, rights, budget/STOP and20/5/6 split; canonical Amendment E actual physical gate-out; and C+D V0087 durable lease rules. Evidence does not justify changing those scientific requirements as optional. The source-build pin is a valid release guard; any later presentation change must preserve its hard production stop and never imply a verified/published build.
+
+## CI simplification repair (Nov27)
+
+Inspection of `.github/workflows/v39-phase0-offline.yml` found that one job invoked TypeScript, offline tests, the full suite, lint, registry, traceability, scanner, and production build individually, then invoked `npm run v39:preflight`, which reran those same checks (plus repo intake and migration checks). This was unnecessary duplicate orchestration, extended a single CI job, and hid useful diagnostic output because the aggregate runner redirected child output.
+
+The recovery branch removes those duplicate workflow steps and keeps `npm run v39:preflight` as the single runner for that exact check set. It also changes the aggregate's child process output to inherit the Actions log, so a failed prerequisite includes its diagnostics. Fresh B0062 boot/restart/reconciliation checks, staged V0065 application only to disposable PG16, and the separate disposable-PG16 Gate3 behavior check remain intact. No check category or scientific gate is removed, and no production or provider credentials are introduced. Exact-head CI on the resulting commit is required before calling this workflow repair verified.
+
+Local verification on the resulting source tree passed the two workflow/Phase0 regression files (24/24) and `npm run v39:typecheck`; `git diff --check` passed. The preceding documentation-only head34 run `46068955639` completed successfully in8m44s while still using the duplicate workflow, confirming the old path was green but slow. The post-simplification exact-head workflow has not run yet; it is the required evidence for this change.
