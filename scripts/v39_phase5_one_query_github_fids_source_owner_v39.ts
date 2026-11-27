@@ -4,6 +4,7 @@
  * Does NOT create Flight Alerts, PRE, POST, original rights, or Phase6 GO.
  */
 import {readFileSync,statSync} from "node:fs";
+import {requireP5ExactSourceLocalGeometry} from "../server/lib/disruption/phase5V0079DailyPreparedQueryProposals_v39";
 import {Pool} from "pg";
 import {makeP5Stage28DedicatedRolePool,P5_STAGE28_GROUPS}
  from "../server/lib/disruption/phase5Stage28DedicatedRolePool_v39";
@@ -48,6 +49,7 @@ async function main():Promise<void>{
   ...input.plan,
   day:{...input.plan.day,scheduledStartUtc:new Date(raw)},
  };
+ requireP5ExactSourceLocalGeometry(plan);
  // Actual source worker must be its own dedicated NOINHERIT login,
  // with SET-only membership in the previously reviewed NOLOGIN SOURCE group.
  // Raw PG pools are not admissible for paid V0079 custodial writes.

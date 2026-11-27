@@ -47,6 +47,19 @@ function local(utc:string,zone:string):string{
    part("hour")+":"+part("minute");
 }
 
+/** Paid owner reuses the exact Stage8 conversion before durable prearm.
+ * Never purchase or rewrite an internally inconsistent signed local frame. */
+export function requireP5ExactSourceLocalGeometry(p:{
+ localFrom:string;localTo:string;ianaTimezone:string;
+ acquisition:{serviceWindowStartUtc:string;serviceWindowEndUtc:string};
+}):void{
+ const a=p.acquisition;
+ if(stamp(a.serviceWindowStartUtc)>=stamp(a.serviceWindowEndUtc)||
+    p.localFrom!==local(a.serviceWindowStartUtc,p.ianaTimezone)||
+    p.localTo!==local(a.serviceWindowEndUtc,p.ianaTimezone))
+  refuse("SIGNED_SOURCE_LOCAL_GEOMETRY_DRIFT");
+}
+
 export interface Stage8UtcChargeBudget {
  chargeDayUtc:string;
  dailyApiCeiling:number;
