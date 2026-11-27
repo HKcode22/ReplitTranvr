@@ -10,7 +10,7 @@ test("only fixed complete diagnostic lines are returned, never arbitrary capture
  assert.deepEqual(readSafeSourceDiagnosticLines(null,{}),[]);
 });
 test("HTTP diagnostic labels distinguish auth, rate, client, server, OK and other without body or URL",()=>{
- for(const [code,ok,label] of [[200,true,"HTTP_OK"],[204,true,"HTTP_NO_CONTENT"],[205,true,"HTTP_RESET_CONTENT"],[401,false,"HTTP_AUTH_REJECTED"],[403,false,"HTTP_AUTH_REJECTED"],[429,false,"HTTP_RATE_LIMIT"],[404,false,"HTTP_OTHER_CLIENT_ERROR"],[503,false,"HTTP_SERVER_ERROR"],[302,false,"HTTP_OTHER_STATUS"]])
+ for(const [code,ok,label] of [[200,true,"HTTP_OK"],[204,true,"HTTP_NO_CONTENT"],[205,true,"HTTP_RESET_CONTENT"],[401,false,"HTTP_AUTH_REJECTED"],[403,false,"HTTP_AUTH_REJECTED"],[429,false,"HTTP_RATE_LIMIT"],[404,false,"HTTP_OTHER_CLIENT_ERROR"],[503,false,"HTTP_SERVER_ERROR"],[301,false,"HTTP_REDIRECT_BLOCKED"],[302,false,"HTTP_REDIRECT_BLOCKED"],[303,false,"HTTP_REDIRECT_BLOCKED"],[307,false,"HTTP_REDIRECT_BLOCKED"],[308,false,"HTTP_REDIRECT_BLOCKED"],[304,false,"HTTP_OTHER_STATUS"]])
   assert.equal(sourceHttpDiagnosticLabel(code,ok),label);
 });
 
@@ -78,6 +78,7 @@ test("T080 paid child evidence requires exact job/step and complete actual diagn
  assert.equal(result.status,"TIMELY_ORIGINAL_REPORTED_BY_CHILD");assert.equal(result.providerBillingVerified,false);assert.equal(result.actualPreCommitVerified,false);
  assert.equal(classifyP6PaidChildReceipt(run,[job],log("PREARM_COMMITTED","RESERVATION_CONFIRMED","HTTP_OK","OUTCOME_UNOBSERVED")).status,"HTTP_OK_NO_ORIGINAL_PROOF");
  assert.equal(classifyP6PaidChildReceipt(run,[job],log("PREARM_COMMITTED","RESERVATION_CONFIRMED","HTTP_RATE_LIMIT","OUTCOME_UNOBSERVED")).status,"RATE_LIMIT_NO_ORIGINAL_PROOF");
+ assert.equal(classifyP6PaidChildReceipt(run,[job],log("PREARM_COMMITTED","RESERVATION_CONFIRMED","HTTP_REDIRECT_BLOCKED","OUTCOME_UNOBSERVED")).status,"HTTP_REDIRECT_BLOCKED_NO_ORIGINAL_PROOF");
  assert.equal(classifyP6PaidChildReceipt(run,[job],complete+"\n"+log("OUTCOME_LATE")).status,"CONTRADICTORY_DIAGNOSTICS_REVIEW");
  assert.equal(classifyP6PaidChildReceipt(run,[job],complete.replace("OUTCOME_TIMELY","OUTCOME_LATE")).status,"LATE_ORIGINAL_REPORTED_BY_CHILD");
  assert.equal(classifyP6PaidChildReceipt(run,[job],null).status,"PAID_STEP_LOG_UNAVAILABLE_OR_NO_DIAGNOSTIC");
