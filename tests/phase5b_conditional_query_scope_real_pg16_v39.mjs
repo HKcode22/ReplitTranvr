@@ -4,10 +4,11 @@ import assert from "node:assert/strict";
 import {createHash} from "node:crypto";
 import pg from "pg";
 import {readP6ConditionalQueryScope} from "../scripts/v39_phase5b_conditional_query_scope_owner.mjs";
+import {readP6SourceSlotRows} from "../scripts/v39_phase5b_signed_calendar_coverage_owner.mjs";
 const adminUrl="postgresql://postgres:postgres@127.0.0.1:5432/neondb?sslmode=disable";
 const ownerUrl="postgresql://neondb_owner:ci-only-scope@127.0.0.1:5432/neondb?sslmode=disable";
 const digest=x=>createHash("sha256").update(x).digest("hex");
-test("T086 real PostgreSQL 16 parses and executes the actual owner query with production-shaped columns",async()=>{
+test("T086 real PostgreSQL 16 parses and executes the actual owner query with production-shaped columns",async t=>{
  assert.equal(process.env.P6_SCOPE_DISPOSABLE_PG16,"1");
  assert.equal(process.env.DATABASE_URL,adminUrl);
  assert.equal(process.env.ADB_AUTO_COLLECT,"0");
@@ -54,5 +55,17 @@ test("T086 real PostgreSQL 16 parses and executes the actual owner query with pr
   assert.deepEqual(counts,{q:9,p:8});
   const who=(await c.query("SELECT current_user=session_user AS same, NOT rolsuper AS non_super FROM pg_roles WHERE rolname=current_user")).rows[0];
   assert.deepEqual(who,{same:true,non_super:true});
+  await t.test("T092 execute actual slot aggregate with real PG16, bound and missing reservations separated",async()=>{
+   await c.query("ALTER TABLE clean.phase5_fids_allowed_query_v39 ADD COLUMN slot_id text NOT NULL DEFAULT 'HUB', ADD COLUMN airport_icao text NOT NULL DEFAULT 'WSSS', ADD COLUMN state text NOT NULL DEFAULT 'PREPARED', ADD COLUMN hard_latest_dispatch_utc timestamptz, ADD COLUMN prediction_cutoff_utc timestamptz");
+   await c.query("UPDATE clean.phase5_fids_allowed_query_v39 SET hard_latest_dispatch_utc=$1,prediction_cutoff_utc=$2",[stamp(4),stamp(5)]);
+   await c.query("CREATE TABLE clean.phase5_fids_physical_attempt_v39(manifest_sha256 text,query_digest text, reservation_sha256 text,charged_reserved_units int); CREATE TABLE clean.phase5_fids_original_binding_v39(manifest_sha256 text,query_digest text,reservation_sha256 text,population_query_id uuid,bound_at_utc timestamptz,normalized_members_count int)");
+   await c.query("INSERT INTO clean.phase5_fids_physical_attempt_v39 VALUES($1,$2,$3,2),($1,$4,$5,2)",[m,digest("valid"),digest("r1"),digest("native"),digest("r2")]);
+   await c.query("INSERT INTO clean.phase5_fids_original_binding_v39 VALUES($1,$2,$3,'00000000-0000-0000-0000-000000000001',$4,12)",[m,digest("valid"),digest("r1"),stamp(2)]);
+   await c.query("BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY");
+   try{
+    const rows=await readP6SourceSlotRows(c,m);
+    assert.deepEqual(rows,[{run_day_index:4,horizon:"T-24h",slot_id:"HUB",airport_icao:"WSSS",prepared:9,reservations:2,bindings:1,timely_bindings:1,stopped_unreserved:0,elapsed_unreserved:0,open_unreserved:0,future_unreserved:7,reserved_units:4,normalized_member_observations:12}]);
+   }finally{await c.query("ROLLBACK");}
+  });
  }finally{await c.end().catch(()=>{});await a.end().catch(()=>{});}
 });

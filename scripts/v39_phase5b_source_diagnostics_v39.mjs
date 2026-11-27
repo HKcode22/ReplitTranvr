@@ -42,6 +42,8 @@ export function postDiagnostic(stage,error){
 export function sourceDbDiagnosticLabel(error){
  const m=String(error?.message??"");
  const known={
+ HOLD_P6_REAL_PRIVATE_SOURCE_CHILD_ORIGINAL_HTTP_NO_CONTENT_UNOBSERVED_NO_REPLAY:"SOURCE_HTTP_NO_CONTENT_UNOBSERVED",
+ HOLD_P6_REAL_PRIVATE_SOURCE_CHILD_ORIGINAL_HTTP_RESET_CONTENT_UNOBSERVED_NO_REPLAY:"SOURCE_HTTP_RESET_CONTENT_UNOBSERVED",
  REFUSED_PHASE5_V0079_SCOPED_DB_SOURCE_PERSISTENCE_PRIVILEGES_NOT_READY_NO_RESERVATION:"SOURCE_PERSISTENCE_NOT_READY",
  REFUSED_PHASE5_V0079_SCOPED_DB_PHYSICAL_POSTCOMMIT_READBACK_FAILED_NO_DISPATCH:"SOURCE_RESERVATION_READBACK_FAILED",
  REFUSED_PHASE5_V0079_SCOPED_DB_POSTCOMMIT_SOURCE_BINDING_UNAVAILABLE:"SOURCE_ORIGINAL_BINDING_READBACK_FAILED",
@@ -98,6 +100,42 @@ function paidStepDiagnostics(log,step){
 }
 const JOB_NAME="exact-private-source-existing-one-get-child";
 const HTTP_LABELS=new Set([...LABELS].filter(x=>x.startsWith("HTTP_")&&x!=="HTTP_STARTED"));
+
+// The provider returned a no-body status, not an empty observed flight
+// population. Preserve the original failure/no-replay boundary.
+function noContentOutcome(labels){
+ const d=new Set(labels),http=[...d].filter(x=>HTTP_LABELS.has(x));
+ const body=[...d].filter(x=>x.startsWith("FIDS_BODY_")||x==="FIDS_DEPARTURES_MISSING"||x==="FIDS_ARRIVALS_MISSING");
+ if(http.length!==1||body.length!==1||body[0]!=="FIDS_BODY_UNAVAILABLE"||
+    !["HTTP_NO_CONTENT","HTTP_RESET_CONTENT"].includes(http[0])||
+    !["RESERVATION_CONFIRMED","HTTP_STARTED","OUTCOME_UNOBSERVED"].every(x=>d.has(x))||
+    ["OUTCOME_TIMELY","OUTCOME_LATE","ORIGINAL_PERSIST_STARTED","ORIGINAL_PERSIST_CONFIRMED"].some(x=>d.has(x)))return null;
+ return http[0]==="HTTP_NO_CONTENT"?"NO_CONTENT":"RESET_CONTENT";
+}
+export function sourceOriginalChildFailureCode(child){
+ if(child?.error||child?.signal||!Number.isSafeInteger(child?.status)||child.status<=0)return "ORIGINAL_ONE_GET_CHILD_FAILED_AMBIGUOUS_NO_REPLAY";
+ const outcome=noContentOutcome(readSafeSourceDiagnosticLines(child.stdout,child.stderr).map(x=>x.slice(PREFIX.length)));
+ return outcome?"ORIGINAL_HTTP_"+outcome+"_UNOBSERVED_NO_REPLAY":"ORIGINAL_ONE_GET_CHILD_FAILED_AMBIGUOUS_NO_REPLAY";
+}
+
+/** A full prearm can occupy twenty of the most recent run rows. Keep the
+ * metadata window bounded but inspect terminal results independently of
+ * active rows so recurring failures do not disappear from the report. */
+export function selectP6PaidChildAuditRuns(page,limit=64){
+ if(!Number.isSafeInteger(limit)||limit<1||limit>64||!Number.isSafeInteger(page?.total_count)||page.total_count<0||
+    !Array.isArray(page.workflow_runs)||page.workflow_runs.length!==Math.min(page.total_count,100))throw Error("AUDIT_METADATA_UNVERIFIED");
+ const rows=page.workflow_runs,seen=new Set();
+ for(const x of rows){
+  if(!Number.isSafeInteger(x?.id)||x.id<=0||seen.has(x.id)||!["completed","queued","in_progress","waiting","requested","pending"].includes(x.status)||
+     typeof x.created_at!=="string"||!Number.isFinite(Date.parse(x.created_at)))throw Error("AUDIT_METADATA_UNVERIFIED");
+  seen.add(x.id);
+ }
+ const active=rows.filter(x=>x.status!=="completed"),terminal=rows.filter(x=>x.status==="completed").sort((a,b)=>Date.parse(b.created_at)-Date.parse(a.created_at)||b.id-a.id);
+ const selected=terminal.slice(0,limit);
+ return {selected:[...active,...selected],metadataRows:rows.length,activeMetadataRows:active.length,terminalMetadataRows:terminal.length,
+  terminalSelected:selected.length,terminalOmitted:terminal.length-selected.length,allMatchingMetadataInspected:page.total_count===rows.length};
+}
+
 /** One exact private child, not parent ACK, billing or PRE. An overall red
  * job may still have committed a timely original before follow-on failure. */
 export function classifyP6PaidChildReceipt(run,jobs,log){
@@ -133,6 +171,8 @@ export function classifyP6PaidChildReceipt(run,jobs,log){
   if(has("OUTCOME_LATE"))return out("LATE_ORIGINAL_REPORTED_BY_CHILD",d);
   return out("ORIGINAL_PERSIST_REPORTED_TIMING_UNVERIFIED",d);
  }
+ const noContent=noContentOutcome(d);
+ if(noContent)return out("HTTP_"+noContent+"_UNOBSERVED_NO_ORIGINAL_PROOF",d);
  if(has("HTTP_RATE_LIMIT"))return out("RATE_LIMIT_NO_ORIGINAL_PROOF",d);
  if(has("HTTP_OK"))return out("HTTP_OK_NO_ORIGINAL_PROOF",d);
  if(http.length===1)return out("HTTP_NON_SUCCESS_NO_ORIGINAL_PROOF",d);

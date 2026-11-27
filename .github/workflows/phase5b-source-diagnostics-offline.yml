@@ -7,6 +7,7 @@ on:
       - 'tests/phase5b_recovery_register_v39.test.mjs'
       - 'scripts/v39_phase5b_source_diagnostics_v39.mjs'
       - 'scripts/v39_phase5b_paid_child_audit_owner.mjs'
+      - 'scripts/v39_phase5b_signed_calendar_coverage_owner.mjs'
       - 'scripts/v39_phase5b_conditional_query_scope_owner.mjs'
       - 'tests/phase5b_conditional_query_scope_owner_v39.test.mjs'
       - 'tests/phase5b_conditional_query_scope_real_pg16_v39.mjs'
@@ -75,7 +76,7 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '20'
-      - run: node --check scripts/v39_phase5b_paid_child_audit_owner.mjs && node --check scripts/v39_phase5b_conditional_query_scope_owner.mjs
+      - run: node --check scripts/v39_phase5b_paid_child_audit_owner.mjs && node --check scripts/v39_phase5b_signed_calendar_coverage_owner.mjs && node --check scripts/v39_phase5b_conditional_query_scope_owner.mjs
       - run: node --test tests/phase5b_source_diagnostics_v39.test.mjs tests/phase5b_recovery_register_v39.test.mjs tests/phase5b_cutover_quiet_v39.test.mjs tests/phase5b_conditional_query_scope_owner_v39.test.mjs
       - run: npm ci --include=dev --no-audit --no-fund
       - run: npm run check

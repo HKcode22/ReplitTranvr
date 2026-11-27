@@ -50,6 +50,52 @@ export function projectP6SignedCalendarCoverage(calendar,rows,duplicates,observe
   preparedQueriesAreNotFullFrozenTemplateDenominator:true,reservationsAreNotBillingProof:true,
   createdAtCutoffIsNotIndependentCommitProof:true,actualLabelsCertified:false,trainingEligibilityCertified:false,providerCalls:0,databaseWrites:0};
 }
+
+// Separate slot denominators retain sampling strata even when no original
+// was returned. Aggregate metadata only; do not read response payloads.
+const SLOT_IDS=["HUB","MID_A","MID_B","REGIONAL"];
+const slotFields=countFields.filter(x=>x!=="pre_rows"&&x!=="cutoff_safe_pre_rows");
+export function projectP6SourceSlotCoverage(rows,cells){
+ if(!Array.isArray(rows)||rows.length>372||!Array.isArray(cells)||cells.length!==93)fail("SLOT_DENOMINATOR");
+ const seen=new Set(),groups=new Map(),airportBySlot=new Map();
+ for(const x of rows){
+  const k=x.run_day_index+"|"+x.horizon,slot=x.run_day_index+"|"+x.slot_id,key=k+"|"+x.slot_id;
+  if(!Number.isInteger(x.run_day_index)||x.run_day_index<1||x.run_day_index>31||!HORIZONS.includes(x.horizon)||
+    !SLOT_IDS.includes(x.slot_id)||!(/^[A-Z]{4}$/).test(x.airport_icao??"")||seen.has(key)||
+    (airportBySlot.has(slot)&&airportBySlot.get(slot)!==x.airport_icao)||
+    ![...slotFields,"reserved_units","normalized_member_observations"].every(f=>int(x[f]))||x.prepared<1||
+    x.reservations>x.prepared||x.bindings>x.reservations||x.timely_bindings>x.bindings||
+    x.reserved_units!==2*x.reservations||x.normalized_member_observations>10000*x.bindings||
+    x.elapsed_unreserved+x.open_unreserved+x.future_unreserved+x.stopped_unreserved+x.reservations!==x.prepared)fail("SLOT_COUNT_OR_IDENTITY_CONTRADICTION");
+  seen.add(key);airportBySlot.set(slot,x.airport_icao);
+  const sums=groups.get(k)??Object.fromEntries(slotFields.map(f=>[f,0]));
+  for(const f of slotFields)sums[f]+=x[f];
+  groups.set(k,sums);
+ }
+ for(const cell of cells){
+  const sums=groups.get(cell.day+"|"+cell.horizon);
+  if(cell.prepared===null){if(sums)fail("SLOT_HORIZON_MISMATCH");}
+  else if(!sums||!slotFields.every(f=>sums[f]===cell[f]))fail("SLOT_HORIZON_MISMATCH");
+ }
+ return rows.map(x=>({...x,reserved_without_binding:x.reservations-x.bindings,
+  reservationIsNotHttpOrBillingProof:true,memberObservationsAreNotDistinctFlights:true}));
+}
+export async function readP6SourceSlotRows(client,manifest){
+ if(!/^[a-f0-9]{64}$/.test(manifest??""))fail("SLOT_MANIFEST");
+ return (await client.query(
+  "SELECT q.run_day_index,q.horizon,q.slot_id,q.airport_icao,count(*)::int prepared,"+
+  "count(a.reservation_sha256)::int reservations,count(b.population_query_id)::int bindings,"+
+  "count(*) FILTER(WHERE b.population_query_id IS NOT NULL AND b.bound_at_utc<=q.prediction_cutoff_utc)::int timely_bindings,"+
+  "count(*) FILTER(WHERE a.reservation_sha256 IS NULL AND q.state='STOPPED')::int stopped_unreserved,"+
+  "count(*) FILTER(WHERE a.reservation_sha256 IS NULL AND q.state<>'STOPPED' AND q.hard_latest_dispatch_utc<transaction_timestamp())::int elapsed_unreserved,"+
+  "count(*) FILTER(WHERE a.reservation_sha256 IS NULL AND q.state<>'STOPPED' AND q.planned_dispatch_utc<=transaction_timestamp() AND q.hard_latest_dispatch_utc>=transaction_timestamp())::int open_unreserved,"+
+  "count(*) FILTER(WHERE a.reservation_sha256 IS NULL AND q.state<>'STOPPED' AND q.planned_dispatch_utc>transaction_timestamp())::int future_unreserved,"+
+  "coalesce(sum(a.charged_reserved_units),0)::int reserved_units,coalesce(sum(b.normalized_members_count),0)::int normalized_member_observations "+
+  "FROM clean.phase5_fids_allowed_query_v39 q LEFT JOIN clean.phase5_fids_physical_attempt_v39 a USING(manifest_sha256,query_digest) "+
+  "LEFT JOIN clean.phase5_fids_original_binding_v39 b ON b.manifest_sha256=q.manifest_sha256 AND b.query_digest=q.query_digest AND b.reservation_sha256=a.reservation_sha256 "+
+  "WHERE q.manifest_sha256=$1 GROUP BY 1,2,3,4 ORDER BY 1,2,3,4",[manifest])).rows;
+}
+
 export async function readP6SignedCalendarCoverage(client){
  let tx=false;
  try{
@@ -99,8 +145,10 @@ export async function readP6SignedCalendarCoverage(client){
     (SELECT count(DISTINCT flight_instance_id)::int FROM dup) duplicate_day_horizon_ids
   `,[m])).rows[0];
   const iso=x=>x===null?null:new Date(x).toISOString();
-  return projectP6SignedCalendarCoverage(calendar.map(d=>({...d,start_utc:iso(d.start_utc)})),
+  const coverage=projectP6SignedCalendarCoverage(calendar.map(d=>({...d,start_utc:iso(d.start_utc)})),
    queryRows.map(x=>({...x,next_planned_utc:iso(x.next_planned_utc),next_hard_latest_utc:iso(x.next_hard_latest_utc)})),duplicates,iso(ident.at));
+  const slotRows=await readP6SourceSlotRows(client,m);
+  return {...coverage,bySlot:projectP6SourceSlotCoverage(slotRows,coverage.cells)};
  }finally{if(tx)await client.query("ROLLBACK").catch(()=>{});}
 }
 if(process.argv[1]&&resolve(process.argv[1])===fileURLToPath(import.meta.url)){

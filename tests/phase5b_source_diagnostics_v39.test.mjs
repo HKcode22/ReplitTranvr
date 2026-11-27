@@ -115,3 +115,43 @@ test("T081 real GitHub masked step name and second-precision interval retain tim
  assert.equal(classifyP6PaidChildReceipt(run,[{...job,steps:[actor,paid,{...pre,conclusion:"success"}]}],log).followOnPre,"STEP_SUCCEEDED_NOT_COMMIT_PROOF");
  assert.equal(classifyP6PaidChildReceipt(run,[{...job,steps:[actor,paid,pre,pre]}],log).status,"STEP_SCOPE_UNVERIFIED");
 });
+
+
+import {selectP6PaidChildAuditRuns,sourceOriginalChildFailureCode} from "../scripts/v39_phase5b_source_diagnostics_v39.mjs";
+import {projectP6SourceSlotCoverage} from "../scripts/v39_phase5b_signed_calendar_coverage_owner.mjs";
+test("T091 full prearm cannot hide terminal SOURCE failures from the bounded audit",()=>{
+ const rows=Array.from({length:100},(_,i)=>({id:2000-i,status:i<24?"in_progress":"completed",created_at:new Date(Date.UTC(2026,10,27,4,20)-i*10000).toISOString()}));
+ const x=selectP6PaidChildAuditRuns({total_count:120,workflow_runs:rows});
+ assert.equal(x.activeMetadataRows,24);assert.equal(x.terminalMetadataRows,76);assert.equal(x.terminalSelected,64);assert.equal(x.terminalOmitted,12);
+ assert.equal(x.selected.length,88);assert.equal(x.selected[24].id,1976);assert.equal(x.allMatchingMetadataInspected,false);
+ assert.throws(()=>selectP6PaidChildAuditRuns({total_count:120,workflow_runs:rows.slice(1)}),/AUDIT_METADATA_UNVERIFIED/);
+ assert.throws(()=>selectP6PaidChildAuditRuns({total_count:100,workflow_runs:[rows[0],...rows.slice(0,99)]}),/AUDIT_METADATA_UNVERIFIED/);
+});
+test("T091 exact observed no-content remains unobserved and no replay; generic and contradictory results are not relabeled",()=>{
+ const labels=["PREARM_COMMITTED","RESERVATION_CONFIRMED","HTTP_STARTED","HTTP_NO_CONTENT","FIDS_BODY_UNAVAILABLE","OUTCOME_UNOBSERVED"];
+ const raw=labels.map(sourceDiagnosticLine).join("\n");
+ const child={status:1,stdout:Buffer.from(raw),stderr:Buffer.from("private suppressed")};
+ assert.equal(sourceOriginalChildFailureCode(child),"ORIGINAL_HTTP_NO_CONTENT_UNOBSERVED_NO_REPLAY");
+ assert.equal(sourceChildFailureDiagnostic("ORIGINAL_SUBPROCESS",{message:"HOLD_P6_REAL_PRIVATE_SOURCE_CHILD_"+sourceOriginalChildFailureCode(child)}).category,"SOURCE_HTTP_NO_CONTENT_UNOBSERVED");
+ assert.equal(sourceOriginalChildFailureCode({...child,stdout:raw.replace("HTTP_NO_CONTENT","HTTP_RESET_CONTENT")}),"ORIGINAL_HTTP_RESET_CONTENT_UNOBSERVED_NO_REPLAY");
+ for(const x of [{...child,signal:"SIGTERM"},{...child,status:null},{...child,status:0},{...child,stdout:raw.replace("HTTP_STARTED","INNER_ADMITTED")},{...child,stdout:raw+"\nP6_SOURCE_DIAG ORIGINAL_PERSIST_STARTED"},{...child,stdout:raw+"\nP6_SOURCE_DIAG HTTP_OK"}])
+  assert.equal(sourceOriginalChildFailureCode(x),"ORIGINAL_ONE_GET_CHILD_FAILED_AMBIGUOUS_NO_REPLAY");
+ const run={id:45916017872,head_sha:"c2bb8e18dfcf64ea815745da59ede62f53e448bb",event:"workflow_dispatch",head_branch:"main",run_attempt:1,status:"completed",conclusion:"failure"};
+ const job={name:"exact-private-source-existing-one-get-child",run_id:run.id,head_sha:run.head_sha,run_attempt:1,status:"completed",conclusion:"failure",steps:[
+  {name:"Admission for real actor preflight ONLY (no paid capability)",conclusion:"skipped"},
+  {name:"Authenticate real private PG***6 signed index and query, then ORIGINAL one-physical-GET child",conclusion:"failure",started_at:"2026-11-27T00:19:40Z",completed_at:"2026-11-27T01:45:39Z"}]};
+ const log=labels.map(x=>"2026-11-27T01:45:39.4611591Z P6_SOURCE_DIAG "+x).join("\n");
+ const result=classifyP6PaidChildReceipt(run,[job],log);
+ assert.equal(result.status,"HTTP_NO_CONTENT_UNOBSERVED_NO_ORIGINAL_PROOF");assert.equal(result.actualPreCommitVerified,false);assert.equal(result.providerBillingVerified,false);
+ assert.equal(classifyP6PaidChildReceipt(run,[job],log.replace("HTTP_NO_CONTENT","HTTP_RESET_CONTENT")).status,"HTTP_RESET_CONTENT_UNOBSERVED_NO_ORIGINAL_PROOF");
+ assert.equal(classifyP6PaidChildReceipt(run,[job],log.replace("OUTCOME_UNOBSERVED","OUTCOME_TIMELY")).status,"CONTRADICTORY_DIAGNOSTICS_REVIEW");
+});
+test("T092 slot denominator retains missing reservations and reconciles all 93 horizon cells",()=>{
+ const cells=Array.from({length:31},(_,i)=>["T-24h","T-6h","T-90m"].map(horizon=>({day:i+1,horizon,prepared:null}))).flat();
+ const base={prepared:8,reservations:4,bindings:2,timely_bindings:2,elapsed_unreserved:1,open_unreserved:0,future_unreserved:3,stopped_unreserved:0};
+ cells[7]={day:3,horizon:"T-6h",...base};
+ const row={run_day_index:3,horizon:"T-6h",slot_id:"HUB",airport_icao:"WSSS",...base,reserved_units:8,normalized_member_observations:100};
+ assert.equal(projectP6SourceSlotCoverage([row],cells)[0].reserved_without_binding,2);
+ for(const rows of [[{...row,reserved_units:7}],[{...row,bindings:1}],[{...row,slot_id:"UNKNOWN"}],[row,row],[{...row,normalized_member_observations:20001}],[]])
+  assert.throws(()=>projectP6SourceSlotCoverage(rows,cells),/SLOT_/);
+});

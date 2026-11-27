@@ -25,7 +25,7 @@ import {readP6StableSourceTrust,P6_STORED_PRIVATE_PATH_PLACEHOLDER}
  from "../server/lib/disruption/phase6StoredSourceRuntimeTrust_v39.mjs";
 import {spawnSync} from "node:child_process";
 import {resolve} from "node:path";
-import {readSafeSourceDiagnosticLines,sourceChildFailureDiagnostic} from "./v39_phase5b_source_diagnostics_v39.mjs";
+import {readSafeSourceDiagnosticLines,sourceChildFailureDiagnostic,sourceOriginalChildFailureCode} from "./v39_phase5b_source_diagnostics_v39.mjs";
 import {
  hydrateAndInspectP6DayEpochOriginalSemanticsReadOnly
 } from "../server/lib/disruption/phase6DayEpochOriginalSemanticHandoff_v39.mjs";
@@ -391,7 +391,7 @@ export async function runP6OnePrivateSourceOriginalGHChild(
    // Do not expose raw stderr/stdout, original payloads, hashes or errors.
    for(const line of readSafeSourceDiagnosticLines(child.stdout,child.stderr))console.log(line);
    if(child.error||child.signal||child.status!==0)
-    fail("ORIGINAL_ONE_GET_CHILD_FAILED_AMBIGUOUS_NO_REPLAY");
+    fail(sourceOriginalChildFailureCode(child));
   });
  const admission=options.runExistingAdmission??
   runP6OneSourceThroughExistingP5ChildAdmission;
