@@ -312,3 +312,10 @@ test("T115 custody uses no signer/publisher authority and emits only a binding c
  // Ordinary runtime still rejects missing write-capability inputs.
  assert.throws(()=>admitP6NonpaidSourceDayGithub(custodyEnv(f.env)),/WRONG_REVIEWER_PRIVATE_KEY/);
 });
+
+test("T117 optional commitment review is admitted only for owner protected custody",()=>{
+ const f=fixture(),e=custodyEnv({...f.env,GITHUB_EVENT_NAME:"workflow_dispatch",GITHUB_ACTOR:"HKcode22",P6_NONPAID_SOURCE_CONFIRM:"VERIFY_FUTURE_CONDITIONAL_POLICY_CUSTODY_NO_PROVIDER",P6_NONPAID_SOURCE_REQUESTED_DAY:"5"});
+ assert.equal(admitP6NonpaidSourceDayGithub({...e,P6_CONDITIONAL_COMMITMENT_REVIEW_SHA256:sha("a")}).mode,"conditional_custody");
+ assert.throws(()=>admitP6NonpaidSourceDayGithub({...e,P6_CONDITIONAL_COMMITMENT_REVIEW_SHA256:"wrong"}),/CONDITIONAL_COMMITMENT_REVIEW_SCOPE/);
+ assert.throws(()=>admitP6NonpaidSourceDayGithub({...f.env,P6_CONDITIONAL_COMMITMENT_REVIEW_SHA256:sha("a")}),/CONDITIONAL_COMMITMENT_REVIEW_SCOPE/);
+});

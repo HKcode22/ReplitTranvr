@@ -21,6 +21,7 @@ import {runP6StoredSourceDayPublication} from "../server/lib/disruption/phase6St
 import {commitP6Day1LateFixedRegistration} from "../server/lib/disruption/phase5EarlyAdaptiveDrawOwner_v39.ts";
 import {verifyP6Day1CommittedLateScope} from "../server/lib/disruption/phase6Day1LateRegistrationScope_v39.mjs";
 import {verifyP5EarlyDrawReadonlyAcl} from "./v39_phase5_github_six_slot_early_draw_owner_v39.ts";
+import {previewP6ConditionalCandidateFromCommitment} from "./v39_phase5b_conditional_policy_candidate_v39.mjs";
 const SHA=/^[a-f0-9]{64}$/,CODE=/^[a-f0-9]{40}$/;
 const PREPARE_LOGIN="phase5_p30_prepare_login_20261107";
 const CONFIRM="ONE_APPROVED_PROSPECTIVE_SOURCE_DAY_NONPAID_PREPARE_PUBLISH";
@@ -76,6 +77,7 @@ export function admitP6NonpaidSourceDayGithub(env){
     env.NODE_TLS_REJECT_UNAUTHORIZED==="0")
   hold("NOT_APPROVED_REAL_MAIN_NONPAID_RUNTIME");
  const mode=modeOf(env);
+ if(env.P6_CONDITIONAL_COMMITMENT_REVIEW_SHA256&&(mode!=="conditional_custody"||!SHA.test(env.P6_CONDITIONAL_COMMITMENT_REVIEW_SHA256)))hold("CONDITIONAL_COMMITMENT_REVIEW_SCOPE");
  if(mode==="conditional_custody"?env.GITHUB_EVENT_NAME!=="workflow_dispatch"||env.GITHUB_ACTOR!=="HKcode22"||!/^(?:[5-9]|[12][0-9]|3[01])$/.test(env.P6_NONPAID_SOURCE_REQUESTED_DAY??""):
     mode==="day1_recovery"?env.GITHUB_EVENT_NAME!=="workflow_dispatch"||env.P6_NONPAID_SOURCE_REQUESTED_DAY!=="1":mode!=="manual"?env.P6_NONPAID_SOURCE_SCHEDULE_ENABLED!=="true"||Boolean(env.P6_NONPAID_SOURCE_REQUESTED_DAY)||
     (mode==="schedule"?Boolean(env.P6_NONPAID_SOURCE_CONFIRM):env.P6_NONPAID_SOURCE_CONFIRM!==CURRENT_CONFIRM):
@@ -392,7 +394,18 @@ export async function runP6NonpaidSourceDayGithub(env){
   if(ctx.mode==="conditional_custody"){
    const count=await conditionalPreparedRead(restricted,ctx);
    if(Math.abs(utc(count.clock)-utc(i.now))>120000)hold("CONDITIONAL_CUSTODY_CLOCK_DRIFT");
-   return projectP6ConditionalPolicyCustody(ctx,plans,c.calendar,i.rows,count.clock,count.count,env);
+   const receipt=projectP6ConditionalPolicyCustody(ctx,plans,c.calendar,i.rows,count.clock,count.count,env);
+   const reviewSha256=env.P6_CONDITIONAL_COMMITMENT_REVIEW_SHA256;
+   if(!reviewSha256)return receipt;
+   const path="data-collection/phase5b/reviews/prospective-conditional-commissioning-day-"+String(ctx.requestedDay).padStart(2,"0")+".json";
+   let reviewBytes;
+   try{reviewBytes=readFileSync(path);}catch{hold("CONDITIONAL_COMMITMENT_REVIEW_MISSING");}
+   const candidatePreview=previewP6ConditionalCandidateFromCommitment({dailyBytes:ctx.policyBytes,signingBytes:ctx.signingPolicyBytes,
+    transportBytes:raw64(env.P6_NONPAID_TRANSPORT_TRUST_BASE64,8000,"TRANSPORT_TRUST"),trust:ctx.trust,reviewBytes,reviewSha256,
+    publicPins:{laneFingerprintSha256:env.P6_PHASE7_PRE_LANE_EVIDENCE_AUTHORITY_FINGERPRINT_SHA256,proofFingerprintSha256:env.P6_PHASE7_PRE_PROOF_REVIEWER_FINGERPRINT_SHA256,
+     lanePublicKeyBase64:env.P6_PHASE7_PRE_LANE_EVIDENCE_AUTHORITY_PUBLIC_KEY_BASE64,proofPublicKeyBase64:env.P6_PHASE7_PRE_PROOF_REVIEWER_PUBLIC_KEY_BASE64},
+    custody:receipt,reviewedPlanBytes:plans.map(p=>p.bytes)});
+   return Object.freeze({...receipt,candidatePreview});
   }
   let selection,lateScope;
   if(ctx.mode==="day1_recovery"){

@@ -122,3 +122,29 @@ export function prepareP6ConditionalPolicyCandidate({dailyBytes,signingBytes,tra
  Object.defineProperty(result,"privatePolicyBytes",{value:Object.freeze({daily:b,signing:s,transport:t}),enumerable:false,writable:false});
  return Object.freeze(result);
 }
+
+/** Protected preview only: external review binds the composite commitment;
+ * exact constituent digests are recomputed internally, never disclosed. */
+export function previewP6ConditionalCandidateFromCommitment({dailyBytes,signingBytes,transportBytes,trust,reviewBytes,reviewSha256,publicPins,custody,reviewedPlanBytes}){
+ if(custody?.status!=="P6_ACTUAL_PROTECTED_CONDITIONAL_POLICY_CUSTODY_READONLY"||
+  !["exactThreePolicyDigestsValidated","exact31PlanPinsValidated","canonicalNativePredecessorBytes","nativePolicyPresent","baseIntervalCoversRemainingStudy","publicActorsVerified"].every(k=>custody[k]===true)||
+  custody.conditionalPolicyFieldState!=="ABSENT"||custody.signingOrPublishingCapabilityPresent!==false||
+  custody.actualConditionalPolicyInstalledVerified!==false||custody.actualConditionalPreCommitVerified!==false||
+  !["providerCalls","databaseWrites","githubWrites","signaturesIssued"].every(k=>custody[k]===0)||custody.phase6PaidGo!==false)
+  hold("PROTECTED_CUSTODY_REQUIRED");
+ if(![dailyBytes,signingBytes,transportBytes].every(Buffer.isBuffer))hold("BASE_BYTES");
+ const baseDigests={daily:hash(dailyBytes),signing:hash(signingBytes),transport:hash(transportBytes)};
+ const commitment=hash(JSON.stringify({schema:"v39.phase5b.custody-base-commitment.v1",...baseDigests}));
+ const d=parse(reviewBytes,reviewSha256,16000);
+ if(!exact(d,["schema","ownerDelegatedTechnicalScopeReviewed","protocolSha256","externalContentUseReviewSha256","manifestSha256","rightsSha256","basePolicyCommitmentSha256","firstEligibleRunDayIndex","effectiveUtc","validUntilUtc","standaloneNoT24ProtocolSha256"])||
+  d.schema!=="v39.phase5b.prospective-conditional-commissioning-commitment-review.v1"||
+  d.basePolicyCommitmentSha256!==commitment||custody.basePolicyCommitmentSha256!==commitment)hold("CUSTODY_COMMITMENT_DRIFT");
+ const {basePolicyCommitmentSha256:unused,...rest}=d;
+ const internal=Buffer.from(JSON.stringify({...rest,schema:"v39.phase5b.prospective-conditional-commissioning-review.v1",baseDigests}));
+ const c=prepareP6ConditionalPolicyCandidate({dailyBytes,signingBytes,transportBytes,baseDigests,trust,reviewBytes:internal,reviewSha256:hash(internal),publicPins,prospective:custody.prospective,observedUtc:custody.observedDbClockUtc,reviewedPlanBytes});
+ return Object.freeze({status:"CONDITIONAL_POLICY_CANDIDATE_PREVIEW_NOT_INSTALLED",reviewSha256,
+  basePolicyCommitmentSha256:commitment,candidateCommitmentSha256:hash(JSON.stringify({schema:"v39.phase5b.custody-candidate-commitment.v1",daily:c.dailySha256,signing:c.signingSha256,transport:c.transportSha256})),
+  firstEligibleRunDayIndex:c.firstEligibleRunDayIndex,reviewedConditionalThroughUtc:c.reviewedConditionalThroughUtc,
+  nativePolicyPreserved:true,standaloneNoT24Approved:false,actualConditionalPolicyInstalledVerified:false,actualConditionalPreCommitVerified:false,
+  providerCalls:0,databaseWrites:0,githubWrites:0,signaturesIssued:0,phase6PaidGo:false});
+}

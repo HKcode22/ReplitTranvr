@@ -402,9 +402,10 @@
         "I094",
         "I095",
         "I108",
-        "I121"
+        "I121",
+        "I123"
       ],
-      "next": "Protected policy custody, exact reviewed commissioning, positive conditional signature and PRE",
+      "next": "Protected policy custody, exact reviewed commissioning, positive conditional signature and PRE; actual protected commitment decision preview and separate authorized install/readback outstanding",
       "closureStatus": "NOT_CLOSED",
       "scientificRisk": "P0_SCIENTIFIC",
       "workstream": "preservation_admission"

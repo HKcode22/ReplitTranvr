@@ -123,3 +123,25 @@ test("T109 candidate must preserve an actually valid native feature review",()=>
  const result=prepare(inputs);
  assert.deepEqual(JSON.parse(result.privatePolicyBytes.daily).nativePreFeatureReview,p.nativePreFeatureReview);
 });
+
+import {previewP6ConditionalCandidateFromCommitment as preview} from "../scripts/v39_phase5b_conditional_policy_candidate_v39.mjs";
+test("T117 protected composite review binds actual predecessor, exact decision and prospective plans without private output",()=>{
+ const commitment=h(JSON.stringify({schema:"v39.phase5b.custody-base-commitment.v1",...baseDigests}));
+ const custody={status:"P6_ACTUAL_PROTECTED_CONDITIONAL_POLICY_CUSTODY_READONLY",prospective,observedDbClockUtc:now,basePolicyCommitmentSha256:commitment,
+  exactThreePolicyDigestsValidated:true,exact31PlanPinsValidated:true,canonicalNativePredecessorBytes:true,nativePolicyPresent:true,baseIntervalCoversRemainingStudy:true,publicActorsVerified:true,
+  conditionalPolicyFieldState:"ABSENT",signingOrPublishingCapabilityPresent:false,actualConditionalPolicyInstalledVerified:false,actualConditionalPreCommitVerified:false,
+  providerCalls:0,databaseWrites:0,githubWrites:0,signaturesIssued:0,phase6PaidGo:false};
+ const {baseDigests:unused,...rest}=review;
+ const decision={...rest,schema:"v39.phase5b.prospective-conditional-commissioning-commitment-review.v1",basePolicyCommitmentSha256:commitment};
+ const bytes=buf(decision),args={...inputs,custody,reviewBytes:bytes,reviewSha256:sha(bytes)};
+ const result=preview(args),expected=prepare(inputs);
+ assert.equal(result.status,"CONDITIONAL_POLICY_CANDIDATE_PREVIEW_NOT_INSTALLED");
+ assert.equal(result.candidateCommitmentSha256,h(JSON.stringify({schema:"v39.phase5b.custody-candidate-commitment.v1",daily:expected.dailySha256,signing:expected.signingSha256,transport:expected.transportSha256})));
+ assert.equal(result.actualConditionalPolicyInstalledVerified,false);assert.equal(result.signaturesIssued,0);
+ for(const value of [...Object.values(baseDigests),expected.dailySha256,expected.signingSha256,expected.transportSha256])assert(!JSON.stringify(result).includes(value));
+ assert.equal(result.privatePolicyBytes,undefined);
+ for(const delta of [{custody:{...custody,conditionalPolicyFieldState:"PARTIAL_HOLD"}},{custody:{...custody,basePolicyCommitmentSha256:h("wrong")}},{custody:{...custody,observedDbClockUtc:prospective.preparationOpensUtc}},{custody:{...custody,signingOrPublishingCapabilityPresent:true}},{dailyBytes:Buffer.concat([dailyBytes,Buffer.from(" ")])},{reviewSha256:h("unreviewed")}])
+  assert.throws(()=>preview({...args,...delta}),/HOLD_P6_CONDITIONAL_POLICY_CANDIDATE_/);
+ const bad=buf({...decision,standaloneNoT24ProtocolSha256:h("unapproved")});
+ assert.throws(()=>preview({...args,reviewBytes:bad,reviewSha256:sha(bad)}),/EXACT_PROSPECTIVE_REVIEW/);
+});

@@ -9,6 +9,11 @@ on:
         required: false
         default: ''
         type: string
+      conditional_review_sha256:
+        description: 'Optional exact reviewed commitment decision SHA-256, custody preview only'
+        required: false
+        default: ''
+        type: string
       confirm:
         description: 'Confirm exact reviewed day, current calendar, or VERIFY_FUTURE_CONDITIONAL_POLICY_CUSTODY_NO_PROVIDER'
         required: true
@@ -16,6 +21,8 @@ on:
   pull_request:
     branches: [main]
     paths:
+      - 'scripts/v39_phase5b_conditional_policy_candidate_v39.mjs'
+      - 'tests/phase5b_conditional_policy_candidate_v39.test.mjs'
       - 'scripts/v39_phase6_nonpaid_source_day_github_runtime_v39.mjs'
       - 'tests/phase6_nonpaid_source_day_github_runtime_v39.test.mjs'
       - 'server/lib/disruption/phase6RollingCalendarHints_v39.mjs'
@@ -75,6 +82,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     env:
+      P6_CONDITIONAL_COMMITMENT_REVIEW_SHA256: ${{ inputs.conditional_review_sha256 }}
       P6_NONPAID_SOURCE_REQUESTED_DAY: ${{ inputs.run_day_index }}
       P6_NONPAID_SOURCE_CONFIRM: ${{ inputs.confirm }}
       P6_NONPAID_SOURCE_SCHEDULE_ENABLED: ${{ vars.P6_NONPAID_SOURCE_SCHEDULE_ENABLED }}
