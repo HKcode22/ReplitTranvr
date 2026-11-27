@@ -155,3 +155,19 @@ test("T092 slot denominator retains missing reservations and reconciles all 93 h
  for(const rows of [[{...row,reserved_units:7}],[{...row,bindings:1}],[{...row,slot_id:"UNKNOWN"}],[row,row],[{...row,normalized_member_observations:20001}],[]])
   assert.throws(()=>projectP6SourceSlotCoverage(rows,cells),/SLOT_/);
 });
+
+import {selectP6RunReceiptScope,projectP6RunReceiptRows} from "../scripts/v39_phase5b_signed_calendar_coverage_owner.mjs";
+test("T093 exact run-level custody corroboration detects missing, duplicate and contradictory ledger evidence",()=>{
+ const positive="TIMELY_ORIGINAL_REPORTED_BY_CHILD",negative="HTTP_NO_CONTENT_UNOBSERVED_NO_ORIGINAL_PROOF";
+ const scope=selectP6RunReceiptScope([{runId:1,status:positive},{runId:2,status:negative},{runId:3,status:"RUN_NOT_TERMINAL"}]);
+ const base={run_day_index:3,horizon:"T-6h",reserved:true};
+ const a={...base,run_id:"1",slot_id:"HUB",airport_icao:"YSSY",bound:true,timely:true};
+ const b={...base,run_id:"2",slot_id:"MID_A",airport_icao:"KBUF",bound:false,timely:false};
+ const out=projectP6RunReceiptRows(scope,[a,b]);
+ assert.equal(out.selectedRuns,2);assert.equal(out.excludedReceiptCount,1);
+ assert.deepEqual(out.rows.map(x=>[x.airport_icao,x.bound,x.timely_bindings]),[["YSSY",1,1],["KBUF",0,0]]);
+ assert.equal(out.httpStatusIndependentlyVerified,false);assert.equal(out.actualPreCommitVerified,false);
+ for(const rows of [[a],[a,a],[a,{...b,reserved:false}],[a,{...b,bound:true}],[{...a,timely:false},b],[a,{...b,run_id:"3"}]])assert.throws(()=>projectP6RunReceiptRows(scope,rows),/RUN_RECEIPT_/);
+ assert.throws(()=>selectP6RunReceiptScope([{runId:1,status:positive},{runId:1,status:negative}]),/RUN_RECEIPT_IDENTITY/);
+ assert.throws(()=>selectP6RunReceiptScope([{runId:3,status:"RUN_NOT_TERMINAL"}]),/RUN_RECEIPT_SCOPE/);
+});

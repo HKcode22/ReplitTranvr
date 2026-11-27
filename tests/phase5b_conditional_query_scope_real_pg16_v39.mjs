@@ -4,7 +4,7 @@ import assert from "node:assert/strict";
 import {createHash} from "node:crypto";
 import pg from "pg";
 import {readP6ConditionalQueryScope} from "../scripts/v39_phase5b_conditional_query_scope_owner.mjs";
-import {readP6SourceSlotRows} from "../scripts/v39_phase5b_signed_calendar_coverage_owner.mjs";
+import {readP6SourceSlotRows,readP6SourceRunReceiptRows} from "../scripts/v39_phase5b_signed_calendar_coverage_owner.mjs";
 const adminUrl="postgresql://postgres:postgres@127.0.0.1:5432/neondb?sslmode=disable";
 const ownerUrl="postgresql://neondb_owner:ci-only-scope@127.0.0.1:5432/neondb?sslmode=disable";
 const digest=x=>createHash("sha256").update(x).digest("hex");
@@ -61,10 +61,20 @@ test("T086 real PostgreSQL 16 parses and executes the actual owner query with pr
    await c.query("CREATE TABLE clean.phase5_fids_physical_attempt_v39(manifest_sha256 text,query_digest text, reservation_sha256 text,charged_reserved_units int); CREATE TABLE clean.phase5_fids_original_binding_v39(manifest_sha256 text,query_digest text,reservation_sha256 text,population_query_id uuid,bound_at_utc timestamptz,normalized_members_count int)");
    await c.query("INSERT INTO clean.phase5_fids_physical_attempt_v39 VALUES($1,$2,$3,2),($1,$4,$5,2)",[m,digest("valid"),digest("r1"),digest("native"),digest("r2")]);
    await c.query("INSERT INTO clean.phase5_fids_original_binding_v39 VALUES($1,$2,$3,'00000000-0000-0000-0000-000000000001',$4,12)",[m,digest("valid"),digest("r1"),stamp(2)]);
+   await c.query("ALTER TABLE clean.phase5_fids_physical_attempt_v39 ADD COLUMN github_run_id text");
+   await c.query("UPDATE clean.phase5_fids_physical_attempt_v39 SET github_run_id=CASE WHEN query_digest=$1 THEN '123' ELSE '456' END",[digest("valid")]);
+   await c.query("UPDATE clean.phase5_fids_allowed_query_v39 SET slot_id='MID_A',airport_icao='KBUF' WHERE query_digest=$1",[digest("native")]);
    await c.query("BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY");
    try{
     const rows=await readP6SourceSlotRows(c,m);
-    assert.deepEqual(rows,[{run_day_index:4,horizon:"T-24h",slot_id:"HUB",airport_icao:"WSSS",prepared:9,reservations:2,bindings:1,timely_bindings:1,stopped_unreserved:0,elapsed_unreserved:0,open_unreserved:0,future_unreserved:7,reserved_units:4,normalized_member_observations:12}]);
+    const hub=rows.find(x=>x.slot_id==="HUB"),mid=rows.find(x=>x.slot_id==="MID_A");
+    assert.deepEqual(hub,{run_day_index:4,horizon:"T-24h",slot_id:"HUB",airport_icao:"WSSS",prepared:8,reservations:1,bindings:1,timely_bindings:1,stopped_unreserved:0,elapsed_unreserved:0,open_unreserved:0,future_unreserved:7,reserved_units:2,normalized_member_observations:12});
+    assert.deepEqual(mid,{run_day_index:4,horizon:"T-24h",slot_id:"MID_A",airport_icao:"KBUF",prepared:1,reservations:1,bindings:0,timely_bindings:0,stopped_unreserved:0,elapsed_unreserved:0,open_unreserved:0,future_unreserved:0,reserved_units:2,normalized_member_observations:0});
+    const receipts=[{runId:123,status:"TIMELY_ORIGINAL_REPORTED_BY_CHILD"},{runId:456,status:"HTTP_NO_CONTENT_UNOBSERVED_NO_ORIGINAL_PROOF"}];
+    const corroborated=await readP6SourceRunReceiptRows(c,m,receipts);
+    assert.deepEqual(corroborated.rows.map(x=>[x.slot_id,x.runs,x.bound,x.timely_bindings]),[["HUB",1,1,1],["MID_A",1,0,0]]);
+    await assert.rejects(readP6SourceRunReceiptRows(c,m,[{...receipts[0],runId:999}]),/RUN_RECEIPT_LEDGER_IDENTITY/);
+    await assert.rejects(readP6SourceRunReceiptRows(c,m,[{...receipts[1],runId:123}]),/RUN_RECEIPT_CUSTODY_CONTRADICTION/);
    }finally{await c.query("ROLLBACK");}
   });
  }finally{await c.end().catch(()=>{});await a.end().catch(()=>{});}

@@ -5,6 +5,7 @@
 import {fileURLToPath} from "node:url";
 import {resolve} from "node:path";
 import {createRequire} from "node:module";
+import {readFileSync} from "node:fs";
 const fail=s=>{throw Error("HOLD_P6_SIGNED_CALENDAR_COVERAGE_"+s)};
 const HORIZONS=["T-24h","T-6h","T-90m"];
 const int=n=>Number.isSafeInteger(n)&&n>=0;
@@ -96,7 +97,56 @@ export async function readP6SourceSlotRows(client,manifest){
   "WHERE q.manifest_sha256=$1 GROUP BY 1,2,3,4 ORDER BY 1,2,3,4",[manifest])).rows;
 }
 
-export async function readP6SignedCalendarCoverage(client){
+// Exact owner run-to-ledger reconciliation, not merely aggregate slot totals.
+// Reported HTTP class remains a log claim; PostgreSQL corroborates custody,
+// not HTTP status, billing or the reason a provider returned no content.
+const receiptClasses=new Set(["TIMELY_ORIGINAL_REPORTED_BY_CHILD","LATE_ORIGINAL_REPORTED_BY_CHILD","HTTP_NO_CONTENT_UNOBSERVED_NO_ORIGINAL_PROOF","HTTP_RESET_CONTENT_UNOBSERVED_NO_ORIGINAL_PROOF"]);
+export function selectP6RunReceiptScope(receipts){
+ if(!Array.isArray(receipts)||receipts.length<1||receipts.length>100)fail("RUN_RECEIPT_SCOPE");
+ const ids=new Set(),selected=[];
+ for(const x of receipts){
+  if(!Number.isSafeInteger(x?.runId)||x.runId<=0||ids.has(x.runId)||typeof x.status!=="string"||x.status.length>100)fail("RUN_RECEIPT_IDENTITY");
+  ids.add(x.runId);
+  if(receiptClasses.has(x.status))selected.push({runId:String(x.runId),status:x.status});
+ }
+ if(!selected.length||selected.length>64)fail("RUN_RECEIPT_SCOPE");
+ return {selected,excludedReceiptCount:receipts.length-selected.length};
+}
+export function projectP6RunReceiptRows(scope,rows){
+ if(!Array.isArray(rows)||rows.length!==scope.selected.length)fail("RUN_RECEIPT_CARDINALITY");
+ const expected=new Map(scope.selected.map(x=>[x.runId,x.status])),seen=new Set(),groups=new Map();
+ for(const x of rows){
+  const status=expected.get(x.run_id);
+  if(!status||seen.has(x.run_id)||!Number.isInteger(x.run_day_index)||x.run_day_index<1||x.run_day_index>31||
+    !HORIZONS.includes(x.horizon)||!SLOT_IDS.includes(x.slot_id)||!(/^[A-Z]{4}$/).test(x.airport_icao??"")||
+    x.reserved!==true||typeof x.bound!=="boolean"||typeof x.timely!=="boolean"||x.timely&&!x.bound)fail("RUN_RECEIPT_LEDGER_IDENTITY");
+  seen.add(x.run_id);
+  const expectBound=status==="TIMELY_ORIGINAL_REPORTED_BY_CHILD"||status==="LATE_ORIGINAL_REPORTED_BY_CHILD";
+  if(x.bound!==expectBound||x.timely!==(status==="TIMELY_ORIGINAL_REPORTED_BY_CHILD"))fail("RUN_RECEIPT_CUSTODY_CONTRADICTION");
+  const key=JSON.stringify([x.run_day_index,x.horizon,x.slot_id,x.airport_icao,status]);
+  const g=groups.get(key)??{run_day_index:x.run_day_index,horizon:x.horizon,slot_id:x.slot_id,airport_icao:x.airport_icao,reported_class:status,runs:0,reserved:0,bound:0,timely_bindings:0};
+  g.runs++;g.reserved++;g.bound+=Number(x.bound);g.timely_bindings+=Number(x.timely);groups.set(key,g);
+ }
+ return {status:"EXACT_SELECTED_RUN_RECEIPTS_LEDGER_CUSTODY_RECONCILED",selectedRuns:seen.size,excludedReceiptCount:scope.excludedReceiptCount,
+  rows:[...groups.values()],httpStatusIndependentlyVerified:false,providerBillingVerified:false,actualPreCommitVerified:false,providerCalls:0,databaseWrites:0};
+}
+export async function readP6SourceRunReceiptRows(client,manifest,receipts){
+ if(!/^[a-f0-9]{64}$/.test(manifest??""))fail("RUN_RECEIPT_MANIFEST");
+ const scope=selectP6RunReceiptScope(receipts);
+ const rows=(await client.query(`
+  SELECT e.run_id,q.run_day_index,q.horizon,q.slot_id,q.airport_icao,
+   a.reservation_sha256 IS NOT NULL AS reserved,b.population_query_id IS NOT NULL AS bound,
+   coalesce(b.bound_at_utc<=q.prediction_cutoff_utc,false) AS timely
+  FROM unnest($1::text[]) AS e(run_id)
+  LEFT JOIN clean.phase5_fids_physical_attempt_v39 a ON a.github_run_id=e.run_id AND a.manifest_sha256=$2
+  LEFT JOIN clean.phase5_fids_allowed_query_v39 q ON q.manifest_sha256=a.manifest_sha256 AND q.query_digest=a.query_digest
+  LEFT JOIN clean.phase5_fids_original_binding_v39 b ON b.manifest_sha256=a.manifest_sha256 AND b.query_digest=a.query_digest AND b.reservation_sha256=a.reservation_sha256
+  ORDER BY e.run_id
+ `,[scope.selected.map(x=>x.runId),manifest])).rows;
+ return projectP6RunReceiptRows(scope,rows);
+}
+
+export async function readP6SignedCalendarCoverage(client,runReceipts=null){
  let tx=false;
  try{
   await client.query("BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY");tx=true;
@@ -148,7 +198,8 @@ export async function readP6SignedCalendarCoverage(client){
   const coverage=projectP6SignedCalendarCoverage(calendar.map(d=>({...d,start_utc:iso(d.start_utc)})),
    queryRows.map(x=>({...x,next_planned_utc:iso(x.next_planned_utc),next_hard_latest_utc:iso(x.next_hard_latest_utc)})),duplicates,iso(ident.at));
   const slotRows=await readP6SourceSlotRows(client,m);
-  return {...coverage,bySlot:projectP6SourceSlotCoverage(slotRows,coverage.cells)};
+  const runReceiptReconciliation=runReceipts===null?null:await readP6SourceRunReceiptRows(client,m,runReceipts);
+  return {...coverage,bySlot:projectP6SourceSlotCoverage(slotRows,coverage.cells),runReceiptReconciliation};
  }finally{if(tx)await client.query("ROLLBACK").catch(()=>{});}
 }
 if(process.argv[1]&&resolve(process.argv[1])===fileURLToPath(import.meta.url)){
@@ -157,7 +208,12 @@ if(process.argv[1]&&resolve(process.argv[1])===fileURLToPath(import.meta.url)){
   if(!process.env.DATABASE_URL||process.env.NODE_TLS_REJECT_UNAUTHORIZED==="0")fail("OWNER_URL");
   const {Client}=createRequire(resolve(process.cwd(),"package.json"))("pg");
   c=new Client({connectionString:process.env.DATABASE_URL,connectionTimeoutMillis:8000});
-  await c.connect();console.log(JSON.stringify(await readP6SignedCalendarCoverage(c)));
+  let receipts=null;
+  if(process.argv.length===3&&process.argv[2]==="--run-receipts"){
+   const input=readFileSync(0,"utf8");if(input.length>1024*1024)fail("RUN_RECEIPT_INPUT");
+   receipts=JSON.parse(input);selectP6RunReceiptScope(receipts);
+  }else if(process.argv.length!==2)fail("ARGUMENTS");
+  await c.connect();console.log(JSON.stringify(await readP6SignedCalendarCoverage(c,receipts)));
  }catch(e){console.error(JSON.stringify({status:"P6_SIGNED_CALENDAR_COVERAGE_HOLD",sqlstate:/^[A-Z0-9]{5}$/.test(e?.code??"")?e.code:null,providerCalls:0,databaseWrites:0}));process.exitCode=2;}
  finally{if(c)await c.end().catch(()=>{});}
 }
