@@ -1,7 +1,7 @@
 import {test} from "node:test";
 import assert from "node:assert/strict";
 import {createHash,generateKeyPairSync} from "node:crypto";
-import {admitP6NonpaidSourceDayGithub,loadP6ReviewedDayPlans,selectP6NonpaidSourceDay}
+import {admitP6NonpaidSourceDayGithub,loadP6ReviewedDayPlans,selectP6NonpaidSourceDay,projectP6ConditionalPolicyCustody}
  from "../scripts/v39_phase6_nonpaid_source_day_github_runtime_v39.mjs";
 const h=b=>createHash("sha256").update(b).digest("hex"),sha=c=>c.repeat(64),code="f".repeat(40);
 const fp=k=>h(k.export({format:"der",type:"spki"}));
@@ -15,7 +15,7 @@ function fixture(manifest=sha("a"),codeOverride=code){
   const day=i+1,first=iso(now+(i+1)*3600000);
   return Buffer.from(JSON.stringify({schema:"v39.phase6.reviewed-future-day-source-plan.v1",runDayIndex:day,
    expectedServiceStartUtc:iso(now+(i+25)*3600000),
-   templates:Array.from({length:12},()=>({runDayIndex:day,scheduledRequestUtc:first}))}));
+   templates:Array.from({length:12},()=>({runDayIndex:day,scheduledRequestUtc:first,serviceWindowEndUtc:iso(now+(i+26)*3600000)}))}));
  });
  const stable={independentStudyTrustPinsApproved:true,expectedReaderSessionLogin:"phase6_private_reader_login_ci_runtime",
   reviewedCodeSha:code,manifestSha256:manifest,calendarSha256:sha("b"),releaseSha256:sha("c"),rightsSha256:sha("d"),
@@ -176,4 +176,25 @@ test("T055 reports nearest future preparation opening/deadline and exact draw/ge
  assert(a.futureOutsideLookaheadCount>0);
  assert.equal(a.missedUnpublishedDays.length,0);
  assert.equal(a.selected.runDayIndex,2);
+});
+
+test("T102 protected future conditional custody is explicit owner-only, no publication or secret serialization",()=>{
+ const f=fixture(),e={...f.env,GITHUB_EVENT_NAME:"workflow_dispatch",GITHUB_ACTOR:"HKcode22",
+  P6_NONPAID_SOURCE_CONFIRM:"VERIFY_FUTURE_CONDITIONAL_POLICY_CUSTODY_NO_PROVIDER",P6_NONPAID_SOURCE_REQUESTED_DAY:"5"};
+ const ctx=admitP6NonpaidSourceDayGithub(e),plans=loadP6ReviewedDayPlans(ctx,f.read);
+ assert.equal(ctx.mode,"conditional_custody");assert.equal(ctx.requestedDay,5);
+ const r=projectP6ConditionalPolicyCustody(ctx,plans,f.calendar,f.indexes,iso(now),0,e);
+ assert.equal(r.status,"P6_ACTUAL_PROTECTED_CONDITIONAL_POLICY_CUSTODY_READONLY");
+ assert.equal(r.prospective.runDayIndex,5);assert.equal(r.prospective.preparedQueryCount,0);
+ assert.equal(r.exactThreePolicyDigestsValidated,true);assert.equal(r.exact31PlanPinsValidated,true);
+ assert.equal(r.conditionalPolicyFieldState,"ABSENT");assert.equal(r.nativePolicyPresent,false);
+ assert.equal(r.publicActorsVerified,false);assert.equal(r.providerCalls,0);assert.equal(r.databaseWrites,0);assert.equal(r.signaturesIssued,0);
+ assert(!JSON.stringify(r).includes("test-only"));assert(!JSON.stringify(r).includes(f.env.P6_NONPAID_DAILY_POLICY_SHA256));
+ for(const delta of [{GITHUB_ACTOR:"other"},{P6_NONPAID_SOURCE_REQUESTED_DAY:"4"},{GITHUB_EVENT_NAME:"schedule"},
+  {GITHUB_RUN_ATTEMPT:"2"},{AERODATABOX_API_KEY:"forbidden"}])
+  assert.throws(()=>admitP6NonpaidSourceDayGithub({...e,...delta}),/HOLD_P6_NONPAID_SOURCE_DAY_GITHUB_/);
+ assert.throws(()=>projectP6ConditionalPolicyCustody(ctx,plans,f.calendar,f.indexes,iso(now),1,e),/CONDITIONAL_CUSTODY_NOT_UNSIGNED/);
+ assert.throws(()=>projectP6ConditionalPolicyCustody(ctx,plans,f.calendar,f.indexes,iso(now+2*3600000),0,e),/CONDITIONAL_CUSTODY_NOT_UNSIGNED/);
+ f.indexes[4].claim_n=1;
+ assert.throws(()=>projectP6ConditionalPolicyCustody(ctx,plans,f.calendar,f.indexes,iso(now),0,e),/CONDITIONAL_CUSTODY_NOT_UNSIGNED/);
 });
