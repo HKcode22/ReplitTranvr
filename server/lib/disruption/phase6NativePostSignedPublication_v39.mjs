@@ -366,6 +366,7 @@ export async function readP6PostSourceQueryHints({sourcePool,trust,runDayIndex,q
    "JOIN clean.flight_snapshots s ON s.population_query_id=b.population_query_id::text AND s.fids_response_hash=b.response_hash "+
    "WHERE q.manifest_sha256=$1 AND q.run_day_index=$2 AND q.query_digest=ANY($3::text[]) AND s.frame_hash=$4 "+
    "AND s.prediction_state='PRE_DEPARTURE' AND s.horizon=q.horizon AND s.created_at<=s.prediction_cutoff_utc "+
+   "AND s.flight_instance_id NOT LIKE 'leg:g5a:%' "+
    "AND s.created_at<=$5::timestamptz AND b.source_expires_at_utc>$5::timestamptz "+
    "GROUP BY q.query_digest,q.horizon,q.airport_icao,q.service_window_start_utc,q.service_window_end_utc LIMIT 385",
    [trust.manifestSha256,runDayIndex,queryDigests,frameSha256,clock]);

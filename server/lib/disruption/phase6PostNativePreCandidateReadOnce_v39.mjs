@@ -14,6 +14,10 @@ import {readP6T24CurrentRegistrySet} from "./phase6PrivateT24RegistryTransport_v
 import {auditP5FuturePostActualPriorPreBatch} from "./phase5V0083FuturePostOriginalDb_v39.ts";
 const H=/^[a-f0-9]{64}$/;
 const ID=/^[-A-Za-z0-9_.:|]{5,200}$/;
+const conditionalId=id=>typeof id==="string"&&/^leg:g5a:[a-f0-9]{64}$/.test(id);
+const conditionalNamespace=id=>typeof id==="string"&&id.startsWith("leg:g5a:");
+const conditionalT24Schema="v39.phase6.conditional-t24-private-registry.v1";
+const nativeT24Schema="v39.phase6.native-t24-private-registry.v1";
 const hash=b=>createHash("sha256").update(b).digest("hex");
 const hold=s=>{throw Error("HOLD_P6_POST_NATIVE_PRE_"+s);};
 const utc=x=>{if(typeof x!=="string"||!Number.isFinite(Date.parse(x))||new Date(x).toISOString()!==x)hold("INVALID_UTC");return Date.parse(x);};
@@ -34,7 +38,7 @@ export function selectP6PostNativePreCandidatePage({index,selector,trust,sourceS
     (afterFlightId!==null&&!ID.test(afterFlightId)))hold("UNBOUND_PAGE_SCOPE");
  const begin=utc(sourceScope.expectedServiceWindowStartUtc),end=utc(sourceScope.expectedServiceWindowEndUtc);
  if(begin>=end)hold("INVALID_SOURCE_WINDOW");
- const by=new Map(),all=new Set();
+ const by=new Map(),all=new Set(),conditionalSeen=new Set();
  for(const e of index.privateParsedIndex.entries.filter(x=>x.lane==="LATER_PRE")){
   const b=index.getFrozen(e.filePath);
   if(!Buffer.isBuffer(b)||hash(b)!==e.fileSha256)hold("LATER_REGISTRY_BYTES_DRIFT");
@@ -55,6 +59,12 @@ export function selectP6PostNativePreCandidatePage({index,selector,trust,sourceS
       f.expectedHorizon!==sourceScope.horizon||by.has(f.expectedFlightInstanceId))hold("CROSS_SOURCE_OR_HORIZON");
    const t=utc(f.expectedSelectedTNativeUtc);
    if(t<begin||t>=end)hold("NATIVE_T_OUTSIDE_SIGNED_SOURCE");
+   // A signed conditional service is not a native operating-leg anchor.
+   // Validate common query/clock scope first, then count it separately.
+   if(conditionalNamespace(f.expectedFlightInstanceId)){
+    if(!conditionalId(f.expectedFlightInstanceId))hold("CONDITIONAL_IDENTITY_NAMESPACE_DRIFT");
+    conditionalSeen.add(f.expectedFlightInstanceId+"|"+f.expectedHorizon);continue;
+   }
    // Never substitute a valid PRE from another query to qualify this exact query.
    by.set(f.expectedFlightInstanceId,Object.freeze({flightInstanceId:f.expectedFlightInstanceId,
     expectedSelectedTNativeUtc:f.expectedSelectedTNativeUtc,boundSourceQueryDigests:Object.freeze([selector.queryDigestSha256])}));
@@ -69,16 +79,33 @@ export function selectP6PostNativePreCandidatePage({index,selector,trust,sourceS
      !Array.isArray(t24Current.privateRegistries)||t24Current.privateRegistries.length!==t24Current.registryCount||
      t24Current.registryCount>1024)hold("NO_CURRENT_AUTHENTICATED_T24_REGISTRY");
   for(const {reg,review,registryBytes} of t24Current.privateRegistries){
-   if(reg?.schema!=="v39.phase6.native-t24-private-registry.v1"||reg.manifestSha256!==trust.manifestSha256||
+   const conditional=reg?.schema===conditionalT24Schema;
+   if((!conditional&&reg?.schema!==nativeT24Schema)||reg.manifestSha256!==trust.manifestSha256||
       reg.runDayIndex!==selector.runDayIndex||!Buffer.isBuffer(registryBytes)||hash(registryBytes)!==review.registrySha256||
       !registryBytes.equals(Buffer.from(JSON.stringify(reg)))||!Array.isArray(reg.entries)||reg.entries.length>96)
     hold("T24_REGISTRY_SCOPE_DRIFT");
+   // readP6T24CurrentRegistrySet has already authenticated tier-specific
+   // Ed25519, source membership, retention and policy. Do not reinterpret
+   // a valid conditional registry as native or block its native siblings.
+   if(conditional&&(!H.test(reg.conditionalT24Scope?.protocolSha256??"")||
+      !H.test(reg.conditionalT24Scope?.externalContentUseReviewSha256??"")||
+      reg.conditionalT24Scope.protocolSha256!==review.conditionalT24Scope?.protocolSha256||
+      reg.conditionalT24Scope.externalContentUseReviewSha256!==review.conditionalT24Scope?.externalContentUseReviewSha256)||
+      !conditional&&(Object.hasOwn(reg,"conditionalT24Scope")||Object.hasOwn(review,"conditionalT24Scope")))
+    hold("T24_REGISTRY_TIER_DRIFT");
    for(const e of reg.entries){
+    if(conditional?!conditionalId(e.flightInstanceId):conditionalNamespace(e.flightInstanceId))
+     hold("T24_REGISTRY_TIER_DRIFT");
     if(e.queryDigestSha256!==selector.queryDigestSha256)continue;
     const t=utc(e.selectedTNativeUtc);
     if(reg.sourceRegistryPath!==selected.entry.filePath||reg.sourceRegistrySha256!==selected.entry.fileSha256||
        !ID.test(e.flightInstanceId??"")||by.has(e.flightInstanceId)||t<begin||t>=end||t-utc(e.cutoffUtc)!==86400000)
      hold("T24_POST_CANDIDATE_SCOPE_DRIFT");
+    if(conditional){
+     const key=e.flightInstanceId+"|T-24h";
+     if(conditionalSeen.has(key))hold("DUPLICATE_CONDITIONAL_T24_CANDIDATE");
+     conditionalSeen.add(key);continue;
+    }
     by.set(e.flightInstanceId,Object.freeze({flightInstanceId:e.flightInstanceId,
      expectedSelectedTNativeUtc:e.selectedTNativeUtc,boundSourceQueryDigests:Object.freeze([selector.queryDigestSha256])}));
    }
@@ -88,6 +115,7 @@ export function selectP6PostNativePreCandidatePage({index,selector,trust,sourceS
  const rest=ordered.filter(x=>afterFlightId===null||x.flightInstanceId>afterFlightId),page=rest.slice(0,pageSize);
  return privateResult({status:"SIGNED_LATER_NATIVE_POST_CANDIDATE_PAGE_NOT_ACTUAL_PRE",runDayIndex:selector.runDayIndex,
   totalCandidateCount:ordered.length,pageCandidateCount:page.length,remainingAfterPageCount:rest.length-page.length,
+  conditionalCandidatesExcludedFromNativeCount:conditionalSeen.size,
   providerCalls:0,databaseWrites:0,phase6PaidGo:false},page);
 }
 /** Actual restricted clients, current independently signed day + source query,
@@ -127,7 +155,7 @@ export async function readP6ActualNativePostPreCandidatePage({readerClient,sourc
     result.candidateCount!==page.pageCandidateCount||result.providerCalls!==0||result.databaseWrites!==0||result.phase6PaidGo!==false))hold("ACTUAL_PRE_READ_CLOCK_OR_SCOPE_DRIFT");
  const out={status:"ACTUAL_NATIVE_POST_PRE_CANDIDATE_PAGE_NO_GO",runDayIndex:exact.runDayIndex,
   totalCandidateCount:page.totalCandidateCount,pageCandidateCount:page.pageCandidateCount,
-  remainingAfterPageCount:page.remainingAfterPageCount,eligibleCount:result?.eligibleCount??0,
+  remainingAfterPageCount:page.remainingAfterPageCount,conditionalCandidatesExcludedFromNativeCount:page.conditionalCandidatesExcludedFromNativeCount,eligibleCount:result?.eligibleCount??0,
   unavailableCount:result?.unavailableCount??0,observedDbClockUtc:result?.completedDbClockUtc??observed,
   providerCalls:0,databaseWrites:0,postPacketsIssued:0,phase6PaidGo:false};
  return Object.freeze(Object.defineProperties(out,{
@@ -203,6 +231,7 @@ export function proposeP6NativePostPhysicalWindow({page,policyBytes,expectedPoli
  if(existingRequestSha256s.includes(requestSha256))return Object.freeze({...base,status:"POST_PHYSICAL_REQUEST_ALREADY_INDEXED_NO_REPLAY"});
  const ids=new Map(page.privateCandidates.map(x=>[x.flightInstanceId,x])),seen=new Set(),eligible=[];
  if(ids.size!==page.privateCandidates.length)hold("DUPLICATE_CANDIDATE_ID");
+ if(page.privateCandidates.some(c=>conditionalNamespace(c.flightInstanceId)))hold("CONDITIONAL_SERVICE_NOT_NATIVE_POST_ANCHOR");
  for(const x of page.privateDecisions){
   const c=ids.get(x.flightInstanceId);
   if(!c||seen.has(x.flightInstanceId))hold("POST_DECISION_SCOPE_DRIFT");

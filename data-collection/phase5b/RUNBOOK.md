@@ -65,3 +65,7 @@ I126/T120 is local-only, does not query production or expose secret values. The 
 ## Actual local predecessor result and protected preview route
 
 Owner exact T120 passed 2/2. Actual Replit inventory returned HOLD_NO_EXACT_LOCAL_PREDECESSOR, directoriesChecked=0, rejectedDirectories=0, distinctValidCommitments=0, all effects zero. Do not rerun or assume GitHub protected policy absence. #980 custody after safe release is next. #981 I127/T121 candidate can accept exact reviewed commitment metadata through `conditional_review_base64` + `conditional_review_sha256` in owner-only protected custody mode, without writing a decision file into main; prior committed-file route remains. Metadata only, never policy bytes or credentials. The protected runtime recomputes actual commitment/clock and checks review shape/scope; candidate preview does not install or export policy bytes. Installation remains separately reviewed, do not imply it is completed.
+
+## Mixed-tier POST separation
+
+I128/T122 fixes candidate-only coexistence defect before prospective conditional commissioning: native POST must neither hold on valid already authenticated conditional T24 registry nor treat conditional later service as native anchor. Exclude/count separate conditional tier, preserve native peer, fail closed on malformed/duplicate/tier drift. Native hints and lineage filter namespace. No conditional POST issuer or physical gate-out truth created; F027/F029 stay open. #981 candidate only.

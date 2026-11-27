@@ -408,7 +408,8 @@
         "I123",
         "I125",
         "I126",
-        "I127"
+        "I127",
+        "I128"
       ],
       "next": "Protected policy custody, exact reviewed commissioning, positive conditional signature and PRE; actual protected commitment decision preview and separate authorized install/readback outstanding",
       "closureStatus": "NOT_CLOSED",
@@ -432,7 +433,8 @@
       "classification": "PARTIAL_OR_OPEN",
       "implementations": [
         "I005",
-        "I081"
+        "I081",
+        "I128"
       ],
       "next": "Independent same-leg same-milestone physical label or report insufficient",
       "closureStatus": "NOT_CLOSED",

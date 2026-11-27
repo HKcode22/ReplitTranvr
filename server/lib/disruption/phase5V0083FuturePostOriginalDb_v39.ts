@@ -336,6 +336,7 @@ export const P5_FUTURE_POST_ACTUAL_PRE_SQL=
    " AND fp.population_role='requested_airport_primary'"+
    " AND fp.source_type='fids'"+
    " AND fp.codeshare_resolution_status='confirmed_operating_leg'"+
+   " AND s.flight_instance_id NOT LIKE 'leg:g5a:%'"+
    " AND fp.available_at<=s.prediction_cutoff_utc"+
    " AND fp.provider_content_expired_at_utc IS NULL"+
    " AND r.raw_expired_at_utc IS NULL AND r.raw_payload IS NOT NULL"+

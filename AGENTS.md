@@ -181,3 +181,6 @@ Read [the permanent seven-priority and seven-requirement F/I/C/T crosswalk](data
 
 
 **Nov27 actual owner T120:** exact test 2/2 PASS; read-only local inventory returned HOLD_NO_EXACT_LOCAL_PREDECESSOR with directoriesChecked=0, all effects zero. This is NOT protected secret absence; no rerun/recreate old bundle. I127/T121 enables bounded exact reviewed commitment metadata as owner-only protected preview input, with original file fallback; no policy export or install. #980 remains unchanged; protected custody after safe cutover, then separate exact commissioning.
+
+
+**Nov27 I128/T122:** native POST selector previously rejected all conditional T24 registry schemas and could include conditional later IDs in native candidate pages. Preserve native peer after authenticated conditional-tier enumeration, exclude/count conditional identities without claiming native eligibility, retain hard tier drift/duplicate checks, native hint and lineage SQL exclude leg:g5a namespace. Separate conditional POST issuance and physical labels remain unresolved; no historical production recurrence claimed. #980 unchanged.
