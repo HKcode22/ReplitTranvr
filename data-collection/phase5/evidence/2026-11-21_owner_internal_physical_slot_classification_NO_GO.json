@@ -1,0 +1,32 @@
+{
+  "evidenceKind": "owner-supplied terminal output; not independent reexecution",
+  "helperGitBlob": "2d58fa89f1249d5482dc5165d76986c610d198c6",
+  "checkedMain": "781140cde71af3b72376c2db9f0fdb84204a2b7c",
+  "receipt": {
+    "schema": "travnr.phase6.physical-slot-name-classification.v1",
+    "status": "OWNER_PHYSICAL_SLOT_CLASSIFICATION_ONLY_NO_GO",
+    "observedAtUtc": "2026-11-21T17:50:59.071Z",
+    "slotClasses": {
+      "visibility": "VISIBLE_SQL_METADATA_ONLY",
+      "value": {
+        "total": 2,
+        "proposer": 1,
+        "proposer_active": 1,
+        "retention": 1,
+        "retention_active": 0,
+        "logical": 0,
+        "other_physical": 0
+      }
+    },
+    "allVisibleSlotsMatchDocumentedInternalNames": true,
+    "managedOwnershipOrRotationVerified": false,
+    "managedReadReplicasVerified": false,
+    "sourceRowsRead": 0,
+    "providerCalls": 0,
+    "databaseWrites": 0,
+    "exactDisabledStageReadback": true,
+    "sourceEnabled": false,
+    "phase6PaidGo": false
+  },
+  "interpretation": "Both visible slots match internal WAL infrastructure naming. No other physical or logical slots; no further slot-name query needed. Preserve both. This is not a control-plane inventory or rotation/access attestation. Keep existing reviewed seven-day PITR recovery-only boundary; do not infer managed replica, log or bucket IAM from SQL."
+}

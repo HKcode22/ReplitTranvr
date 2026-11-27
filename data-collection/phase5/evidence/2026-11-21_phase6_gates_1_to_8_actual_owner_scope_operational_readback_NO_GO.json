@@ -1,0 +1,220 @@
+{
+  "schema": "v39.phase6.actual-owner-operational-readback.v1",
+  "capturedAtUtc": "2026-11-21T16:19:18.668Z",
+  "independentSources": [
+    "GitHub Actions run/job logs read-only",
+    "GitHub main and source files",
+    "User-supplied Replit owner PostgreSQL readonly results",
+    "Master issue #413 prior owner commissioning receipts"
+  ],
+  "repo": "HKcode22/ReplitTranvr",
+  "productionMainSha": "781140cde71af3b72376c2db9f0fdb84204a2b7c",
+  "sourceEnabled": false,
+  "paidGo": false,
+  "providerPaidRequestsByTheseReviews": 0,
+  "productionWritesByTheseReviews": 0,
+  "exactMondayStage": {
+    "codeSha": "781140cde71af3b72376c2db9f0fdb84204a2b7c",
+    "manifestSha256": "b2a691cb411af61c2bfdc42c55506e0ee86e45bfa3e22b420bbd738dc98ee4e4",
+    "calendarSha256": "55ea0dd4b50d43af11af65a1e2910928e98a731ffa5efdeda7eee98ac451077b",
+    "stageCodeAndManifestVerified": true,
+    "sourceEnabled": false,
+    "firstSourceUtc": "2026-11-23T23:45:00.000Z"
+  },
+  "gateStatuses": [
+    {
+      "gate": 1,
+      "status": "IN_PROGRESS",
+      "verified": [
+        "six existing Phase7 LOGIN actors confirmed in owner read-only PostgreSQL inventory",
+        "four restricted preservation actors authenticated Nov20",
+        "canonical sixteen-field mechanical policy route inventory",
+        "Review-only PR #937 exact head 5a91d846202cbccdf352f379e9f4648d6d9e6570 implements explicit non-injective native status candidate with synthetic tests; not real production mapping, joint reconstruction or scientific parity approval",
+        "Owner recovered exact public OpenAPI 1.15.4.0 SHA256 63b8daf194858a27ea487308f34839def760aadda2acd9f81c82c466f9de7f09: all 13 FlightStatus values, no paid request. PR #937 exact head 535c61f02aa87790d92000c1a976abe95617882e validates exhaustive non-injective review candidate; focused disposable PG16 workflows 44928946763 and 44928946847 passed, full CI pending.",
+        "Exact status-domain PR #937 predecessor 535c61f02aa87790d92000c1a976abe95617882e all seven workflows passed; newer head includes Gate3 writer preflight, separate CI."
+      ],
+      "open": [
+        "independently reviewed actual as-of source transform, non-reconstruction, source-reference purpose policy bytes",
+        "production PRE policy row readback, signer authority and disarmed integrated native proof",
+        "current native status categorical_dictionary maps each distinct string to a unique index; known dictionary permits exact inversion. Independent field-specific derived-work and reconstruction review, not a mere categorical encoding, is needed; no changing the frozen estimand or deleting Packet A fields"
+      ]
+    },
+    {
+      "gate": 2,
+      "status": "IN_PROGRESS",
+      "verified": [
+        "four scoped Phase7 preservation actor sessions authenticated Nov20 with four secret names present",
+        "two additional Phase6 production private transport logins independently verified read-only, GitHub Actions run 44917566057"
+      ],
+      "open": [
+        "POST independently reviewed policy bytes and restricted actor readiness; current issuer supports explicit censor after reviewed observation, not numerical truth issuance",
+        "genuine same-leg continuous actual gate-out outcome where independently attested; otherwise explicit censoring; production actual positive outcome is post-GO evidence, not a prelaunch fabricated row"
+      ]
+    },
+    {
+      "gate": 3,
+      "status": "IN_PROGRESS",
+      "verified": [
+        "production V0107 STOPPED installed and read back",
+        "primary protected child run 44915360246 succeeded",
+        "primary protected child run 44917214631 succeeded",
+        "retention read-only sentinel run 44921362060 NO_OVERDUE_REFERENCES 838/838 verified",
+        "Nov19 owner observed Replit PITR enabled, ordinary rotation window seven days (168h), scheduled backups off; recovery-only control reviewed and destructive restore drill expressly not required",
+        "Nov14 exact 65 historical primary bucket objects physically absent after separately authorized deletion; 838 verified reference markers, not 838 individual physical examinations",
+        "V0107 positive disposable PG16 expiry behavior, run 44875915991: four tests passed",
+        "additional current-main primary-only protected children 44923949897 and 44926668721 succeeded; latter actual job 136914155002 verified V0107 23h margin, no due originals, no STOP, no writes possible",
+        "Owner set only P7_EXPIRY_APPROVED_MAIN_SHA to exact current main; restricted Phase7 read-only job 136918090173/run 44927953065 PASS at 2026-11-21T17:04:09.820Z, 0 live/due links, 0 due bundles/fragments, 0 deletions/provider calls; primary sibling skipped",
+        "Owner configured exact Monday manifest b2a691cb411af61c2bfdc42c55506e0ee86e45bfa3e22b420bbd738dc98ee4e4, private APPLY_DUE_ONLY, P7 due-only and full-retention backstop flags; actual full-scope run 44929165704 both jobs succeeded. Primary job 136921785419 at DB 17:17:19.117Z primary V0107, 0 due/live originals, distinct actors, no STOP, 0 deletions, no writes possible; private at 17:17:19.359567Z 0 due packets/indexes/foreign, claims 0, no STOP or writes possible. P7 job 136921785702 at 17:17:16.274Z 0 due links/fragments/bundles, no deletions/provider calls. Exact main remains 781140cde71af3b72376c2db9f0fdb84204a2b7c. No replay.",
+        "PR #937 successor 17b15859a5523a2bcd5d4a86775b7c0ae1dffca5 preflight verifies expiry writer in zero-work APPLY (catalog-only rollback). Disposable PG16 run 44929557491 job 136922968937: 10 tests, 3 files PASS incl wrong writer and ACL drift, no new roles, migration or actual production mutation; exact new full safety pending."
+      ],
+      "open": [
+        "P7 zero-work APPLY authenticates reader but writer connection is lazy until actual due items; retain existing login evidence and distinguish no-op from writer execution",
+        "non-PITR object IAM/log/replica controls, actual recurring deadline enforcement, short-lived custody vs hard-clock margin",
+        "future genuine positive due-item deletion observation under live load; do not repeat the historical 65 deletions"
+      ],
+      "knownCaveats": {
+        "primaryObjectPresenceChecked": false,
+        "backupOrPitrRetentionVerified": false,
+        "pitrControlPolicyPreviouslyReviewed": true,
+        "pitrConsoleIndependentlyReexecutedByAssistant": false,
+        "noProductionRestoreDrillRequired": true
+      }
+    },
+    {
+      "gate": 4,
+      "status": "DONE",
+      "verified": [
+        "PR #926 merged and scoped technical release review recorded"
+      ],
+      "open": []
+    },
+    {
+      "gate": 5,
+      "status": "DONE",
+      "verified": [
+        "production actual exact 31-day prospective Monday stage committed disabled",
+        "independent stage/cost review readback verified"
+      ],
+      "open": []
+    },
+    {
+      "gate": 6,
+      "status": "IN_PROGRESS",
+      "verified": [
+        "Replit callback-only publish status successful",
+        "public-root callback-only GET health passed",
+        "legacy owner-local keypair/actor setup already commissioned"
+      ],
+      "open": [
+        "six production policy bytes and 31 static binding values accepted and independently read back",
+        "receiver signed callback provenance and production PRE/POST issuer roles"
+      ],
+      "knownCaveats": {
+        "publicRootHealthNotCallbackSignatureProof": true
+      }
+    },
+    {
+      "gate": 7,
+      "status": "IN_PROGRESS",
+      "verified": [
+        "direct read-only clock probe run 44917568249 succeeded",
+        "nine external relay ROLLING_ROOT wakes 14:38:17–15:58:18 UTC, consecutive creation intervals 599–601 sec",
+        "two protected primary FIDS child executions success",
+        "PR #936 review-only count-mismatch patch 9/9 exact-head CI success",
+        "actual owner-dispatched three-hop no-provider chain 190c7d6fa707fd3ddd7409bb9a9d5d55 succeeded on current main: 44925689007 -> 44925734532 -> 44925786837; six real read-only waves, exactly two acknowledged successors, terminal no successor, zero provider/DB/collection dispatches",
+        "12 external relay wake observations with 599–601s spacing, 14:38–16:28 UTC",
+        "Relay review-only PR #24 exact head 4dedbdbe751726af864a5c811f41d75f2a009ad0 4/4 CI passed: proposed Dec30 08Z clock lease covers Dec29 04Z POST tail plus 28h; no schedule mutation",
+        "Relay review-only PR #23 exact head 14a6c56f5918c9b07a17618d455b7ce52c4940bf CI run 44928254780 passed: rejects primary-only bootstrap and requires actual native private APPLY receipt for full-retention classification",
+        "Actual manually dispatched full-retention baseline 44929165704, both jobs and all three scope receipts PASS; not autonomous recurrence. Relay #23 candidate parser revised to actual projected private receipt format at 7c33c81ab076239834574161432b3fb8564a4f5c; new CI required.",
+        "Consolidated relay PR #23 at e6bd8dfac19c42b4e979d398c5a6f977424c145e: all five CI workflows PASS (44929498575,44929498600,44929498579,44929498590,44929498594), relay unit 54/54, lease 8/8. Exact #24 files incorporated, extra released-Monday lease regression; #24 closed superseded, #23 ready. Scoped technical COMMENT 6006942140; no independent APPROVE minted. Production primary-only external run 44929378382 -> 44929410835 job 136922540439 at 17:20:05.943Z succeeded after full target commissioning, zero due/live, private GRANTED, research sibling skipped."
+      ],
+      "open": [
+        "four-hour native schedule recovery: six-slot diagnostic 2/6 observed success",
+        "live PRE POST budget STOP actor and emergency recovery rehearsal",
+        "One coordinated normal merge + exact relay audit re-pin + full-retention opt-in on existing pair; do not reset history or reconfigure cron. Require actual recurrent evidence and deadline assurance."
+      ],
+      "failedRun": {
+        "id": 44921364637,
+        "rootReason": "HOLD_P6_ROLLING_CONTROLLER_GITHUB_HISTORY_UNAVAILABLE_OR_INCOMPLETE_ACTIVE_SWEEP_COUNT",
+        "successorDispatched": false
+      }
+    },
+    {
+      "gate": 8,
+      "status": "IN_PROGRESS",
+      "verified": [
+        "free account prearm observed Nov21 14:59:51 UTC",
+        "API units 59968 remaining of 60000",
+        "alert credits 1830",
+        "active billable subscriptions 0"
+      ],
+      "open": [
+        "independently accepted scoped SOURCE AUTH artifact",
+        "auth ledger approval and exact evidence hash linkage",
+        "enabled readback and independent separate paid GO",
+        "first actual paid SOURCE receipt after GO"
+      ],
+      "exactLedger": {
+        "path": "data-collection/evidence/ledgers/V3.9_PHASE6_SOURCE_ENABLE_APPROVALS.json",
+        "evidenceEntries": 29,
+        "approvals": 0
+      }
+    }
+  ],
+  "ownerAttempt": {
+    "status": "HOLD_LOCAL_MAIN_CHANGED",
+    "afterRemoteAndLocalPinPrecheck": false,
+    "databaseConnectionAttempted": false,
+    "description": "Owner-local script exited at local git rev-parse HEAD check prior to connecting to PostgreSQL. This is not an ACL/prod DB failure and does not invalidate prior commissions."
+  },
+  "evidenceLinks": [
+    "https://github.com/HKcode22/ReplitTranvr/issues/413#issuecomment-7037203472",
+    "https://github.com/HKcode22/ReplitTranvr/actions/runs/44917566057",
+    "https://github.com/HKcode22/ReplitTranvr/actions/runs/44917568249",
+    "https://github.com/HKcode22/ReplitTranvr/actions/runs/44921362060",
+    "https://github.com/HKcode22/ReplitTranvr/actions/runs/44921364637",
+    "https://github.com/HKcode22/ReplitTranvr/actions/runs/44921807603",
+    "https://github.com/HKcode22/ReplitTranvr/pull/936",
+    "https://github.com/HKcode22/ReplitTranvr/blob/main/data-collection/phase5/evidence/2026-11-19_replit_pitr_recovery_control_review.md",
+    "https://github.com/HKcode22/ReplitTranvr/blob/main/data-collection/phase5/evidence/2026-11-19_owner_inert_freeze_and_pitr_console_observation_NO_PHASE6_GO.json",
+    "https://github.com/HKcode22/ReplitTranvr/issues/413#issuecomment-6877828297",
+    "https://github.com/HKcode22/ReplitTranvr/actions/runs/44875915991",
+    "https://github.com/HKcode22/ReplitTranvr/actions/runs/44925689007",
+    "https://github.com/HKcode22/ReplitTranvr/actions/runs/44925734532",
+    "https://github.com/HKcode22/ReplitTranvr/actions/runs/44925786837",
+    "https://github.com/HKcode22/ReplitTranvr/actions/runs/44926668721",
+    "https://github.com/HKcode22/ReplitTranvr/actions/runs/44927953065",
+    "https://github.com/HKcode22/TravnrClockRelay/pull/23",
+    "https://github.com/HKcode22/TravnrClockRelay/pull/24",
+    "https://github.com/HKcode22/ReplitTranvr/pull/937",
+    "https://github.com/HKcode22/ReplitTranvr/actions/runs/44929165704",
+    "https://github.com/HKcode22/ReplitTranvr/commit/535c61f02aa87790d92000c1a976abe95617882e",
+    "https://github.com/HKcode22/TravnrClockRelay/actions/runs/44929498600",
+    "https://github.com/HKcode22/TravnrClockRelay/actions/runs/44929498579",
+    "https://github.com/HKcode22/ReplitTranvr/actions/runs/44929410835",
+    "https://github.com/HKcode22/ReplitTranvr/actions/runs/44929557491"
+  ],
+  "sourceRightsReview": "data-collection/phase5/evidence/2026-11-19_aerodatabox_bounded_published_terms_source_use_review.md",
+  "retentionCertification": false,
+  "fullyAutonomousThreeHopCertified": false,
+  "derivedResearchRightsIndependentlyApproved": false,
+  "sourceAuthorizationGranted": false,
+  "phase6PaidGo": false,
+  "boundedNoProviderThreeHopRehearsal": {
+    "certified": true,
+    "scope": "ACTUAL_GITHUB_READONLY_HANDOFF_NO_PROVIDER_NO_DB_NO_COLLECTION",
+    "runIds": [
+      44925689007,
+      44925734532,
+      44925786837
+    ],
+    "chainId": "190c7d6fa707fd3ddd7409bb9a9d5d55",
+    "waves": 6,
+    "rehearsalDispatches": 2,
+    "providerCalls": 0,
+    "databaseReads": 0,
+    "databaseWrites": 0,
+    "collectionDispatches": 0,
+    "integratedPaidOperationCertified": false
+  }
+}
