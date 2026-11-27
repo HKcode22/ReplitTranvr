@@ -18,7 +18,36 @@ const parse=(b,d,max)=>{
 const pin=(b,f)=>{
  try{const k=createPublicKey(b);return k.asymmetricKeyType==="ed25519"&&hash(k.export({type:"spki",format:"der"}))===f;}catch{return false}
 };
-export function prepareP6ConditionalPolicyCandidate({dailyBytes,signingBytes,transportBytes,baseDigests,trust,reviewBytes,reviewSha256,publicPins,prospective,observedUtc}){
+// The caller's observed DB receipt must still be authenticated separately.
+ // Bind its proposed clock to the same exact 31 reviewed plans used by
+ // the existing producer; a marker policy has no independent end-day field.
+function requirePlanCoverage(p,r,reviewedPlanBytes,prospective,decision){
+ const pins=p.dayPlanSha256s;
+ if(!Array.isArray(pins)||pins.length!==31||!Array.isArray(reviewedPlanBytes)||reviewedPlanBytes.length!==31||
+    pins.some((d,i)=>!exact(d,["runDayIndex","sha256"])||d.runDayIndex!==i+1||!H.test(d.sha256??""))||
+    new Set(pins.map(d=>d.sha256)).size!==31||
+    !Number.isSafeInteger(r.minimumPreparationLeadMinutes)||r.minimumPreparationLeadMinutes<15||r.minimumPreparationLeadMinutes>180||
+    !Number.isSafeInteger(r.maximumPreparationLookaheadMinutes)||r.maximumPreparationLookaheadMinutes<r.minimumPreparationLeadMinutes||
+    r.maximumPreparationLookaheadMinutes>2880)hold("REVIEWED_PLAN_PINS");
+ let first=Infinity,last=-Infinity;
+ for(let i=0;i<31;i++){
+  const d=parse(reviewedPlanBytes[i],pins[i].sha256,500000);
+  if(d.schema!=="v39.phase6.reviewed-future-day-source-plan.v1"||d.runDayIndex!==i+1||!iso(d.expectedServiceStartUtc)||
+     !Array.isArray(d.templates)||d.templates.length<12||d.templates.length>384||
+     d.templates.some(t=>t?.runDayIndex!==i+1||!iso(t.scheduledRequestUtc)||!iso(t.serviceWindowEndUtc)||
+      Date.parse(t.scheduledRequestUtc)>=Date.parse(t.serviceWindowEndUtc)))hold("REVIEWED_PLAN_SHAPE");
+  if(i+1===prospective.runDayIndex)first=Math.min(...d.templates.map(t=>Date.parse(t.scheduledRequestUtc)));
+  if(i+1>=prospective.runDayIndex)last=Math.max(last,...d.templates.map(t=>Date.parse(t.serviceWindowEndUtc)));
+ }
+ if(first!==Date.parse(prospective.firstRequestUtc)||first-r.maximumPreparationLookaheadMinutes*60000!==Date.parse(prospective.preparationOpensUtc))
+  hold("REVIEWED_PLAN_CLOCK");
+ // Since the current SOURCE marker is prospective for all subsequent
+ // study days, refuse a truncated delegation rather than silently sign
+ // later days whose conditional PRE reviewer has expired.
+ if(Date.parse(decision.validUntilUtc)<=last)hold("REVIEWED_PLAN_INTERVAL");
+ return new Date(last).toISOString();
+}
+export function prepareP6ConditionalPolicyCandidate({dailyBytes,signingBytes,transportBytes,baseDigests,trust,reviewBytes,reviewSha256,publicPins,prospective,observedUtc,reviewedPlanBytes}){
  // A reviewed decision must name exact old policy hashes and a future,
  // still-unpublished study day. An owner generic GO is not this record.
  if(!exact(baseDigests,["daily","signing","transport"])||!iso(observedUtc)||
@@ -60,6 +89,7 @@ export function prepareP6ConditionalPolicyCandidate({dailyBytes,signingBytes,tra
     Object.hasOwn(p,"conditionalLaterPermitReview")||Object.hasOwn(q,"conditionalServicePolicy")||
     Object.hasOwn(v,"conditionalT24Scope")||Object.hasOwn(v,"conditionalLaterDayAppendPolicy")||
     Object.hasOwn(day,"conditionalLaterPreScope"))hold("EXACT_BASE_POLICY");
+ const reviewedConditionalThroughUtc=requirePlanCoverage(p,r,reviewedPlanBytes,prospective,decision);
  const fp=publicPins?.laneFingerprintSha256,proof=publicPins?.proofFingerprintSha256,raw=publicPins?.lanePublicKeyBase64;
  if(![fp,proof,v.laterReviewerFingerprintSha256,trust.dayReviewerFingerprintSha256,trust.queryReviewerFingerprintSha256].every(x=>H.test(x??""))||
     new Set([fp,proof,v.laterReviewerFingerprintSha256,trust.dayReviewerFingerprintSha256,trust.queryReviewerFingerprintSha256]).size!==5||
@@ -82,7 +112,7 @@ export function prepareP6ConditionalPolicyCandidate({dailyBytes,signingBytes,tra
   P6_PHASE7_PRE_LANE_EVIDENCE_AUTHORITY_PUBLIC_KEY_BASE64:raw,P6_CONDITIONAL_LATER_METADATA_READ_ENABLED:"1"};
  if(!deriveP6ConditionalT24Scope(nextDaily)||!admitP6ConditionalT24Reviewer(e,nextDaily,trust)||!admitP6ConditionalLaterReviewer(e,nextDaily,trust))hold("ACTUAL_ADMISSION");
  const result={status:"CONDITIONAL_POLICY_CANDIDATE_PREPARED_NOT_INSTALLED",firstEligibleRunDayIndex:prospective.runDayIndex,
-  dailySha256:hash(b),signingSha256:hash(s),transportSha256:hash(t),reviewSha256,
+  dailySha256:hash(b),signingSha256:hash(s),transportSha256:hash(t),reviewSha256,reviewedConditionalThroughUtc,
   nativePolicyPreserved:true,standaloneNoT24Approved:false,protectedActualReadbackVerified:false,providerCalls:0,databaseWrites:0,githubWrites:0,paidGo:false};
  Object.defineProperty(result,"privatePolicyBytes",{value:Object.freeze({daily:b,signing:s,transport:t}),enumerable:false,writable:false});
  return Object.freeze(result);
