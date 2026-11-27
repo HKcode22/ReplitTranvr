@@ -1,11 +1,11 @@
 {
-  "asOfUtc": "2026-11-27T14:20:10.429129Z",
+  "asOfUtc": "2026-11-27T20:46:08.314097Z",
   "exactCandidate": "c4408c621a84a2549355d935cca7333c5527d3c2",
   "canonicalRegister": "../phase6/RECOVERY_REGISTER.md",
   "counts": {
-    "narrowCorrected": 15,
+    "narrowCorrected": 16,
     "exactCiGreenPendingDeployment": 10,
-    "partialOrOpen": 32,
+    "partialOrOpen": 31,
     "historicalLoss": 2
   },
   "failures": [
@@ -564,7 +564,7 @@
     },
     {
       "id": "F040",
-      "classification": "PARTIAL_OR_OPEN",
+      "classification": "NARROW_CORRECTION_RECORDED",
       "implementations": [
         "I045",
         "I084",
@@ -573,10 +573,11 @@
         "I112",
         "I132"
       ],
-      "next": "Exact #980 owner cutover and post-pin readback",
-      "closureStatus": "NOT_CLOSED",
+      "next": "Preserve exact reviewed pins and natural-drain/quiet helper; future overlaps still require fresh guard",
+      "closureStatus": "CLOSED",
       "scientificRisk": "OPERATIONAL",
-      "workstream": "release_reliability"
+      "workstream": "release_reliability",
+      "closureEvidence": "Repeated cutovers previously held on ACTIVE_RELAY_NO_CANCEL / ACTIVE_PARENT_OR_CHILD_NO_CANCEL; never cancel or treat unreadable metadata as quiet. On Nov27 the fixed-base/target one-shot wait completed its exact read-only drain, original helper passed fresh CI/STOP/tasks/all-main-and-relay quiet/130-minute checks, #980 merged as 24df876fc612c0e4fdfb6f69585ed90bcc56f9b8, owner pins converged, and both primary-FIDS/Phase7 expiry jobs passed in 46061597861. This closes that bounded cutover hold only; future overlaps still require the same guard. No scientific PRE or paid capture inferred. [Post-#980 checkpoint](../phase5b/checkpoints/2026-11-27_PHASE5B_POST980_DEPLOYMENT_AND_CUSTODY_READBACK.md)"
     },
     {
       "id": "F041",
@@ -799,8 +800,8 @@
     }
   ],
   "binaryClosure": {
-    "closed": 15,
-    "notClosed": 44,
+    "closed": 16,
+    "notClosed": 43,
     "definition": "CLOSED only for an explicitly evidenced, narrowly defined correction already recorded; no broader component or future recurrence guarantee. Partial, candidate-only, historical loss with unverified recurrence prevention, and missing positive production proof are NOT_CLOSED. No previously closed ID reopened."
   },
   "riskDefinition": {

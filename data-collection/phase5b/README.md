@@ -1,26 +1,21 @@
-# Phase 5B — operational engineering recovery
+# Phase5B — operational engineering recovery
 
-Phase 5B is an engineering workstream alongside Phase 6, **not a scientific reboot or new collection gate**. Simplify operations, preserve single-purpose roles and bounded parallelism, reuse existing actors, reduce owner commands and ambiguous state; do not change f.8, Packet A/B, Amendment E, C+D, 16 features, signed calendar, budgets, splits, or provider rights. No replay, no fabricated PRE, no extended retention.
+Phase5B simplifies recovery operations alongside Phase6. It does not restart the study or add scientific gates. Preserve f.8, Packet A/B, canonical Amendment E, C+D, all16 feature dispositions plus the distinct purpose-bound reference lane, signed calendar/draw, budget/STOP, provider rights, same-flight grouping and20/5/6 split. No replay, fabricated PRE, extended raw retention or schedule substitution for physical gate-out.
 
-- [Canonical F/I/T/C register](../phase6/RECOVERY_REGISTER.md) remains authoritative for immutable IDs; do not duplicate or renumber it. [Closure matrix](closure-matrix.json) is a dated evidence view, not a second authoritative register.
-- [Current checkpoint](checkpoints/2026-11-27_0305_PST_LIVE_RETENTION_AND_NO_DUE_READBACK.md) records current relay/retention evidence, two narrow closures, active-worker hold and next safe release order.
-- [Operational runbook](RUNBOOK.md) consolidates owner steps and stop conditions.
-- [Retention inventory script](../../scripts/v39_phase5b_retention_p7_inventory_owner.mjs) counts binding custody separately from actual durable storage. It remains a follow-on branch artifact, not deployed on main; the owner ran the exact read-only copy against production and T114 passed 4/4 with the SQL readback at 09:07:06Z.
+## Current status — Nov27 post-#980
 
-Historical Phase 6 checkpoints stay in place to preserve links and hashes. New operational consolidation work belongs here. Existing executable paths stay unchanged; do not move live scripts or workflows solely for organization. Keep tested #980 head c4408c62 untouched until release; this follow-on branch is separate to avoid invalidating exact CI.
+- **Production:** #980 merged as `24df876fc612c0e4fdfb6f69585ed90bcc56f9b8`; owner verified exact runtime/retention pins and relay executable unchanged. Current-main primary FIDS + Phase7 retention run `46061597861` passed both jobs.
+- **Science:** latest owner inventory remains 134 timely bindings, zero linked/cutoff-safe PRE and zero global Packet B fragments/bundles/links. Day5 protected read-only custody run `46065789071` passed and found the future conditional fields ABSENT, metadata disabled, and no installation/precommit. No positive PRE, Packet B, POST or physical label is evidenced.
+- **Register:** 59 failure families;16 narrow corrections closed,43 not closed. All P0 families F005/F010/F026/F027/F029/F042 and all ten complete component objectives remain open. Failure families are not counts of newly active incidents.
+- **PR:** #981 remains a stacked draft on the existing recovery branch. Exact head `f7990b1b0c2f9ea8221dfdc7f1f2bd791de11c62` passed both jobs in run `46015420628`; its changes are not all deployed by #980.
 
-Latest actual owner checkpoint: [01:07 PST confirmed Packet B empty and custody isolation](checkpoints/2026-11-27_0107_PST_ACTUAL_PACKET_B_EMPTY_AND_CUSTODY_ISOLATION.md). I120/T114 real owner 4/4 and SQL passed. I121/T115 follow-on staging; not part of #980.
+## Start here
 
-Latest [binary closure checkpoint](checkpoints/2026-11-27_0305_PST_LIVE_RETENTION_AND_NO_DUE_READBACK.md): 13 narrowly evidenced corrections CLOSED and 44 NOT_CLOSED (10 exact-CI fixes awaiting deployment, 32 partial/open, 2 historical losses). F032 closes only register/matrix integrity; all six P0 scientific families remain open. CI and relay ACKs do not prove data collection.
+- [Latest dated checkpoint](checkpoints/2026-11-27_PHASE5B_POST980_DEPLOYMENT_AND_CUSTODY_READBACK.md) is the current release and owner-evidence state. Earlier checkpoints below are historical snapshots, not live instructions.
+- [Owner report](reports/README.md) explains evidence of change and remaining scientific blockers.
+- [Current progress and failure-family report](reports/2026-11-27_RECOVERY_PROGRESS.md) orders all open F IDs by priority.
+- [Permanent F/I/C/T register](../phase6/RECOVERY_REGISTER.md) is authoritative for immutable identifiers. [Closure matrix](closure-matrix.json) is a dated, tested evidence projection, not another register.
+- [Runbook](RUNBOOK.md) begins with current no-repeat instructions; its dated handoffs are retained as historical context.
+- [Retention inventory script](../../scripts/v39_phase5b_retention_p7_inventory_owner.mjs) is read-only and already ran once; do not repeat the same census without a new operational interval or cause.
 
-
-Current live hold (12:04:56Z): main 2b9cb404 and relay 2d96b223 are unchanged; 20 P5 SOURCE children remain in progress and none are queued. The 11:47Z source parent acknowledged eight child dispatches, which are not paid receipts. Preserve the active runs; the held owner helper cannot pass its quiet guard yet. #980 remains open/draft at c4408c62 with 26 required CI paths green. #981's 94aa1f6 evidence-sync head passed exact run 45993869374, including T116 and disposable PG16. No positive PRE, Packet B, POST or physical-label proof exists; the PR remains a stacked draft and is not deployed.
-
-
-[Current owner recovery report](reports/README.md) and [all58 registered families](reports/2026-11-27_RECOVERY_PROGRESS.md): F058/I129/T123 records actual GitHub CLI log transport rejection; I130/T124 supplies reproducible evidence-first reports. Thirteen scoped closures preserved;45 NOT_CLOSED pending exact acceptance. Actual matched60 unreadable receipts recovered as30 timely originals/30 no-content, not positive PRE. Reuse other agent I124/T118 for the [single Day4 owner readback](owner/2026-11-27_day4_shape_and_storage_readonly.sh). Routine existing recovery branch integration/commit/push is owner-authorized; no new approval prompt.
-
-
-Actual owner05:58PST readback:134 timely bindings,82 live,52 expired metadata-only,0 linkedPRE,0 globalP7 fragments/bundles/links. Day4 native shape1053/1053 member observations rejected for canonical/core/operating confirmations; all other reported field checks pass. See reports/2026-11-27_owner_day4_native_shape.json and reports/2026-11-27_owner_storage_inventory.json. Existing F005/F027 remain open; no optional feature rule implicated. New F059/I131/T125 corrects the callback test's ancestry-only assumption while preserving production refusal. Current register59F/131I/125T/10C;13 prior closures preserved,46 not closed pending exact acceptance. No repeated census needed.
-
-
-Exact a11538e8 CI46013072497 completed both jobs successfully, including full offline/PG16. Explicit narrow acceptance closes F058 (actual private log visibility) and F059 (actual callback-test expectation), preserving original13 closures. Current15/59 scoped CLOSED,44NOT_CLOSED; no scientific P0/component closed. See reports/2026-11-27_exact_ci_a115.json and latest checkpoint. Owner wait handoff gates on that exact CI and performs one #980 helper invocation only after actual Day4 drain; actual deployment/conditional commission/PRE outcome still pending.
+F040/I132/T126 is closed only for the guarded #980 cutover. F058/I129/T123 is closed only for restored log visibility. F059/I131/T125 is closed only for the corrected callback test expectation. No scientific family or Gate 1/5/6 was closed or reopened. Keep SOURCE and independent retention running; do not repeat the completed Day4 census or #980 cutover.

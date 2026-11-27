@@ -1,5 +1,16 @@
 # Phase 5B single operational runbook
 
+## Current state — Nov27 after #980
+
+The numbered instructions and dated handoffs below are historical snapshots; their pending cutover/readback commands are superseded by this section and the [latest checkpoint](checkpoints/2026-11-27_PHASE5B_POST980_DEPLOYMENT_AND_CUSTODY_READBACK.md). Do not repeat a completed operation.
+
+1. Keep enabled SOURCE and independent retention running. #980 merged after natural Day4 drain as main `24df876fc612c0e4fdfb6f69585ed90bcc56f9b8`; owner updated reviewed runtime/retention pins and confirmed relay executable unchanged at `2d96b22345908aa4334335aa899aec71b2fec2cb`.
+2. Current-main full retention run `46061597861` passed both primary FIDS and Phase7 expiry jobs. Do not infer deletion counts from the owner transcript; it did not include them. If a later mutation has an ambiguous result, read exact current pins/jobs before acting.
+3. Protected future conditional custody already ran for Day5 at `46065789071`. It validated existing base policy pins,31 day-plan pins, native predecessor/policy, and public actors. Conditional fields are ABSENT, metadata read disabled, no install/precommit; zero provider calls, DB/GitHub writes or signatures. Do not rerun solely to get the same receipt.
+4. Next science step is an exact commitment preview from an already governed independent prospective review decision. That decision/metadata is not supplied by the custody readback. Do not invent it, expose policy bytes, enable paid SOURCE/POST, or edit signed Days1–4. Install/read back future-only conditional policy only through the existing reviewed owner path after preview acceptance.
+5. No positive PRE/Packet B/POST/physical label is evidenced. Require the existing source-bound permit/proof, V0087 lease, Stage14 atomic commit and independent readback; require a distinct authentic same-leg actual gate-out observation for Amendment E.
+6. Keep immutable F/I/C/T evidence current. 59 families:16 narrowly closed,43 not closed; all P0 scientific families remain open. Do not infer science from CI, ACK, no-due runs or acquisition totals. No backfill, expired-content reconstruction or rights/budget/STOP/split/identity relaxation.
+
 1. Keep admitted workers running. Read current main and relay pins, issue #413, active SOURCE children and actual receipts. Never infer paid execution from ACK or a green no-due run.
 2. #980 exact c4408c621a84a2549355d935cca7333c5527d3c2 passed all 26 first-attempt CI paths at 08:48:08Z. Existing owner deployment helper blob 1bbec6f1d0dacbc0432b5c7c36955b43163855fa only during actual quiet and full 130-minute gap, with STOP/task checks. Nov27 Day4 T24 first 11:45Z/last15:30Z; next T6 first Nov28 05:45Z. No new pause/cancel. If merge succeeds but pins fail, inspect exact state; use existing recovery mode only for verified exact merged tree, not blind rerun.
 3. After exact deployment dispatch existing protected nonpaid workflow mode VERIFY_FUTURE_CONDITIONAL_POLICY_CUSTODY_NO_PROVIDER, run_day_index=5. Actual preparation opens Nov29 03:45Z; current native-only main cannot run this mode. Inspect real actor keys, policy markers, unsigned day, approved interval. No secret export, guessed policy or signature. Only then commission exact independently reviewed scope. If missing approval, record hold, do not silently change native signed days.
