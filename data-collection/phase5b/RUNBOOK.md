@@ -82,3 +82,6 @@ Actual owner05:58PST readback:134 timely bindings,82 live,52 expired metadata-on
 ## Single bounded owner deployment attempt after natural Day4 drain
 
 I132/T126 `scripts/v39_phase5b_owner_wait_once_980.sh WAIT_ONCE_EXACT_REVIEWED_980` waits read-only until Nov27 15:30Z and no active/queued SOURCE children. It stops on changed main/PR/metadata uncertainty or Nov27 22:00Z expiry, then invokes existing helper1bbec6f1 for exact #980 c4408c62 once. No helper retry or cancellation. Original exactCI/STOP/task/quiet/full130minute guards remain. Use only after exact candidate CI and immutable wrapper hash are published; not actually run by agent. It coordinates #980 only, never merges stacked #981 or installs conditional policy.
+
+
+Exact a11538e8 CI46013072497 completed both jobs successfully, including full offline/PG16. Explicit narrow acceptance closes F058 (actual private log visibility) and F059 (actual callback-test expectation), preserving original13 closures. Current15/59 scoped CLOSED,44NOT_CLOSED; no scientific P0/component closed. See reports/2026-11-27_exact_ci_a115.json and latest checkpoint. Owner wait handoff gates on that exact CI and performs one #980 helper invocation only after actual Day4 drain; actual deployment/conditional commission/PRE outcome still pending.

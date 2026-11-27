@@ -1,11 +1,11 @@
 {
-  "asOfUtc": "2026-11-27T13:53:56Z",
+  "asOfUtc": "2026-11-27T14:20:10.429129Z",
   "exactCandidate": "c4408c621a84a2549355d935cca7333c5527d3c2",
   "canonicalRegister": "../phase6/RECOVERY_REGISTER.md",
   "counts": {
-    "narrowCorrected": 13,
+    "narrowCorrected": 15,
     "exactCiGreenPendingDeployment": 10,
-    "partialOrOpen": 34,
+    "partialOrOpen": 32,
     "historicalLoss": 2
   },
   "failures": [
@@ -775,30 +775,32 @@
     },
     {
       "id": "F058",
-      "classification": "PARTIAL_OR_OPEN",
+      "classification": "NARROW_CORRECTION_RECORDED",
       "implementations": [
         "I129"
       ],
-      "next": "Verify exact PR CI and preserve actual allowlisted receipt comparison; production collection remains separate",
-      "closureStatus": "NOT_CLOSED",
+      "next": "Preserve evidenced scoped correction; reopen only for material new evidence, not as scientific or component closure",
+      "closureStatus": "CLOSED",
       "scientificRisk": "P1_SCIENTIFIC",
-      "workstream": "evidence_integrity"
+      "workstream": "evidence_integrity",
+      "closureEvidence": "GitHub CLI refused terminal escape sequences in privately captured job logs, so the owner audit mislabeled every inspected terminal log as unavailable. Before64/64 unknown; after repair the same60 runs classify30 timely-original and30 HTTP no-content. [Evidence](https://github.com/HKcode22/ReplitTranvr/blob/a11538e8a45dc9daee7d5fc9d0efe347e1ecbff0/data-collection/phase5b/reports/2026-11-27_log_visibility_comparison.json). This is reporting visibility, not improved SOURCE/PRE or billing proof. Exact a11538e8 CI46013072497 passed both jobs, including full offline and PG16; automated code review found no blocker. Raw logs remain private and genuine log denial unknown."
     },
     {
       "id": "F059",
-      "classification": "PARTIAL_OR_OPEN",
+      "classification": "NARROW_CORRECTION_RECORDED",
       "implementations": [
         "I131"
       ],
-      "next": "Exact CI must verify test rejects ancestral but changed source; original callback publication guard stays intact",
-      "closureStatus": "NOT_CLOSED",
+      "next": "Preserve evidenced scoped correction; reopen only for material new evidence, not as scientific or component closure",
+      "closureStatus": "CLOSED",
       "scientificRisk": "OPERATIONAL",
-      "workstream": "release_reliability"
+      "workstream": "release_reliability",
+      "closureEvidence": "Callback V5 test assumed pinned ancestry implied unchanged reviewed source, even though76 reviewed input files differ. Real build wrapper correctly refuses; test incorrectly expected success. Production guard unchanged; actual refusal requires exit2 and HOLD marker. Exact a11538e8 CI46013072497 full suite passed4616 executed tests,259 skipped; all460 original science/artifact blobs verified unchanged."
     }
   ],
   "binaryClosure": {
-    "closed": 13,
-    "notClosed": 46,
+    "closed": 15,
+    "notClosed": 44,
     "definition": "CLOSED only for an explicitly evidenced, narrowly defined correction already recorded; no broader component or future recurrence guarantee. Partial, candidate-only, historical loss with unverified recurrence prevention, and missing positive production proof are NOT_CLOSED. No previously closed ID reopened."
   },
   "riskDefinition": {

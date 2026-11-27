@@ -1,14 +1,14 @@
 # Phase5B recovery progress and evidence
 
-Observed: 2026-11-27T13:40:26.201644Z. Closure matrix: 2026-11-27T13:53:56Z.
+Observed: 2026-11-27T14:22:13.534311Z. Closure matrix: 2026-11-27T14:20:10.429129Z.
 
-**59 failure families: 13 scoped corrections CLOSED; 46 NOT_CLOSED.**
+**59 failure families: 15 scoped corrections CLOSED; 44 NOT_CLOSED.**
 
 **Scientific improvement is not demonstrated by these workflow receipts.** Positive PRE/Packet B and separate POST/physical-label evidence remain required. This report does not certify current database counts.
 
 Production main: [2b9cb404](https://github.com/HKcode22/ReplitTranvr/commit/2b9cb404da863aede54d9069e440ff32bcf6d00e).
 
-Recent current-main SOURCE sample: 35 runs; 20 running, 2 queued/waiting, 7 successful, 6 failed, 0 other terminal. This is not a complete study denominator.
+Recent current-main SOURCE sample: 28 runs; 20 running, 0 queued/waiting, 4 successful, 4 failed, 0 other terminal. This is not a complete study denominator.
 
 Workflow failures count executions, not unique failure families. In-progress/queued work is not a failure. Successful SOURCE jobs require original receipts and independent database reconciliation before acquisition claims.
 
@@ -42,7 +42,6 @@ Workflow failures count executions, not unique failure families. In-progress/que
 | F053 | P1_SCIENTIFIC | EXACT_CI_GREEN_DEPLOYMENT_PENDING | I115 | Deploy shared native feature predicate; actual rights-bound readiness |
 | F055 | P1_SCIENTIFIC | EXACT_CI_GREEN_DEPLOYMENT_PENDING | I117 | Deploy reject partial/unexpected 2xx; observe actual fault if any |
 | F057 | P1_SCIENTIFIC | EXACT_CI_GREEN_DEPLOYMENT_PENDING | I119 | Deploy complete signed frame guard; actual exact request path |
-| F058 | P1_SCIENTIFIC | PARTIAL_OR_OPEN | I129 | Verify exact PR CI and preserve actual allowlisted receipt comparison; production collection remains separate |
 | F007 | OPERATIONAL | PARTIAL_OR_OPEN | I006, I007, I060, I062, I100 | Verify actual bounded rolling execution and history under load |
 | F008 | OPERATIONAL | PARTIAL_OR_OPEN | I006 | Verify actual failure receipt lineage, not ACK |
 | F011 | OPERATIONAL | PARTIAL_OR_OPEN | I009 | Positive scoped SOURCE/POST actor execution under least privilege |
@@ -61,7 +60,6 @@ Workflow failures count executions, not unique failure families. In-progress/que
 | F048 | OPERATIONAL | EXACT_CI_GREEN_DEPLOYMENT_PENDING | I109 | Deploy fail-closed custody transaction cleanup; actual protected readback |
 | F054 | OPERATIONAL | EXACT_CI_GREEN_DEPLOYMENT_PENDING | I116 | Deploy exact final clock/quiet guard; actual safe cutover |
 | F056 | OPERATIONAL | EXACT_CI_GREEN_DEPLOYMENT_PENDING | I118 | Deploy safe transport diagnostic categories |
-| F059 | OPERATIONAL | PARTIAL_OR_OPEN | I131 | Exact CI must verify test rejects ancestral but changed source; original callback publication guard stays intact |
 
 ## Closed corrections preserved
 
@@ -82,18 +80,61 @@ These are scoped corrections, not full component or scientific closure. No gate 
 | F035 | Relay isolated fixture failures were recorded in run 45525733215: extra active-state GETs, unknown active-read deferral and pin rejection fixture. The exact relay fixture now passes in [PR #31](https://github.com/HKcode22/TravnrClockRelay/pull/31), head 6c6cbd36e9838ad519ba2c8403c0e2e12ed51f7f, merged as 2d96b22345908aa4334335aa899aec71b2fec2cb. Actual rolling wake 45980961590 completed with INDEPENDENT_WAKE_COMPLETE_NOT_COLLECTION_PROOF, six safe lane acknowledgments, zero relay provider calls and zero database writes. This closes the fixture/wake correction only; it is not collection or outcome proof. |
 | F043 | I091 owner audit executed twice on live PG16, SQLSTATE 42601, no provider calls or database writes. Prior mocked query test never executed SQL; exact parser token not exposed. I092/T086 real PG16 passed and actual owner corrected blob 00:47:29Z 384 instructions read successfully, no calls/writes. |
 | F052 | After #979 merge ancestry reconciliation, exact #980 head 0f1cfca4 triggered only 10 of 23 mandatory offline workflows because 13 pull_request path filters did not match the new release helper. No production failure. |
+| F058 | GitHub CLI refused terminal escape sequences in privately captured job logs, so the owner audit mislabeled every inspected terminal log as unavailable. Before64/64 unknown; after repair the same60 runs classify30 timely-original and30 HTTP no-content. [Evidence](https://github.com/HKcode22/ReplitTranvr/blob/a11538e8a45dc9daee7d5fc9d0efe347e1ecbff0/data-collection/phase5b/reports/2026-11-27_log_visibility_comparison.json). This is reporting visibility, not improved SOURCE/PRE or billing proof. Exact a11538e8 CI46013072497 passed both jobs, including full offline and PG16; automated code review found no blocker. Raw logs remain private and genuine log denial unknown. |
+| F059 | Callback V5 test assumed pinned ancestry implied unchanged reviewed source, even though76 reviewed input files differ. Real build wrapper correctly refuses; test incorrectly expected success. Production guard unchanged; actual refusal requires exit2 and HOLD marker. Exact a11538e8 CI46013072497 full suite passed4616 executed tests,259 skipped; all460 original science/artifact blobs verified unchanged. |
 
 ## Workflow evidence sample
 
 | Run | Lane | SHA | Status | Conclusion |
 |---|---|---|---|---|
-| [46007865670](https://github.com/HKcode22/ReplitTranvr/actions/runs/46007865670) | CI | fb346f15 | queued | pending |
-| [46007764496](https://github.com/HKcode22/ReplitTranvr/actions/runs/46007764496) | SOURCE | 2b9cb404 | queued | pending |
-| [46007761396](https://github.com/HKcode22/ReplitTranvr/actions/runs/46007761396) | SOURCE | 2b9cb404 | queued | pending |
-| [46006875469](https://github.com/HKcode22/ReplitTranvr/actions/runs/46006875469) | CI | 0d32250c | queued | pending |
-| [46006341806](https://github.com/HKcode22/ReplitTranvr/actions/runs/46006341806) | CI | 3ff09c9e | queued | pending |
-| [46006146307](https://github.com/HKcode22/ReplitTranvr/actions/runs/46006146307) | RETENTION | 2b9cb404 | queued | pending |
-| [46006117343](https://github.com/HKcode22/ReplitTranvr/actions/runs/46006117343) | OTHER | 2b9cb404 | queued | pending |
+| [46014410557](https://github.com/HKcode22/ReplitTranvr/actions/runs/46014410557) | OTHER | 2b9cb404 | queued | pending |
+| [46014408614](https://github.com/HKcode22/ReplitTranvr/actions/runs/46014408614) | OTHER | 2b9cb404 | completed | success |
+| [46014404344](https://github.com/HKcode22/ReplitTranvr/actions/runs/46014404344) | OTHER | 2b9cb404 | completed | success |
+| [46014404097](https://github.com/HKcode22/ReplitTranvr/actions/runs/46014404097) | OTHER | 2b9cb404 | completed | success |
+| [46014400269](https://github.com/HKcode22/ReplitTranvr/actions/runs/46014400269) | OTHER | 2b9cb404 | queued | pending |
+| [46014400232](https://github.com/HKcode22/ReplitTranvr/actions/runs/46014400232) | OTHER | 2b9cb404 | completed | success |
+| [46014359249](https://github.com/HKcode22/ReplitTranvr/actions/runs/46014359249) | SOURCE | 2b9cb404 | in_progress | pending |
+| [46014355864](https://github.com/HKcode22/ReplitTranvr/actions/runs/46014355864) | SOURCE | 2b9cb404 | in_progress | pending |
+| [46014353233](https://github.com/HKcode22/ReplitTranvr/actions/runs/46014353233) | SOURCE | 2b9cb404 | in_progress | pending |
+| [46014350059](https://github.com/HKcode22/ReplitTranvr/actions/runs/46014350059) | SOURCE | 2b9cb404 | in_progress | pending |
+| [46014332573](https://github.com/HKcode22/ReplitTranvr/actions/runs/46014332573) | RETENTION | 2b9cb404 | completed | success |
+| [46013072497](https://github.com/HKcode22/ReplitTranvr/actions/runs/46013072497) | CI | a11538e8 | completed | success |
+| [46012058324](https://github.com/HKcode22/ReplitTranvr/actions/runs/46012058324) | OTHER | 2b9cb404 | completed | success |
+| [46012057959](https://github.com/HKcode22/ReplitTranvr/actions/runs/46012057959) | OTHER | 2b9cb404 | completed | success |
+| [46012056185](https://github.com/HKcode22/ReplitTranvr/actions/runs/46012056185) | CI | f85f71ce | completed | cancelled |
+| [46012053549](https://github.com/HKcode22/ReplitTranvr/actions/runs/46012053549) | OTHER | 2b9cb404 | completed | success |
+| [46012053465](https://github.com/HKcode22/ReplitTranvr/actions/runs/46012053465) | OTHER | 2b9cb404 | completed | success |
+| [46012048953](https://github.com/HKcode22/ReplitTranvr/actions/runs/46012048953) | OTHER | 2b9cb404 | completed | success |
+| [46011572487](https://github.com/HKcode22/ReplitTranvr/actions/runs/46011572487) | CI | 0bb7d4c6 | completed | cancelled |
+| [46011352815](https://github.com/HKcode22/ReplitTranvr/actions/runs/46011352815) | OTHER | 2b9cb404 | completed | success |
+| [46011227894](https://github.com/HKcode22/ReplitTranvr/actions/runs/46011227894) | OTHER | 2b9cb404 | completed | success |
+| [46010961892](https://github.com/HKcode22/ReplitTranvr/actions/runs/46010961892) | OTHER | 2b9cb404 | completed | success |
+| [46010549946](https://github.com/HKcode22/ReplitTranvr/actions/runs/46010549946) | SOURCE | 2b9cb404 | in_progress | pending |
+| [46010546245](https://github.com/HKcode22/ReplitTranvr/actions/runs/46010546245) | SOURCE | 2b9cb404 | in_progress | pending |
+| [46010542383](https://github.com/HKcode22/ReplitTranvr/actions/runs/46010542383) | SOURCE | 2b9cb404 | in_progress | pending |
+| [46010538331](https://github.com/HKcode22/ReplitTranvr/actions/runs/46010538331) | SOURCE | 2b9cb404 | in_progress | pending |
+| [46010535323](https://github.com/HKcode22/ReplitTranvr/actions/runs/46010535323) | SOURCE | 2b9cb404 | in_progress | pending |
+| [46010531969](https://github.com/HKcode22/ReplitTranvr/actions/runs/46010531969) | SOURCE | 2b9cb404 | in_progress | pending |
+| [46010499558](https://github.com/HKcode22/ReplitTranvr/actions/runs/46010499558) | OTHER | 2b9cb404 | completed | success |
+| [46010499469](https://github.com/HKcode22/ReplitTranvr/actions/runs/46010499469) | OTHER | 2b9cb404 | completed | success |
+| [46010496490](https://github.com/HKcode22/ReplitTranvr/actions/runs/46010496490) | OTHER | 2b9cb404 | completed | success |
+| [46010496224](https://github.com/HKcode22/ReplitTranvr/actions/runs/46010496224) | OTHER | 2b9cb404 | completed | success |
+| [46010492299](https://github.com/HKcode22/ReplitTranvr/actions/runs/46010492299) | OTHER | 2b9cb404 | completed | success |
+| [46010004177](https://github.com/HKcode22/ReplitTranvr/actions/runs/46010004177) | OTHER | 2b9cb404 | completed | success |
+| [46009897266](https://github.com/HKcode22/ReplitTranvr/actions/runs/46009897266) | RETENTION | 2b9cb404 | completed | success |
+| [46009884939](https://github.com/HKcode22/ReplitTranvr/actions/runs/46009884939) | OTHER | 2b9cb404 | completed | success |
+| [46009880268](https://github.com/HKcode22/ReplitTranvr/actions/runs/46009880268) | OTHER | 2b9cb404 | completed | success |
+| [46009880224](https://github.com/HKcode22/ReplitTranvr/actions/runs/46009880224) | OTHER | 2b9cb404 | completed | success |
+| [46009876025](https://github.com/HKcode22/ReplitTranvr/actions/runs/46009876025) | OTHER | 2b9cb404 | completed | success |
+| [46009875698](https://github.com/HKcode22/ReplitTranvr/actions/runs/46009875698) | OTHER | 2b9cb404 | completed | success |
+| [46009632869](https://github.com/HKcode22/ReplitTranvr/actions/runs/46009632869) | OTHER | 2b9cb404 | completed | failure |
+| [46007865670](https://github.com/HKcode22/ReplitTranvr/actions/runs/46007865670) | CI | fb346f15 | completed | success |
+| [46007764496](https://github.com/HKcode22/ReplitTranvr/actions/runs/46007764496) | SOURCE | 2b9cb404 | in_progress | pending |
+| [46007761396](https://github.com/HKcode22/ReplitTranvr/actions/runs/46007761396) | SOURCE | 2b9cb404 | in_progress | pending |
+| [46006875469](https://github.com/HKcode22/ReplitTranvr/actions/runs/46006875469) | CI | 0d32250c | completed | success |
+| [46006341806](https://github.com/HKcode22/ReplitTranvr/actions/runs/46006341806) | CI | 3ff09c9e | completed | success |
+| [46006146307](https://github.com/HKcode22/ReplitTranvr/actions/runs/46006146307) | RETENTION | 2b9cb404 | completed | success |
+| [46006117343](https://github.com/HKcode22/ReplitTranvr/actions/runs/46006117343) | OTHER | 2b9cb404 | completed | success |
 | [46006117132](https://github.com/HKcode22/ReplitTranvr/actions/runs/46006117132) | OTHER | 2b9cb404 | completed | success |
 | [46006113170](https://github.com/HKcode22/ReplitTranvr/actions/runs/46006113170) | OTHER | 2b9cb404 | completed | success |
 | [46006113061](https://github.com/HKcode22/ReplitTranvr/actions/runs/46006113061) | OTHER | 2b9cb404 | completed | success |
@@ -121,13 +162,13 @@ These are scoped corrections, not full component or scientific closure. No gate 
 | [46001777314](https://github.com/HKcode22/ReplitTranvr/actions/runs/46001777314) | OTHER | 2b9cb404 | completed | success |
 | [46001777131](https://github.com/HKcode22/ReplitTranvr/actions/runs/46001777131) | OTHER | 2b9cb404 | completed | success |
 | [46001773177](https://github.com/HKcode22/ReplitTranvr/actions/runs/46001773177) | OTHER | 2b9cb404 | completed | success |
-| [46001521504](https://github.com/HKcode22/ReplitTranvr/actions/runs/46001521504) | SOURCE | 2b9cb404 | in_progress | pending |
+| [46001521504](https://github.com/HKcode22/ReplitTranvr/actions/runs/46001521504) | SOURCE | 2b9cb404 | completed | failure |
 | [46001520371](https://github.com/HKcode22/ReplitTranvr/actions/runs/46001520371) | OTHER | 2b9cb404 | completed | skipped |
-| [46001518584](https://github.com/HKcode22/ReplitTranvr/actions/runs/46001518584) | SOURCE | 2b9cb404 | in_progress | pending |
-| [46001515742](https://github.com/HKcode22/ReplitTranvr/actions/runs/46001515742) | SOURCE | 2b9cb404 | in_progress | pending |
-| [46001513480](https://github.com/HKcode22/ReplitTranvr/actions/runs/46001513480) | SOURCE | 2b9cb404 | in_progress | pending |
-| [46001511047](https://github.com/HKcode22/ReplitTranvr/actions/runs/46001511047) | SOURCE | 2b9cb404 | in_progress | pending |
-| [46001508414](https://github.com/HKcode22/ReplitTranvr/actions/runs/46001508414) | SOURCE | 2b9cb404 | in_progress | pending |
+| [46001518584](https://github.com/HKcode22/ReplitTranvr/actions/runs/46001518584) | SOURCE | 2b9cb404 | completed | success |
+| [46001515742](https://github.com/HKcode22/ReplitTranvr/actions/runs/46001515742) | SOURCE | 2b9cb404 | completed | failure |
+| [46001513480](https://github.com/HKcode22/ReplitTranvr/actions/runs/46001513480) | SOURCE | 2b9cb404 | completed | success |
+| [46001511047](https://github.com/HKcode22/ReplitTranvr/actions/runs/46001511047) | SOURCE | 2b9cb404 | completed | success |
+| [46001508414](https://github.com/HKcode22/ReplitTranvr/actions/runs/46001508414) | SOURCE | 2b9cb404 | completed | failure |
 | [46001422500](https://github.com/HKcode22/ReplitTranvr/actions/runs/46001422500) | OTHER | 2b9cb404 | completed | success |
 | [46001418317](https://github.com/HKcode22/ReplitTranvr/actions/runs/46001418317) | OTHER | 2b9cb404 | completed | success |
 | [46001414339](https://github.com/HKcode22/ReplitTranvr/actions/runs/46001414339) | OTHER | 2b9cb404 | completed | success |
@@ -139,53 +180,12 @@ These are scoped corrections, not full component or scientific closure. No gate 
 | [45999316525](https://github.com/HKcode22/ReplitTranvr/actions/runs/45999316525) | OTHER | 2b9cb404 | completed | success |
 | [45999313103](https://github.com/HKcode22/ReplitTranvr/actions/runs/45999313103) | OTHER | 2b9cb404 | completed | success |
 | [45999311056](https://github.com/HKcode22/ReplitTranvr/actions/runs/45999311056) | RETENTION | 2b9cb404 | completed | success |
-| [45999264362](https://github.com/HKcode22/ReplitTranvr/actions/runs/45999264362) | SOURCE | 2b9cb404 | in_progress | pending |
-| [45999261682](https://github.com/HKcode22/ReplitTranvr/actions/runs/45999261682) | SOURCE | 2b9cb404 | in_progress | pending |
+| [45999264362](https://github.com/HKcode22/ReplitTranvr/actions/runs/45999264362) | SOURCE | 2b9cb404 | completed | failure |
+| [45999261682](https://github.com/HKcode22/ReplitTranvr/actions/runs/45999261682) | SOURCE | 2b9cb404 | completed | success |
 | [45998944621](https://github.com/HKcode22/ReplitTranvr/actions/runs/45998944621) | CI | 5b7e6a03 | completed | success |
 | [45998200966](https://github.com/HKcode22/ReplitTranvr/actions/runs/45998200966) | OTHER | 2b9cb404 | completed | success |
 | [45997607130](https://github.com/HKcode22/ReplitTranvr/actions/runs/45997607130) | OTHER | 2b9cb404 | completed | success |
 | [45997603449](https://github.com/HKcode22/ReplitTranvr/actions/runs/45997603449) | OTHER | 2b9cb404 | completed | success |
 | [45997603178](https://github.com/HKcode22/ReplitTranvr/actions/runs/45997603178) | OTHER | 2b9cb404 | completed | success |
-| [45997599826](https://github.com/HKcode22/ReplitTranvr/actions/runs/45997599826) | OTHER | 2b9cb404 | completed | success |
-| [45997599663](https://github.com/HKcode22/ReplitTranvr/actions/runs/45997599663) | OTHER | 2b9cb404 | completed | success |
-| [45997596047](https://github.com/HKcode22/ReplitTranvr/actions/runs/45997596047) | OTHER | 2b9cb404 | completed | success |
-| [45997275595](https://github.com/HKcode22/ReplitTranvr/actions/runs/45997275595) | SOURCE | 2b9cb404 | in_progress | pending |
-| [45997272812](https://github.com/HKcode22/ReplitTranvr/actions/runs/45997272812) | SOURCE | 2b9cb404 | in_progress | pending |
-| [45997270948](https://github.com/HKcode22/ReplitTranvr/actions/runs/45997270948) | OTHER | 2b9cb404 | completed | success |
-| [45997270075](https://github.com/HKcode22/ReplitTranvr/actions/runs/45997270075) | SOURCE | 2b9cb404 | in_progress | pending |
-| [45997267564](https://github.com/HKcode22/ReplitTranvr/actions/runs/45997267564) | SOURCE | 2b9cb404 | in_progress | pending |
-| [45997264908](https://github.com/HKcode22/ReplitTranvr/actions/runs/45997264908) | SOURCE | 2b9cb404 | completed | success |
-| [45997262321](https://github.com/HKcode22/ReplitTranvr/actions/runs/45997262321) | SOURCE | 2b9cb404 | completed | success |
-| [45997259446](https://github.com/HKcode22/ReplitTranvr/actions/runs/45997259446) | SOURCE | 2b9cb404 | completed | failure |
-| [45997256710](https://github.com/HKcode22/ReplitTranvr/actions/runs/45997256710) | SOURCE | 2b9cb404 | completed | failure |
-| [45997247681](https://github.com/HKcode22/ReplitTranvr/actions/runs/45997247681) | CI | 55195427 | completed | success |
-| [45997145667](https://github.com/HKcode22/ReplitTranvr/actions/runs/45997145667) | RETENTION | 2b9cb404 | completed | success |
-| [45997114074](https://github.com/HKcode22/ReplitTranvr/actions/runs/45997114074) | OTHER | 2b9cb404 | completed | success |
-| [45997110424](https://github.com/HKcode22/ReplitTranvr/actions/runs/45997110424) | OTHER | 2b9cb404 | completed | success |
-| [45997110249](https://github.com/HKcode22/ReplitTranvr/actions/runs/45997110249) | OTHER | 2b9cb404 | completed | success |
-| [45997106707](https://github.com/HKcode22/ReplitTranvr/actions/runs/45997106707) | OTHER | 2b9cb404 | completed | success |
-| [45997106660](https://github.com/HKcode22/ReplitTranvr/actions/runs/45997106660) | OTHER | 2b9cb404 | completed | success |
-| [45997102865](https://github.com/HKcode22/ReplitTranvr/actions/runs/45997102865) | OTHER | 2b9cb404 | completed | success |
-| [45997102663](https://github.com/HKcode22/ReplitTranvr/actions/runs/45997102663) | OTHER | 2b9cb404 | completed | success |
-| [45996677151](https://github.com/HKcode22/ReplitTranvr/actions/runs/45996677151) | CI | c22c1566 | completed | success |
-| [45996378036](https://github.com/HKcode22/ReplitTranvr/actions/runs/45996378036) | CI | 49695702 | completed | success |
-| [45993869374](https://github.com/HKcode22/ReplitTranvr/actions/runs/45993869374) | CI | 94aa1f6c | completed | success |
-| [45993371462](https://github.com/HKcode22/ReplitTranvr/actions/runs/45993371462) | SOURCE | 2b9cb404 | completed | success |
-| [45993368975](https://github.com/HKcode22/ReplitTranvr/actions/runs/45993368975) | SOURCE | 2b9cb404 | completed | failure |
-| [45993366522](https://github.com/HKcode22/ReplitTranvr/actions/runs/45993366522) | SOURCE | 2b9cb404 | completed | success |
-| [45993364004](https://github.com/HKcode22/ReplitTranvr/actions/runs/45993364004) | SOURCE | 2b9cb404 | completed | failure |
-| [45993361366](https://github.com/HKcode22/ReplitTranvr/actions/runs/45993361366) | SOURCE | 2b9cb404 | completed | failure |
-| [45993358982](https://github.com/HKcode22/ReplitTranvr/actions/runs/45993358982) | SOURCE | 2b9cb404 | completed | failure |
-| [45993356634](https://github.com/HKcode22/ReplitTranvr/actions/runs/45993356634) | SOURCE | 2b9cb404 | completed | success |
-| [45993354228](https://github.com/HKcode22/ReplitTranvr/actions/runs/45993354228) | SOURCE | 2b9cb404 | completed | success |
-| [45993141568](https://github.com/HKcode22/ReplitTranvr/actions/runs/45993141568) | OTHER | 2b9cb404 | completed | success |
-| [45993141441](https://github.com/HKcode22/ReplitTranvr/actions/runs/45993141441) | OTHER | 2b9cb404 | completed | success |
-| [45993138110](https://github.com/HKcode22/ReplitTranvr/actions/runs/45993138110) | OTHER | 2b9cb404 | completed | success |
-| [45993137943](https://github.com/HKcode22/ReplitTranvr/actions/runs/45993137943) | OTHER | 2b9cb404 | completed | success |
-| [45993134464](https://github.com/HKcode22/ReplitTranvr/actions/runs/45993134464) | OTHER | 2b9cb404 | completed | success |
-| [45993133979](https://github.com/HKcode22/ReplitTranvr/actions/runs/45993133979) | OTHER | 2b9cb404 | completed | success |
-| [45989825020](https://github.com/HKcode22/ReplitTranvr/actions/runs/45989825020) | CI | 51267a1b | completed | success |
-| [45989521919](https://github.com/HKcode22/ReplitTranvr/actions/runs/45989521919) | RETENTION | 2b9cb404 | completed | success |
-| [45989502784](https://github.com/HKcode22/ReplitTranvr/actions/runs/45989502784) | SOURCE | 2b9cb404 | completed | success |
 
 Regenerate locally: `node scripts/v39_phase5b_progress_report_v39.mjs <closure-matrix.json> <evidence.json>`. This reads existing files only and prints Markdown; it does not refresh evidence or alter production.
