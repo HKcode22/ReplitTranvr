@@ -11,7 +11,7 @@ Historical Phase 6 checkpoints stay in place to preserve links and hashes. New o
 
 Latest actual owner checkpoint: [01:07 PST confirmed Packet B empty and custody isolation](checkpoints/2026-11-27_0107_PST_ACTUAL_PACKET_B_EMPTY_AND_CUSTODY_ISOLATION.md). I120/T114 real owner 4/4 and SQL passed. I121/T115 follow-on staging; not part of #980.
 
-Latest [binary closure checkpoint](checkpoints/2026-11-27_0238_PST_BOUNDED_RELAY_RETENTION_CLOSURE_AND_ACTIVE_HOLD.md): 12 narrowly evidenced corrections CLOSED and 45 NOT_CLOSED (10 exact-CI fixes awaiting deployment, 33 partial/open, 2 historical losses). F009/F035 close only their stated operational criteria; all six P0 scientific families remain open. CI and relay ACKs do not prove data collection.
+Latest [binary closure checkpoint](checkpoints/2026-11-27_0305_PST_LIVE_RETENTION_AND_NO_DUE_READBACK.md): 13 narrowly evidenced corrections CLOSED and 44 NOT_CLOSED (10 exact-CI fixes awaiting deployment, 32 partial/open, 2 historical losses). F032 closes only register/matrix integrity; all six P0 scientific families remain open. CI and relay ACKs do not prove data collection.
 
 
 Current live hold (12:04:56Z): main 2b9cb404 and relay 2d96b223 are unchanged; 20 P5 SOURCE children remain in progress and none are queued. The 11:47Z source parent acknowledged eight child dispatches, which are not paid receipts. Preserve the active runs; the held owner helper cannot pass its quiet guard yet. #980 remains open/draft at c4408c62 with 26 required CI paths green. #981's 94aa1f6 evidence-sync head passed exact run 45993869374, including T116 and disposable PG16. No positive PRE, Packet B, POST or physical-label proof exists; the PR remains a stacked draft and is not deployed.
