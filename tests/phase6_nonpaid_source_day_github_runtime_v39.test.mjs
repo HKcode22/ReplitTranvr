@@ -178,9 +178,15 @@ test("T055 reports nearest future preparation opening/deadline and exact draw/ge
  assert.equal(a.selected.runDayIndex,2);
 });
 
+
+// The actual custody workflow supplies no signer or publisher credential.
+// Other modes keep the exact original key/endpoint admission.
+const custodyEnv=e=>({...e,P6_NONPAID_DAILY_REVIEWER_PRIVATE_KEY_BASE64:"",
+ P6_NONPAID_QUERY_REVIEWER_PRIVATE_KEY_BASE64:"",P6_NONPAID_REGISTRY_REVIEWER_PRIVATE_KEY_BASE64:"",
+ P6_PRIVATE_PUBLISHER_DATABASE_URL:""});
 test("T102 protected future conditional custody is explicit owner-only, no publication or secret serialization",()=>{
- const f=fixture(),e={...f.env,GITHUB_EVENT_NAME:"workflow_dispatch",GITHUB_ACTOR:"HKcode22",
-  P6_NONPAID_SOURCE_CONFIRM:"VERIFY_FUTURE_CONDITIONAL_POLICY_CUSTODY_NO_PROVIDER",P6_NONPAID_SOURCE_REQUESTED_DAY:"5"};
+ const f=fixture(),e=custodyEnv({...f.env,GITHUB_EVENT_NAME:"workflow_dispatch",GITHUB_ACTOR:"HKcode22",
+  P6_NONPAID_SOURCE_CONFIRM:"VERIFY_FUTURE_CONDITIONAL_POLICY_CUSTODY_NO_PROVIDER",P6_NONPAID_SOURCE_REQUESTED_DAY:"5"});
  const ctx=admitP6NonpaidSourceDayGithub(e),plans=loadP6ReviewedDayPlans(ctx,f.read);
  assert.equal(ctx.mode,"conditional_custody");assert.equal(ctx.requestedDay,5);
  const r=projectP6ConditionalPolicyCustody(ctx,plans,f.calendar,f.indexes,iso(now),0,e);
@@ -234,8 +240,8 @@ test("T103 conditional custody refuses uncertain transaction cleanup and discard
 });
 
 test("T104 custody cannot skip an earlier unsigned prospective conditional day",()=>{
- const f=fixture(),e={...f.env,GITHUB_EVENT_NAME:"workflow_dispatch",GITHUB_ACTOR:"HKcode22",
-  P6_NONPAID_SOURCE_CONFIRM:"VERIFY_FUTURE_CONDITIONAL_POLICY_CUSTODY_NO_PROVIDER",P6_NONPAID_SOURCE_REQUESTED_DAY:"6"};
+ const f=fixture(),e=custodyEnv({...f.env,GITHUB_EVENT_NAME:"workflow_dispatch",GITHUB_ACTOR:"HKcode22",
+  P6_NONPAID_SOURCE_CONFIRM:"VERIFY_FUTURE_CONDITIONAL_POLICY_CUSTODY_NO_PROVIDER",P6_NONPAID_SOURCE_REQUESTED_DAY:"6"});
  const ctx=admitP6NonpaidSourceDayGithub(e),plans=loadP6ReviewedDayPlans(ctx,f.read);
  const run=()=>projectP6ConditionalPolicyCustody(ctx,plans,f.calendar,f.indexes,iso(now),0,e);
  assert.throws(run,/CONDITIONAL_CUSTODY_EARLIER_UNSIGNED_PROSPECTIVE_DAY/);
@@ -250,8 +256,8 @@ test("T104 custody cannot skip an earlier unsigned prospective conditional day",
  assert.equal(run().prospective.runDayIndex,6);
 });
 test("T105 custody accounts for the nested day-append conditional scope",()=>{
- const f=fixture(),e={...f.env,GITHUB_EVENT_NAME:"workflow_dispatch",GITHUB_ACTOR:"HKcode22",
-  P6_NONPAID_SOURCE_CONFIRM:"VERIFY_FUTURE_CONDITIONAL_POLICY_CUSTODY_NO_PROVIDER",P6_NONPAID_SOURCE_REQUESTED_DAY:"5"};
+ const f=fixture(),e=custodyEnv({...f.env,GITHUB_EVENT_NAME:"workflow_dispatch",GITHUB_ACTOR:"HKcode22",
+  P6_NONPAID_SOURCE_CONFIRM:"VERIFY_FUTURE_CONDITIONAL_POLICY_CUSTODY_NO_PROVIDER",P6_NONPAID_SOURCE_REQUESTED_DAY:"5"});
  const ctx=admitP6NonpaidSourceDayGithub(e),plans=loadP6ReviewedDayPlans(ctx,f.read);
  const marker={};
  const p={...ctx.p,nativeLaterReview:{dayAppendPolicy:{conditionalLaterPreScope:marker}}};
@@ -272,8 +278,8 @@ test("T105 custody accounts for the nested day-append conditional scope",()=>{
 });
 
 test("T109 custody native readiness requires rights-bound actual feature review, not approved flag alone",()=>{
- const f=fixture(),e={...f.env,GITHUB_EVENT_NAME:"workflow_dispatch",GITHUB_ACTOR:"HKcode22",
-  P6_NONPAID_SOURCE_CONFIRM:"VERIFY_FUTURE_CONDITIONAL_POLICY_CUSTODY_NO_PROVIDER",P6_NONPAID_SOURCE_REQUESTED_DAY:"5"};
+ const f=fixture(),e=custodyEnv({...f.env,GITHUB_EVENT_NAME:"workflow_dispatch",GITHUB_ACTOR:"HKcode22",
+  P6_NONPAID_SOURCE_CONFIRM:"VERIFY_FUTURE_CONDITIONAL_POLICY_CUSTODY_NO_PROVIDER",P6_NONPAID_SOURCE_REQUESTED_DAY:"5"});
  const ctx=admitP6NonpaidSourceDayGithub(e),plans=loadP6ReviewedDayPlans(ctx,f.read);
  const v={approved:true,nativeT24ReviewApproved:true,independentT24WitnessProtocolReviewed:true,
   validFromUtc:ctx.p.validFromUtc,validUntilUtc:ctx.p.validUntilUtc,
@@ -287,4 +293,22 @@ test("T109 custody native readiness requires rights-bound actual feature review,
  const good=run({approved:true,rightsSha256:ctx.trust.rightsSha256,externalContentUseReviewSha256:sha("e")});
  assert.equal(good.nativePolicyPresent,true);
  assert.equal(good.actualConditionalPolicyInstalledVerified,false);
+});
+
+test("T115 custody uses no signer/publisher authority and emits only a binding commitment",()=>{
+ const f=fixture(),e=custodyEnv({...f.env,GITHUB_EVENT_NAME:"workflow_dispatch",GITHUB_ACTOR:"HKcode22",
+  P6_NONPAID_SOURCE_CONFIRM:"VERIFY_FUTURE_CONDITIONAL_POLICY_CUSTODY_NO_PROVIDER",P6_NONPAID_SOURCE_REQUESTED_DAY:"5"});
+ const ctx=admitP6NonpaidSourceDayGithub(e),plans=loadP6ReviewedDayPlans(ctx,f.read);
+ assert.equal(ctx.dailyKey,undefined);assert.equal(ctx.queryKey,undefined);assert.equal(ctx.registryKey,undefined);assert.equal(ctx.publisherUrl,undefined);
+ const a=projectP6ConditionalPolicyCustody(ctx,plans,f.calendar,f.indexes,iso(now),0,e);
+ assert.match(a.basePolicyCommitmentSha256,/^[a-f0-9]{64}$/);
+ assert.equal(a.basePolicyCommitmentSha256,h(JSON.stringify({schema:"v39.phase5b.custody-base-commitment.v1",daily:e.P6_NONPAID_DAILY_POLICY_SHA256,signing:e.P6_NONPAID_SIGNING_POLICY_SHA256,transport:e.P6_NONPAID_TRANSPORT_TRUST_SHA256})));
+ assert.equal(a.signingPrivateKeysVerified,false);assert.equal(a.publisherEndpointVerified,false);
+ assert.equal(a.signingOrPublishingCapabilityPresent,false);
+ for(const name of ["P6_NONPAID_DAILY_REVIEWER_PRIVATE_KEY_BASE64","P6_NONPAID_QUERY_REVIEWER_PRIVATE_KEY_BASE64","P6_NONPAID_REGISTRY_REVIEWER_PRIVATE_KEY_BASE64","P6_PRIVATE_PUBLISHER_DATABASE_URL"])
+  assert.throws(()=>admitP6NonpaidSourceDayGithub({...e,[name]:f.env[name]}),/CONDITIONAL_CUSTODY_WRITE_CAPABILITY_FORBIDDEN/);
+ for(const key of ["P6_NONPAID_DAILY_POLICY_SHA256","P6_NONPAID_SIGNING_POLICY_SHA256","P6_NONPAID_TRANSPORT_TRUST_SHA256"])
+  assert(!JSON.stringify(a).includes(e[key]));
+ // Ordinary runtime still rejects missing write-capability inputs.
+ assert.throws(()=>admitP6NonpaidSourceDayGithub(custodyEnv(f.env)),/WRONG_REVIEWER_PRIVATE_KEY/);
 });

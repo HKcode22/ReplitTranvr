@@ -119,20 +119,27 @@ export function admitP6NonpaidSourceDayGithub(env){
  try{dailyPublic=createPublicKey(reviewed.dailyReviewerPublicKeyPem);
   if(dailyPublic.asymmetricKeyType!=="ed25519"||fp(dailyPublic)!==reviewed.dailyReviewerFingerprintSha256)hold("INVALID_DAILY_REVIEWER_TRUST");
  }catch{hold("INVALID_DAILY_REVIEWER_TRUST");}
- const dailyKey=privateKey(env.P6_NONPAID_DAILY_REVIEWER_PRIVATE_KEY_BASE64,reviewed.dailyReviewerFingerprintSha256);
- const queryKey=privateKey(env.P6_NONPAID_QUERY_REVIEWER_PRIVATE_KEY_BASE64,trust.queryReviewerFingerprintSha256);
- const registryKey=privateKey(env.P6_NONPAID_REGISTRY_REVIEWER_PRIVATE_KEY_BASE64,trust.dayReviewerFingerprintSha256);
+ // Custody is read-only, not a signing or publisher readiness probe.
+ // Never inject private reviewer material or a publisher password into this
+ // branch. Ordinary prepare/publish still validates all original credentials.
+ const custodyOnly=mode==="conditional_custody";
+ if(custodyOnly&&[env.P6_NONPAID_DAILY_REVIEWER_PRIVATE_KEY_BASE64,env.P6_NONPAID_QUERY_REVIEWER_PRIVATE_KEY_BASE64,
+   env.P6_NONPAID_REGISTRY_REVIEWER_PRIVATE_KEY_BASE64,env.P6_PRIVATE_PUBLISHER_DATABASE_URL].some(Boolean))
+  hold("CONDITIONAL_CUSTODY_WRITE_CAPABILITY_FORBIDDEN");
+ const dailyKey=custodyOnly?undefined:privateKey(env.P6_NONPAID_DAILY_REVIEWER_PRIVATE_KEY_BASE64,reviewed.dailyReviewerFingerprintSha256);
+ const queryKey=custodyOnly?undefined:privateKey(env.P6_NONPAID_QUERY_REVIEWER_PRIVATE_KEY_BASE64,trust.queryReviewerFingerprintSha256);
+ const registryKey=custodyOnly?undefined:privateKey(env.P6_NONPAID_REGISTRY_REVIEWER_PRIVATE_KEY_BASE64,trust.dayReviewerFingerprintSha256);
  const prepare=url(env.P5_V39_PREPARE_DATABASE_URL,PREPARE_LOGIN),
   reader=url(env.P6_PRIVATE_READER_DATABASE_URL,trust.expectedReaderSessionLogin),
-  publisher=url(env.P6_PRIVATE_PUBLISHER_DATABASE_URL,reviewed.expectedPublisherSessionLogin);
- if(new Set([prepare.endpoint,reader.endpoint,publisher.endpoint]).size!==1)hold("CROSS_DATABASE_ENDPOINT");
+  publisher=custodyOnly?undefined:url(env.P6_PRIVATE_PUBLISHER_DATABASE_URL,reviewed.expectedPublisherSessionLogin);
+ if(new Set([prepare.endpoint,reader.endpoint,...(publisher?[publisher.endpoint]:[])]).size!==1)hold("CROSS_DATABASE_ENDPOINT");
  const lateRole=mode==="day1_recovery"?env.V39_P5_EARLY_DRAW_EFFECTIVE_ROLE:undefined;
  const late=mode==="day1_recovery"?url(env.V39_P5_EARLY_DRAW_DATABASE_URL,lateRole):undefined;
  if(late&& (lateRole!=="phase5_early_draw_prod20261115"||late.endpoint!==prepare.endpoint||p.manifestSha256!=="a596feb9b3d8a1d75c8856a2f2f6bc559a87d58fd18132bbfa0f48428965118e"||budget.budgetReleaseMode!=="COST_UPPER_BOUND"))hold("EXACT_EXISTING_DAY1_RECOVERY_ROLE_AND_MANIFEST");
  const receipt={mode,mainSha:env.GITHUB_SHA,requestedDay:["manual","day1_recovery","conditional_custody"].includes(mode)?Number(env.P6_NONPAID_SOURCE_REQUESTED_DAY):null,
   providerCalls:0,phase6PaidGo:false};
  Object.defineProperties(receipt,Object.fromEntries(Object.entries({p,q,reviewed,policyBytes,signingPolicyBytes,trust,
-  prepareUrl:prepare.raw,readerUrl:reader.raw,publisherUrl:publisher.raw,dailyKey,queryKey,registryKey,lateUrl:late?.raw,lateRole,
+  prepareUrl:prepare.raw,readerUrl:reader.raw,publisherUrl:publisher?.raw,dailyKey,queryKey,registryKey,lateUrl:late?.raw,lateRole,
   dailyPolicySha:env.P6_NONPAID_DAILY_POLICY_SHA256,signingPolicySha:env.P6_NONPAID_SIGNING_POLICY_SHA256})
   .map(([k,value])=>[k,{value,enumerable:false}])));
  return Object.freeze(receipt);
@@ -288,6 +295,13 @@ export function projectP6ConditionalPolicyCustody(ctx,plans,calendar,indexRows,o
  return Object.freeze({status:"P6_ACTUAL_PROTECTED_CONDITIONAL_POLICY_CUSTODY_READONLY",
   prospective:{runDayIndex:day.runDayIndex,firstRequestUtc:day.firstRequestUtc,preparationOpensUtc:day.preparationOpensUtc,genesisAbsent:true,preparedQueryCount:0},
   observedDbClockUtc:observedUtc,exactThreePolicyDigestsValidated:true,exact31PlanPinsValidated:true,
+  // Commitment to exact admitted policy digests (not the secret digest
+  // values themselves). Recompute inside the protected context when
+  // reviewing a candidate; never use as a substitute for the individual pins.
+  basePolicyCommitmentSha256:h(JSON.stringify({schema:"v39.phase5b.custody-base-commitment.v1",
+   daily:env.P6_NONPAID_DAILY_POLICY_SHA256,signing:env.P6_NONPAID_SIGNING_POLICY_SHA256,transport:env.P6_NONPAID_TRANSPORT_TRUST_SHA256})),
+  signingPrivateKeysVerified:false,publisherEndpointVerified:false,
+  signingOrPublishingCapabilityPresent:false,
   canonicalNativePredecessorBytes:Buffer.from(JSON.stringify(p)).equals(ctx.policyBytes),
   nativePolicyPresent,baseIntervalCoversRemainingStudy,remainingServiceEndUtc:new Date(last).toISOString(),
   conditionalPolicyFieldState:unexpectedNativeMarker?"PARTIAL_HOLD":present===0?"ABSENT":present===fields.length?"ALL_FIELDS_PRESENT_NOT_COMMISSIONED_PROOF":"PARTIAL_HOLD",
@@ -369,7 +383,7 @@ export async function runP6NonpaidSourceDayGithub(env){
  const restricted=makeP5Stage28DedicatedRolePool(raw,{group:"prepare",reviewedDedicatedLogin:PREPARE_LOGIN,
   forbiddenApplicationLogin:"phase5_p30_pre_login_20261107"});
  const reader=new pg.Client({connectionString:ctx.readerUrl,connectionTimeoutMillis:8000,query_timeout:40000});
- const publisher=new pg.Client({connectionString:ctx.publisherUrl,connectionTimeoutMillis:8000,query_timeout:40000});
+ const publisher=ctx.mode==="conditional_custody"?null:new pg.Client({connectionString:ctx.publisherUrl,connectionTimeoutMillis:8000,query_timeout:40000});
  try{
   await reader.connect();
   await reader.query("SET ROLE phase6_private_frozen_reader_v39");
@@ -430,7 +444,7 @@ export async function runP6NonpaidSourceDayGithub(env){
   return Object.freeze({...base,status:"ONE_PROSPECTIVE_DAY_PREPARED_AND_PUBLISHED_NO_PAID_GO",runDayIndex:plan.runDayIndex,
    insertedDailyReviewRow:prep.insertedDailyReviewRow,preparedLedgerInserts:prep.preparedLedgerInserts,
    verifiedPreparedQueryCount:prep.verifiedQueryCount,...published});
- }finally{await publisher.end().catch(()=>{});await reader.end().catch(()=>{});await raw.end().catch(()=>{});}
+ }finally{if(publisher)await publisher.end().catch(()=>{});await reader.end().catch(()=>{});await raw.end().catch(()=>{});}
 }
 if(process.argv[1]&&resolve(process.argv[1])===fileURLToPath(import.meta.url)){
  runP6NonpaidSourceDayGithub(process.env).then(r=>console.log(JSON.stringify(r))).catch(e=>{

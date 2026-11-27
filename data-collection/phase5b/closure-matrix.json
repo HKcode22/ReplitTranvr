@@ -1,11 +1,11 @@
 {
-  "asOfUtc": "2026-11-27T08:48:08Z",
+  "asOfUtc": "2026-11-27T09:07:06.284Z",
   "exactCandidate": "c4408c621a84a2549355d935cca7333c5527d3c2",
   "canonicalRegister": "../phase6/RECOVERY_REGISTER.md",
   "counts": {
-    "narrowCorrected": 9,
+    "narrowCorrected": 10,
     "exactCiGreenPendingDeployment": 10,
-    "partialOrOpen": 36,
+    "partialOrOpen": 35,
     "historicalLoss": 2
   },
   "failures": [
@@ -211,12 +211,12 @@
     },
     {
       "id": "F022",
-      "classification": "PARTIAL_OR_OPEN",
+      "classification": "NARROW_CORRECTION_RECORDED",
       "implementations": [
         "I020",
         "I120"
       ],
-      "next": "Retention-aware inventory separates expired metadata and retained content"
+      "next": "Actual 09:07:06Z I120/T114 inventory proves 52 expired metadata correctly distinguished; preserve regression"
     },
     {
       "id": "F023",
@@ -268,7 +268,7 @@
         "I090",
         "I120"
       ],
-      "next": "Preserve historical loss and prevent prospective recurrence"
+      "next": "Day2 4902 historical observations; 52 expired originals, no global durable P7 fragments or bundles at 09:07Z. Prevent recurrence through prospective actual PRE/Packet B commit, never backfill"
     },
     {
       "id": "F027",
@@ -316,7 +316,8 @@
         "I091",
         "I094",
         "I095",
-        "I108"
+        "I108",
+        "I121"
       ],
       "next": "Protected policy custody, exact reviewed commissioning, positive conditional signature and PRE"
     },
