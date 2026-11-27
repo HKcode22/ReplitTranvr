@@ -91,6 +91,7 @@ test("T060 each named failure in a multi-failure T must match its own implementa
 });
 
 const matrixPath=new URL("../data-collection/phase5b/closure-matrix.json",import.meta.url);
+const reviewedClosedIds=Object.freeze(["F001","F002","F004","F006","F013","F022","F025","F028","F043","F052"]);
 function validateClosure(m,rows){
  const fs=rows.filter(r=>r[0].startsWith("F"));
  assert.equal(m.failures.length,fs.length,"lost failure");
@@ -111,6 +112,7 @@ function validateClosure(m,rows){
   assert.ok(["preservation_admission","outcome_truth","source_effectiveness","release_reliability","evidence_integrity"].includes(f.workstream),"missing workstream");
   assert.ok(typeof f.next==="string"&&f.next.trim().length>0,"missing acceptance");
  }
+ assert.deepEqual(m.failures.filter(f=>f.closureStatus==="CLOSED").map(f=>f.id).sort(),[...reviewedClosedIds].sort(),"closure requires explicit reviewed evidence decision");
  assert.deepEqual(m.counts,counts,"classification count mismatch");
  assert.equal(m.binaryClosure.closed,closed);
  assert.equal(m.binaryClosure.notClosed,fs.length-closed);
@@ -125,6 +127,7 @@ test("T116 refuses premature closure, duplicates, omissions, count and risk drif
  const original=JSON.parse(readFileSync(matrixPath,"utf8")),rows=parseRegister(doc);
  const bad=change=>{const m=structuredClone(original);change(m);assert.throws(()=>validateClosure(m,rows));};
  bad(m=>{m.failures.find(f=>f.id==="F027").closureStatus="CLOSED";});
+ bad(m=>{const f=m.failures.find(f=>f.id==="F027");f.classification="NARROW_CORRECTION_RECORDED";f.closureStatus="CLOSED";f.closureEvidence=rows.find(r=>r[0]==="F027")[2];m.counts.narrowCorrected++;m.counts.partialOrOpen--;m.binaryClosure.closed++;m.binaryClosure.notClosed--;});
  bad(m=>{m.failures[1]=structuredClone(m.failures[0]);});
  bad(m=>{m.failures.pop();});
  bad(m=>{m.binaryClosure.closed++;});
