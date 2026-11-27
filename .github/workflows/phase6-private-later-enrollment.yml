@@ -16,6 +16,7 @@ on:
   pull_request:
     branches: [main]
     paths:
+      - 'scripts/v39_phase5b_source_only_successor_owner.sh'
       - 'server/lib/disruption/phase6SameNeonEndpoint_v39.ts'
       - 'scripts/v39_phase6_private_later_restartable_enrollment_v39.ts'
       - 'scripts/v39_phase6_private_t24_restartable_enrollment_v39.mjs'

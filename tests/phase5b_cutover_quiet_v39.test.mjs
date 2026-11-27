@@ -184,3 +184,13 @@ test("T106 target980 requires every added exact workflow and checks all pin scop
  assert.match(sourceCutover,/target_980_pins_ok "\$OLD" "\$OLD" \|\| hold PIN_SCOPE_DRIFT;fi\nmerge_exact/);
  assert.match(sourceCutover,/RECOVERY_REQUIRES_EXACT_MERGED_TREE/);
 });
+
+test("T108 required target980 offline workflows trigger on the exact owner release helper",()=>{
+ const required=["phase5-one-signed-future-post-v0083-main-manual.yml","phase6-source-existing-p5-child-admission-offline-no-provider.yml","phase5-source-upcoming-queue-main-scheduled-readonly.yml","phase5-actual-source-native-flight-candidates-readonly-manual.yml","phase6-private-later-enrollment.yml","phase5-github-fids-source-release-guard-offline.yml","phase5-cd-github-one-queued-t24-witness-main-manual.yml","phase5-source-login-and-manual-owner-disposable-pg16.yml","phase5-v0080-github-runtime-prearm-real-pg16.yml","phase5-amendment-c-segmented-day-stage6-stage8-offline.yml","phase5-v0082-atomic-segmented-day-pg16-no-provider.yml","phase5-stage9-v0079-db-prepare-offline.yml","phase5-stage8-v0079-daily-prepare-proposals-offline.yml"];
+ for(const path of required){
+  const yaml=readFileSync(new URL("../.github/workflows/"+path,import.meta.url),"utf8");
+  const pull=yaml.split("  pull_request:\n")[1]?.split(/\n  [a-z_]+:/)[0];
+  assert.ok(pull,"missing pull_request "+path);
+  assert.match(pull,/^      - 'scripts\/v39_phase5b_source_only_successor_owner\.sh'$/m,path);
+ }
+});

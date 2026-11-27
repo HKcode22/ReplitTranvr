@@ -3,6 +3,7 @@ on:
   pull_request:
     branches: [main]
     paths:
+      - 'scripts/v39_phase5b_source_only_successor_owner.sh'
       - 'server/lib/disruption/phase5V0079DailyPreparedQueryProposals_v39.ts'
       - 'tests/phase5_stage8_v0079_prepared_day_proposals_v39.test.ts'
       - '.github/workflows/phase5-stage8-v0079-daily-prepare-proposals-offline.yml'

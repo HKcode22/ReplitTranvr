@@ -16,6 +16,7 @@ on:
   pull_request:
     branches: [main]
     paths:
+      - 'scripts/v39_phase5b_source_only_successor_owner.sh'
       - 'migrations/staged/V0080__phase5_bind_actual_github_run_id_before_fids_get_v39.sql'
       - 'server/lib/disruption/phase5V0080GitHubPrearm_v39.ts'
       - 'server/lib/disruption/phase5GitHubOneQueryReleaseAdmission_v39.ts'

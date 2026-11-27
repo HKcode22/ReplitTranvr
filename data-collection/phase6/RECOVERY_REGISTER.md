@@ -67,6 +67,7 @@ F = failure family or evidenced defect; I = corrective implementation; C = incom
 | F049 | Candidate commissioning scope defect; staged | Requested day selector can skip an earlier unsigned prospective conditional day; violates next unsigned commissioning target. No production execution or recurrence. | I110 |
 | F050 | Candidate commissioning diagnostic defect; staged | Nested conditional successor scope omitted from custody inventory; unexpected marker on original native append policy also not detected. Could report false ABSENT or ALL_FIELDS_PRESENT. No actual commissioning proof or recurrence. | I111 |
 | F051 | Candidate-only proof actor pin validation gap; staged | Candidate assembler checked the lane public key but only a distinct digest for the proof reviewer; no actual proof key binding at candidate assembly. No production commissioning or recurrence. | I113 |
+| F052 | Actual candidate CI scheduling coverage defect; repair staged | After #979 merge ancestry reconciliation, exact #980 head 0f1cfca4 triggered only 10 of 23 mandatory offline workflows because 13 pull_request path filters did not match the new release helper. No production failure. | I114 |
 
 ## Implementations
 
@@ -221,6 +222,7 @@ F = failure family or evidenced defect; I = corrective implementation; C = incom
 | I111 | Exact 41cdcebd 23/23 passed; production pending | Include nested conditionalLaterDayAppendPolicy.conditionalLaterPreScope in protected field inventory; any marker on original native dayAppendPolicy is PARTIAL_HOLD. Aligned with existing candidate assembler. Presence never certifies approval. | F050 |
 | I112 | Staged; exact CI and safe prospective gap required | Exact target-only #980 owner deployment/recovery mode with all 23 mandatory CI paths, scoped pin preflight, exact merged-tree recovery, unchanged SOURCE/POST/retention and no cancellation. | F040, F046 |
 | I113 | Staged; exact CI required | Require canonical actual Ed25519 proof public key bytes matching the existing fingerprint at candidate assembly, same as lane key. No signer generation or install. | F051 |
+| I114 | Staged; exact CI required | Add the exact owner successor helper path to the 13 missing pull_request filters, without altering main schedule/dispatch jobs or credentials. Retain all 23 mandatory exact CI paths. | F052 |
 
 ## Completion components (not gates)
 
@@ -234,7 +236,7 @@ F = failure family or evidenced defect; I = corrective implementation; C = incom
 | C006 | Open | Prospective SOURCE effectiveness and status/body custody | F003, F016, F017, F047 | I012, I013, I086, I087, I097, I098, I099, I103, I105, I107 |
 | C007 | Coordinated deployment complete; actual paid capture open | Owner exact pins and budget/STOP audit passed 19:47:58Z, SOURCE switch enabled, first actual stored parent 45886377755 NO_DUE_WORK; POST remains paused. Do not treat routing as paid capture. Owner 23:20Z quiet hold followed by successful exact coordinated retry: target c2bb8e18, relay 2d96b223, retention 45910885837 both jobs success and final pin readback. No paid capture inferred. | F026, F040 | I008, I011, I023, I057, I082, I084, I086, I087, I090, I096 |
 | C008 | Partial; actual owner coverage readback passed | I059/T054 verified 31 days, 512 prepared queries, 92 reservations, 52 timely bindings, 292 elapsed unreserved, 128 future, zero linked PRE; leakage not assessable. I060 explicit empty status staged. Labels, feature completeness, actual split collision evaluation remain open. | F003, F005, F017, F026, F029 | I018, I020, I059, I060, I086, I087, I097, I098, I099, I103, I105 |
-| C009 | Open | Remove redundant runtime dependencies and isolate failures without weakening custody | F007, F021, F023, F024, F037, F040, F041, F042, F043, F044, F045, F046, F047 | I006, I019, I021, I022, I049, I088, I089, I092, I093, I094, I096, I100, I101, I102, I104, I106, I107, I112 |
+| C009 | Open | Remove redundant runtime dependencies and isolate failures without weakening custody | F007, F021, F023, F024, F037, F040, F041, F042, F043, F044, F045, F046, F047, F052 | I006, I019, I021, I022, I049, I088, I089, I092, I093, I094, I096, I100, I101, I102, I104, I106, I107, I112, I114 |
 
 | C010 | Coordinated deployment, rolling and actual primary due sweep verified | Relay #30 merged to 91888916, target f4fe806d; independent primary relay 45816236626 and target retention child 45816293783 passed. New relay rolling wake 45816860550 passed and six target child workflows completed; scientific execution remains separate. 23:19Z retention cleared 6 originals; cron audit 23:20Z detected older preflight defer. New-main 23:28Z and 23:38Z rolling six lanes passed; primary 23:34Z self-admitted and intentionally deferred recent retention, not new deletion. Actual 23:49Z independent retention 45913171519 cleared 6 originals/576 population/582 tombstones, zero hard due, private/P7 zero due. | F007, F034, F035, F036, F037, F041, F046 | I032, I035, I036, I049, I083, I084, I090, I100, I104, I106, I112 |
 
@@ -386,6 +388,7 @@ T IDs are permanent scenarios, not claims of passing CI. Each references existin
 | T105 | Exact 41cdcebd 23/23 passed; production pending | Native marker is PARTIAL_HOLD even with complete successor; seven of eight successor fields partial; all eight present is not commissioning proof. | F050 | I111 | C001 | tests/phase6_nonpaid_source_day_github_runtime_v39.test.mjs |
 | T106 | Staged; exact CI required | Require every exact #980 path, reject missing path and unexpected/unknown pin scope before merge, preserve SOURCE-only partial merged recovery. | F040, F046 | I112 | C009, C010 | tests/phase5b_cutover_quiet_v39.test.mjs |
 | T107 | Staged; exact CI required | Reject missing, mismatched, malformed or reused proof key; existing Ed25519 lane/proof key pair must match exact fingerprints. | F051 | I113 | C001 | tests/phase5b_conditional_policy_candidate_v39.test.mjs |
+| T108 | Staged; exact CI required | Verify each of the 13 formerly missing workflows explicitly includes the successor helper in pull_request paths, not production triggers. | F052 | I114 | C009 | tests/phase5b_cutover_quiet_v39.test.mjs |
 
 ## Scientific and retention authorities
 
@@ -712,3 +715,5 @@ F050 correction on immediate successor: the eighth required marker belongs to co
 ## Nov27 00:03 PST — actual #979 deployed; #980 successor
 
 [Checkpoint](checkpoints/2026-11-27_PHASE5B_ACTUAL_979_DEPLOYMENT_AND_980_SUCCESSOR.md). Owner actual drain complete 08:01:40Z; Day3 T90 32 reservations/16 timely, 32 future; Day4 T24 64 prepared/unarmed. #979 merged main 2b9cb404da863aede54d9069e440ff32bcf6d00e; new retention 45962639210 both jobs green; 08:03:13Z actual SOURCE restored. #980 parent 41cdcebd 23/23 CI passed, base merge tree identical to #979 head; incorporate main ancestry without changing science. I112/T106 next source-only cutover, no maintenance pause inferred; F051/I113/T107 candidate proof key parity. Exact new CI required. F51 I113 T107 C10.
+
+F052 actual 0f1cfca4 candidate returned 10 PR runs rather than required 23 after new main ancestry. I114 explicitly adds missing PR filter paths and T108 checks coverage. Do not reduce mandatory CI to green subset. No paid job changes. F52 I114 T108 C10.
