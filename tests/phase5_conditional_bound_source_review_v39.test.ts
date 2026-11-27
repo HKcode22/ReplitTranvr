@@ -698,7 +698,7 @@ it("T048 independent conditional T24 issuer reads one genuine marked original, s
   expectedReviewerFingerprintSha256:fp,forbiddenSignerFingerprints:[h("c")],signer:keys.privateKey,env:{P6_PHASE7_PRE_LANE_EVIDENCE_AUTHORITY_APPROVED:"1",
    P6_PHASE7_PRE_LANE_EVIDENCE_AUTHORITY_FINGERPRINT_SHA256:fp,P6_NONPAID_DAILY_POLICY_SHA256:sha,
    V39_P5_MANIFEST_SHA256:scope.source.manifestSha256,V39_P5_RIGHTS_SHA256:scope.source.rightsReviewSha256}};
- const missing="leg:g5a:"+h("missing-at-fresh-clock");
+ const missing="leg:g5a:"+hash(Buffer.from("missing-at-fresh-clock"));
  const db=make(),wire=await issueP5ConditionalT24SignedReviewPage(db.pool,proofScope,[missing,id],input);
  if(!wire)throw Error("T119 expected still-eligible T24 signed subset");
  expect(wire.page.reviews.map(r=>r.flightInstanceId)).toEqual([id]);
