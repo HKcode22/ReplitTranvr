@@ -23,3 +23,36 @@ describe("Gate 5 exact Nov22 private-stage recovery from committed evidence",()=
   expect(r.phase6PaidGo).toBe(false);
  });
 });
+
+import {readFileSync} from "node:fs";
+import {join} from "node:path";
+import {compileP6ProspectiveDisabledStageRevisionV39,P6_EXACT_MONDAY_IDENTITY_SUCCESSOR as K} from "../server/lib/disruption/phase6ProspectiveDisabledStageRevision_v39";
+const HNOW=new Date("2026-11-22T03:40:00.000Z");
+const fixturePair=process.env.P6_EXACT_MONDAY_FIXTURE_PAIR;
+function actualMondayIdentityContext(){
+ const a=JSON.parse(readFileSync(join(fixturePair!,"old","prospective-revision-package.json"),"utf8"));
+ const b=JSON.parse(readFileSync(join(fixturePair!,"new","prospective-revision-package.json"),"utf8"));
+ expect(digest(a.newInput)).toBe(K.oldStage);expect(a.newFreezeReview.expectedSignedSevenCategoryCostSha256).toBe(K.oldCost);
+ expect(digest(b.newInput)).toBe(K.newStage);expect(b.newFreezeReview.expectedSignedSevenCategoryCostSha256).toBe(K.newCost);
+ return {oldInput:a.newInput,oldStageReview:a.newStageReview,oldFreezeReview:a.newFreezeReview,
+ newInput:b.newInput,newStageReview:b.newStageReview,newFreezeReview:b.newFreezeReview,
+ newManifestRaw:b.newManifestRaw,now:HNOW,review:{...b.review,schema:K.schema,
+ expectedOldStageInputSha256:K.oldStage,expectedOldCostEnvelopeSha256:K.oldCost,
+ expectedOriginalFrozenManifestSha256:K.oldManifest,expectedPriorCodeSha40:K.oldCode}};
+}
+describe.skipIf(!fixturePair)("Exact owner-observed Monday identity succession — no new scientific dates",()=>{
+ it("reconstructs both real public-evidence packets and requires exact unchanged budget/calendar economics",()=>{
+  const c=actualMondayIdentityContext(),r=compileP6ProspectiveDisabledStageRevisionV39(c);
+  expect(r.changedParentDays).toBe(0);expect(r.firstOldServiceUtc).toBe(r.firstNewServiceUtc);
+  expect(r.new.cost.costOnlyCategoryDraftSha256).toBe(K.newCost);
+  expect(r.providerCalls).toBe(0);expect(r.phase6PaidGo).toBe(false);
+ });
+ it("rejects generic zero-day revision or any altered exact identity, budget or cutoff",()=>{
+  const c=actualMondayIdentityContext();
+  expect(()=>compileP6ProspectiveDisabledStageRevisionV39({...c,review:{...c.review,schema:"v39.phase6.prospective-disabled-stage-revision-review.v2"}})).toThrow();
+  expect(()=>compileP6ProspectiveDisabledStageRevisionV39({...c,review:{...c.review,expectedOldCostEnvelopeSha256:"f".repeat(64)}})).toThrow();
+  const bad=structuredClone(c);bad.newInput.slotBudgetInput.cycleRestCeilingUnits++;
+  expect(()=>compileP6ProspectiveDisabledStageRevisionV39(bad)).toThrow();
+  expect(()=>compileP6ProspectiveDisabledStageRevisionV39({...c,now:new Date("2026-11-24T00:00:00.000Z")})).toThrow("FIRST_PROSPECTIVE_T24_WINDOW_ALREADY_DUE");
+ });
+});

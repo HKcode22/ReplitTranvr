@@ -35,8 +35,44 @@ const utcDate=(x:unknown)=>{
  return Number.isFinite(d.getTime())?d.toISOString().slice(0,10):null;
 };
 
+// One-use identity succession for the exact two Monday packets. No generic
+// zero-day revision: the installed stage and reviewed successor have the
+// same 31-day calendar, ancestor, economics, and no observed collection.
+export const P6_EXACT_MONDAY_IDENTITY_SUCCESSOR=Object.freeze({
+ schema:"v39.phase6.exact-monday-identity-succession-review.v3",
+ oldCode:"781140cde71af3b72376c2db9f0fdb84204a2b7c",
+ oldStage:"a4c30369fcb52eb58da2dd12ec0ea9dabb07fe41b171f44fcb766d0408b3f682",
+ oldCost:"ebf61e512a40c03e3bd3be679a83f995645b199f0bbb172f82677e9cb7976f0e",
+ oldManifest:"b2a691cb411af61c2bfdc42c55506e0ee86e45bfa3e22b420bbd738dc98ee4e4",
+ oldConfig:"ee4ec9f6ca3e0f123512c8aa463cadd07a8892a3fedc4c316fe0c1b64731457c",
+ newCode:"795ace55984b44a3d0bffa886d33a5ec11d31927",
+ newStage:"8adfc61a2bdc73ebacf17aa16788bfa14b890d2eb501e8ca7435109116f096fc",
+ newCost:"cef58dcc4e8009d46e686bb555faab0fe952b9921e8aa3aa13d610ea443e3bf9",
+ newManifest:"a596feb9b3d8a1d75c8856a2f2f6bc559a87d58fd18132bbfa0f48428965118e",
+ newConfig:"9f181bbc70a378f41b85ecd70cd8bc05d8bf4ef76398b0225400c4c21abccebe",
+ calendar:"55ea0dd4b50d43af11af65a1e2910928e98a731ffa5efdeda7eee98ac451077b",
+ sharedManifest:"3a0e3667dbbd3eb9bc101618b1858755d3814f4676d61f1487586463c6d91ba7",
+ dateDecision:"b383daf8f138daee3b5c976a6843ff9ff19d710bd62f212160f5b177c4931cda"
+} as const);
+function exactMondayIdentityReview(r:P6ProspectiveDisabledStageRevisionReviewV39){
+ const k=P6_EXACT_MONDAY_IDENTITY_SUCCESSOR;
+ return r.expectedOldStageInputSha256===k.oldStage&&r.expectedOldCostEnvelopeSha256===k.oldCost&&
+ r.expectedNewStageInputSha256===k.newStage&&r.expectedNewCostEnvelopeSha256===k.newCost&&
+ r.expectedOriginalFrozenManifestSha256===k.oldManifest&&r.expectedNewManifestSha256===k.newManifest&&
+ r.expectedPriorCodeSha40===k.oldCode&&r.expectedCurrentCodeSha40===k.newCode&&
+ r.reviewedCalendarRevisionEvidenceSha256===k.dateDecision;
+}
+function costEconomics(c:any){
+ const {sourceSlotBudgetSha256,manifestSha256,configSha256,reviewedProviderRangeEvidenceSha256,
+ timingEvidenceSha256,costOnlyCategoryDraftSha256,...economic}=c;
+ return economic;
+}
+function slotEconomics(c:any){
+ const {manifestSha256,configSha256,providerRangeEvidenceSha256,timingEvidenceSha256,...economic}=c;
+ return economic;
+}
 export interface P6ProspectiveDisabledStageRevisionReviewV39{
- schema:"v39.phase6.prospective-disabled-stage-revision-review.v1"|"v39.phase6.prospective-disabled-stage-revision-review.v2";
+ schema:"v39.phase6.prospective-disabled-stage-revision-review.v1"|"v39.phase6.prospective-disabled-stage-revision-review.v2"|typeof P6_EXACT_MONDAY_IDENTITY_SUCCESSOR.schema;
  expectedOldStageInputSha256:string;
  expectedOldCostEnvelopeSha256:string;
  expectedNewStageInputSha256:string;
@@ -105,7 +141,7 @@ export function compileP6ProspectiveDisabledStageRevisionV39(input:{
  now?:Date;
 }){
  const r=input.review;
- if(!r||!["v39.phase6.prospective-disabled-stage-revision-review.v1","v39.phase6.prospective-disabled-stage-revision-review.v2"].includes(r.schema)||
+ if(!r||!["v39.phase6.prospective-disabled-stage-revision-review.v1","v39.phase6.prospective-disabled-stage-revision-review.v2",P6_EXACT_MONDAY_IDENTITY_SUCCESSOR.schema].includes(r.schema)||
     ![r.expectedOldStageInputSha256,r.expectedOldCostEnvelopeSha256,
       r.expectedNewStageInputSha256,r.expectedNewCostEnvelopeSha256,
       r.expectedOriginalFrozenManifestSha256,r.expectedNewManifestSha256,
@@ -122,6 +158,16 @@ export function compileP6ProspectiveDisabledStageRevisionV39(input:{
     input.newInput.codeSha40!==r.expectedCurrentCodeSha40)
   hold("STAGE_INPUT_OR_CODE_SHA_DRIFT");
 
+ const identityOnly=r.schema===P6_EXACT_MONDAY_IDENTITY_SUCCESSOR.schema;
+ const k=P6_EXACT_MONDAY_IDENTITY_SUCCESSOR;
+ if(identityOnly&&(!exactMondayIdentityReview(r)||
+  input.oldInput.manifestSha256!==k.oldManifest||input.newInput.manifestSha256!==k.newManifest||
+  input.oldInput.configSha256!==k.oldConfig||input.newInput.configSha256!==k.newConfig||
+  input.oldInput.calendarSha256!==k.calendar||input.newInput.calendarSha256!==k.calendar||
+  !same(input.oldInput.calendarDays,input.newInput.calendarDays)||
+  !same(input.oldInput.predecessorEvidenceIds,input.newInput.predecessorEvidenceIds)||
+  !same(slotEconomics(input.oldInput.slotBudgetInput),slotEconomics(input.newInput.slotBudgetInput))))
+  hold("EXACT_MONDAY_IDENTITY_SCOPE_OR_SLOT_DRIFT");
  const oldCompiled=compileP5V0093CostOnlySevenRestReview(
   input.oldInput,input.oldStageReview,input.oldFreezeReview);
  const next=compileP5V0093CostOnlySevenRestReview(
@@ -133,7 +179,9 @@ export function compileP6ProspectiveDisabledStageRevisionV39(input:{
   hold("COMPILED_STAGE_OR_COST_SHA_DRIFT");
 
  exactManifest(input.newManifestRaw,r.expectedNewManifestSha256,input.newInput,
-  r.expectedOriginalFrozenManifestSha256);
+  identityOnly?k.sharedManifest:r.expectedOriginalFrozenManifestSha256);
+ if(identityOnly&&!same(costEconomics(oldCompiled.cost),costEconomics(next.cost)))
+  hold("EXACT_MONDAY_IDENTITY_COST_ECONOMICS_DRIFT");
 
  const a=oldCompiled.staged,b=next.staged;
  if(a.authorizationId!==b.authorizationId||
@@ -160,7 +208,11 @@ export function compileP6ProspectiveDisabledStageRevisionV39(input:{
    hold("REVISED_DATE_ORDER");
   if(delta!==0)changed++;
  }
- if(legacy){
+ if(identityOnly){
+  if(changed!==0||a.calendarSha256!==k.calendar||b.calendarSha256!==k.calendar||
+     a.manifestSha256!==k.oldManifest||b.manifestSha256!==k.newManifest)
+   hold("EXACT_MONDAY_IDENTITY_CALENDAR_DRIFT");
+ }else if(legacy){
   // Historical approved boundary remains exactly reproducible.
   if(changed!==1||
     Date.parse(b.calendarDays[0].startUtc)-Date.parse(a.calendarDays[0].startUtc)!==24*H||
@@ -320,6 +372,15 @@ export async function commitP6ProspectiveDisabledStageRevisionOnceV39(
   if(lock.ok!==true)hold("PROVIDER_OWNER_LOCK_BUSY");
   await c.query("LOCK TABLE "+LOCK_TABLES.join(",")+" IN SHARE ROW EXCLUSIVE MODE");
   await assertOldDisabledVirgin(c,compiled.old);
+  if(input.review.schema===P6_EXACT_MONDAY_IDENTITY_SUCCESSOR.schema){
+   // The predecessor is the actually installed Monday sibling, not the
+   // historical pre-Monday packet. Verify stored original bytes while
+   // holding the same protected locks, and preserve the row permanently.
+   const k=P6_EXACT_MONDAY_IDENTITY_SUCCESSOR;
+   const m=await one(c,"SELECT value FROM clean.adb_collection_meta WHERE key=$1",
+    ["phase5_frozen_manifest:"+k.oldManifest]);
+   exactManifest(m.value,k.oldManifest,input.oldInput,k.sharedManifest);
+  }
   // Re-check the prospective window using the DB clock after all mutation
   // surfaces are locked.
   compileP6ProspectiveDisabledStageRevisionV39({...input,now:new Date(sys.now_utc)});
