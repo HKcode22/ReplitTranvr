@@ -48,3 +48,30 @@ test("T089 exact checked-in 31-plan bytes bind preparation clock and cover all p
  const b=buf({...review,validUntilUtc:"2026-11-30T23:00:00.000Z"});
  assert.throws(()=>prepare({...inputs,reviewBytes:b,reviewSha256:sha(b)}),/REVIEWED_PLAN_INTERVAL/);
 });
+
+import {deriveP6NativeT24PolicyTransition,matchesP6T24RegistryPolicyDigest} from "../server/lib/disruption/phase6PrivateT24RegistryTransport_v39.mjs";
+import {requireP6ConditionalPreflightClock} from "../scripts/v39_phase6_stored_source_postcommit_native_later_v39.mjs";
+test("T095 exact additive successor retains only earlier native registry digest",()=>{
+ const x=prepare(inputs),d=JSON.parse(x.privatePolicyBytes.daily),transition=deriveP6NativeT24PolicyTransition(d);
+ assert.equal(transition.previousDailyPolicySha256,baseDigests.daily);
+ const trust={expectedT24PolicySha256:x.dailySha256,nativeT24PolicyTransition:transition};
+ const old={policySha256:baseDigests.daily,runDayIndex:4};
+ assert.equal(matchesP6T24RegistryPolicyDigest(trust,old,false),true);
+ assert.equal(matchesP6T24RegistryPolicyDigest(trust,old,true),false);
+ assert.equal(matchesP6T24RegistryPolicyDigest(trust,{...old,runDayIndex:5},false),false);
+ assert.equal(matchesP6T24RegistryPolicyDigest(trust,{...old,policySha256:h("wrong")},false),false);
+ assert.equal(matchesP6T24RegistryPolicyDigest(trust,{...old,policySha256:x.dailySha256,runDayIndex:5},true),true);
+ assert.equal(matchesP6T24RegistryPolicyDigest({expectedT24PolicySha256:x.dailySha256},old,false),false);
+ assert.throws(()=>deriveP6NativeT24PolicyTransition({...d,frameSha256:h("changed")}),/PREDECESSOR_BYTES_DRIFT/);
+ assert.equal(deriveP6NativeT24PolicyTransition(p),undefined);
+});
+test("T096 earlier native day does not inherit future conditional clock",()=>{
+ const d=JSON.parse(prepare(inputs).privatePolicyBytes.daily);
+ const scope={nativeT24PolicyTransition:deriveP6NativeT24PolicyTransition(d),c:{selector:{runDayIndex:4}},conditionalT24Reviewer:d.conditionalT24PermitReview,conditionalLaterReviewer:d.conditionalLaterPermitReview};
+ assert.doesNotThrow(()=>requireP6ConditionalPreflightClock(scope,now,false));
+ const marked={...scope,c:{selector:{runDayIndex:5}}};
+ assert.throws(()=>requireP6ConditionalPreflightClock(marked,now,false),/CONDITIONAL_T24_REVIEWER_CLOCK/);
+ assert.doesNotThrow(()=>requireP6ConditionalPreflightClock(marked,effective,false));
+ assert.throws(()=>requireP6ConditionalPreflightClock(marked,end,false),/CONDITIONAL_T24_REVIEWER_CLOCK/);
+ assert.throws(()=>requireP6ConditionalPreflightClock({...scope,nativeT24PolicyTransition:undefined},now,false),/CONDITIONAL_T24_REVIEWER_CLOCK/);
+});

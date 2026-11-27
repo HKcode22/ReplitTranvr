@@ -6,7 +6,7 @@ import {sameP5ConditionalLaterReviewerScope} from "../server/lib/disruption/phas
  * All publication uses independently approved protected policies and
  * existing restricted logins; STOP default. */
 import pg from "pg";
-import {readP6T24CurrentRegistrySet,buildP6DelegatedT24PrivateRegistry,publishP6T24PrivateRegistryOnce,deriveP6ConditionalT24Scope,buildP6ConditionalT24RegistryProposal,signP6DelegatedConditionalT24Registry} from "../server/lib/disruption/phase6PrivateT24RegistryTransport_v39.mjs";
+import {readP6T24CurrentRegistrySet,buildP6DelegatedT24PrivateRegistry,publishP6T24PrivateRegistryOnce,deriveP6ConditionalT24Scope,deriveP6NativeT24PolicyTransition,buildP6ConditionalT24RegistryProposal,signP6DelegatedConditionalT24Registry} from "../server/lib/disruption/phase6PrivateT24RegistryTransport_v39.mjs";
 import {createHash,createPrivateKey,createPublicKey} from "node:crypto";
 import {pathToFileURL} from "node:url";
 import {admitP6PostcommitNativeAudit,runP6PostcommitNativeAudit} from "./v39_phase6_stored_source_postcommit_native_audit_v39.mjs";
@@ -154,8 +154,9 @@ export function admitP6NativeLaterRuntime(env,read,mode="committed"){
  const laterReviewerKey=key(env.P6_PRIVATE_LATER_REVIEWER_KEY_BASE64,v.laterReviewerFingerprintSha256);
  const dayReviewerKey=key(env.P6_PRIVATE_DAY_REVIEWER_KEY_BASE64,t.dayReviewerFingerprintSha256);
  const dayPolicyBytes=Buffer.from(JSON.stringify(day)),conditionalT24Reviewer=admitP6ConditionalT24Reviewer(env,p,t),conditionalLaterReviewer=admitP6ConditionalLaterReviewer(env,p,t);
+ const nativeT24PolicyTransition=deriveP6NativeT24PolicyTransition(p);
  const conditionalDayBytes=conditionalLaterReviewer?Buffer.from(JSON.stringify(conditionalLaterReviewer.day)):null;
- return {auditEnv,c,v,custody,policyBytes,publisherUrl,preUrl,conditionalT24Reviewer,conditionalLaterReviewer,
+ return {auditEnv,c,v,custody,policyBytes,publisherUrl,preUrl,conditionalT24Reviewer,conditionalLaterReviewer,nativeT24PolicyTransition,
   conditionalAppendApproval:conditionalDayBytes?{policyBytes:conditionalDayBytes,expectedPolicySha256:hash(conditionalDayBytes),dayReviewerKey,independentlyApprovedDelegatedDayAppend:true,noProviderCredentialsInSigner:true}:null,
   authority:{trust:t,policyBytes,expectedPolicySha256:env.P6_NONPAID_DAILY_POLICY_SHA256,
    independentDelegatedNativeReviewApproved:true,noProviderCredentialsInReviewer:true,laterReviewerKey},
@@ -217,6 +218,14 @@ export function p6PreflightConditionalReadiness(x,clock){
   actualConditionalPreCommitVerified:false,trainingEligibilityCertified:false
  });
 }
+export function requireP6ConditionalPreflightClock(x,clock,actorOnly){
+ if(!iso(clock))hold("PREFLIGHT_CLOCK");
+ const tr=x.nativeT24PolicyTransition,day=x.c?.selector?.runDayIndex;
+ if(tr&&(!Number.isSafeInteger(day)||day<1||day>31))hold("CONDITIONAL_PREFLIGHT_DAY");
+ if(tr&&day<tr.firstConditionalRunDayIndex)return;
+ if(x.conditionalT24Reviewer&&(clock>=x.conditionalT24Reviewer.validUntilUtc||(!actorOnly&&clock<x.conditionalT24Reviewer.validFromUtc)))hold("CONDITIONAL_T24_REVIEWER_CLOCK");
+ if(x.conditionalLaterReviewer&&(clock>=x.conditionalLaterReviewer.validUntilUtc||(!actorOnly&&clock<x.conditionalLaterReviewer.validFromUtc)))hold("CONDITIONAL_LATER_REVIEWER_CLOCK");
+}
 export async function preflightP6NativeLaterRuntime(env){
  const actorOnly=env.V39_P5_CHILD_CONFIRM==="ONLY_PRE_INDEPENDENT_ACTOR_PREFLIGHT_NO_PROVIDER";
  const x=admitP6NativeLaterRuntime(env,undefined,actorOnly?"actor-preflight":"committed");
@@ -231,8 +240,7 @@ export async function preflightP6NativeLaterRuntime(env){
   for(const p of [x.v,x.v.dayAppendPolicy,{validFromUtc:x.custody.policyValidFromUtc,validUntilUtc:x.custody.policyValidUntilUtc}]){
    if(Date.parse(clock)>=Date.parse(p.validUntilUtc)||(!actorOnly&&Date.parse(clock)<Date.parse(p.validFromUtc)))hold("NATIVE_POLICY_CLOCK");
   }
-  if(x.conditionalT24Reviewer&&(clock>=x.conditionalT24Reviewer.validUntilUtc||(!actorOnly&&clock<x.conditionalT24Reviewer.validFromUtc)))hold("CONDITIONAL_T24_REVIEWER_CLOCK");
-  if(x.conditionalLaterReviewer&&(clock>=x.conditionalLaterReviewer.validUntilUtc||(!actorOnly&&clock<x.conditionalLaterReviewer.validFromUtc)))hold("CONDITIONAL_LATER_REVIEWER_CLOCK");
+  requireP6ConditionalPreflightClock(x,clock,actorOnly);
   checkPhase7PrePolicyStructure(policy,clock);
   checkPhase7NativePrePolicySupport(policy);
   const reader=await opened.preflight();
@@ -407,6 +415,7 @@ export async function runP6NativeLaterRuntime(env,phase7ProofPort){
    if(v.independentT24WitnessProtocolReviewed!==true||v.reviewedWitnessOnlyRole!=="phase5_fids_t24_witness_prod_20261107")hold("T24_WITNESS_PROTOCOL_NOT_APPROVED");
    const trust={...t,independentNativeT24RegistryApproved:true,
     expectedT24ReviewerFingerprintSha256:v.laterReviewerFingerprintSha256,expectedT24PolicySha256:x.authority.expectedPolicySha256,
+    ...(x.nativeT24PolicyTransition?{nativeT24PolicyTransition:x.nativeT24PolicyTransition}:{}),
     expectedFrameSha256:v.frameSha256,expectedConfigSha256:v.configSha256,
     expectedSelectedTVersion:v.selectedTConfig.milestone+":"+v.selectedTConfig.version+":"+v.selectedTConfig.artifactHash,
     maximumPrivateRetentionHours:v.maximumPrivateRetentionHours,policyValidFromUtc:v.validFromUtc,policyValidUntilUtc:v.validUntilUtc,

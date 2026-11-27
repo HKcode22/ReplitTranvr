@@ -5,7 +5,7 @@
  * The original V0100 enrollment and V0092 claim own real write authority. */
 import {createHash,createPublicKey} from "node:crypto";
 import {sameP5ConditionalLaterReviewerScope} from "./phase5ExternalEd25519LaterShardReviewerVerify_v39.ts";
-import {deriveP6ConditionalT24Scope,readP6T24CurrentRegistrySet,readP6T24PrivateRegistryPackets} from "./phase6PrivateT24RegistryTransport_v39.mjs";
+import {deriveP6ConditionalT24Scope,deriveP6NativeT24PolicyTransition,readP6T24CurrentRegistrySet,readP6T24PrivateRegistryPackets} from "./phase6PrivateT24RegistryTransport_v39.mjs";
 import {verifyP5CdFrozenRoster} from "./phase5CdGithubBoundedPreTick_v39.ts";
 import {verifyP5T24PreWitnessCrossReview} from "./phase5T24PreIndependentWitnessChain_v39.ts";
 const H=/^[a-f0-9]{64}$/;
@@ -40,9 +40,10 @@ export function deriveP6T24QueueTrust({trust:t,policyBytes:b,expectedPolicySha25
   if(k.asymmetricKeyType!=="ed25519"||hash(k.export({format:"der",type:"spki"}))!==v.laterReviewerFingerprintSha256)
    hold("WRONG_REVIEWER_KEY");
  }catch{hold("WRONG_REVIEWER_KEY");}
- const conditional=deriveP6ConditionalT24Scope(p);
+ const conditional=deriveP6ConditionalT24Scope(p),transition=deriveP6NativeT24PolicyTransition(p);
  return Object.freeze({...t,independentNativeT24RegistryApproved:true,...(conditional?{conditionalT24Scope:conditional}:{}),
   expectedT24ReviewerFingerprintSha256:v.laterReviewerFingerprintSha256,expectedT24PolicySha256:expectedPolicySha256,
+  ...(transition?{nativeT24PolicyTransition:transition}:{}),
   expectedFrameSha256:v.frameSha256,expectedConfigSha256:v.configSha256,
   expectedSelectedTVersion:c.milestone+":"+c.version+":"+c.artifactHash,
   maximumPrivateRetentionHours:v.maximumPrivateRetentionHours,policyValidFromUtc:v.validFromUtc,policyValidUntilUtc:v.validUntilUtc,

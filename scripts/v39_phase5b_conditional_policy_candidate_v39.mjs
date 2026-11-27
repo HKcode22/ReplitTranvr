@@ -4,7 +4,7 @@
  * This module does not return secret values in enumerable output. */
 import {createHash,createPublicKey} from "node:crypto";
 import {sameP5TypedSourceBudgetBinding} from "../server/lib/disruption/phase5TypedSourceBudgetBinding_v39.mjs";
-import {deriveP6ConditionalT24Scope} from "../server/lib/disruption/phase6PrivateT24RegistryTransport_v39.mjs";
+import {deriveP6ConditionalT24Scope,deriveP6NativeT24PolicyTransition} from "../server/lib/disruption/phase6PrivateT24RegistryTransport_v39.mjs";
 import {admitP6ConditionalT24Reviewer,admitP6ConditionalLaterReviewer} from "./v39_phase6_stored_source_postcommit_native_later_v39.mjs";
 const H=/^[a-f0-9]{64}$/,C=/^[a-f0-9]{40}$/;
 const hash=b=>createHash("sha256").update(b).digest("hex");
@@ -87,8 +87,9 @@ export function prepareP6ConditionalPolicyCandidate({dailyBytes,signingBytes,tra
     !H.test(v.selectedTConfig?.semanticsEvidenceSha256??"")||
     Object.hasOwn(p,"conditionalPreFeatureReview")||Object.hasOwn(p,"conditionalT24PermitReview")||
     Object.hasOwn(p,"conditionalLaterPermitReview")||Object.hasOwn(q,"conditionalServicePolicy")||
-    Object.hasOwn(v,"conditionalT24Scope")||Object.hasOwn(v,"conditionalLaterDayAppendPolicy")||
+    Object.hasOwn(v,"conditionalT24Scope")||Object.hasOwn(v,"conditionalLaterDayAppendPolicy")||Object.hasOwn(v,"nativeT24PolicyTransition")||
     Object.hasOwn(day,"conditionalLaterPreScope"))hold("EXACT_BASE_POLICY");
+ if(!Buffer.from(JSON.stringify(p)).equals(dailyBytes))hold("NONCANONICAL_PREDECESSOR_BYTES");
  const reviewedConditionalThroughUtc=requirePlanCoverage(p,r,reviewedPlanBytes,prospective,decision);
  const fp=publicPins?.laneFingerprintSha256,proof=publicPins?.proofFingerprintSha256,raw=publicPins?.lanePublicKeyBase64;
  if(![fp,proof,v.laterReviewerFingerprintSha256,trust.dayReviewerFingerprintSha256,trust.queryReviewerFingerprintSha256].every(x=>H.test(x??""))||
@@ -100,7 +101,8 @@ export function prepareP6ConditionalPolicyCandidate({dailyBytes,signingBytes,tra
  const nextDaily={...p,conditionalPreFeatureReview:{schema:"v39.phase5.conditional-pre-feature-review-policy.v1",approved:true,...scope,rightsSha256:p.rightsSha256},
   conditionalT24PermitReview:{schema:"v39.phase5.conditional-t24-permit-review-delegation.v1",...delegation},
   conditionalLaterPermitReview:{schema:"v39.phase5.conditional-later-permit-review-delegation.v1",...delegation,standaloneNoT24ProtocolSha256:null},
-  nativeLaterReview:{...v,conditionalT24Scope:scope,conditionalLaterDayAppendPolicy:{...day,...interval,conditionalLaterPreScope:scope}}};
+  nativeLaterReview:{...v,conditionalT24Scope:scope,conditionalLaterDayAppendPolicy:{...day,...interval,conditionalLaterPreScope:scope},
+   nativeT24PolicyTransition:{schema:"v39.phase5b.native-t24-policy-transition.v1",previousDailyPolicySha256:baseDigests.daily,firstConditionalRunDayIndex:decision.firstEligibleRunDayIndex,conditionalEffectiveUtc:decision.effectiveUtc}}};
  const nextSigning={...q,conditionalServicePolicy:{schema:"v39.phase5.conditional-source-signing-policy.v1",protocolSha256:scope.protocolSha256,effectiveUtc:decision.effectiveUtc,
   firstEligibleRunDayIndex:decision.firstEligibleRunDayIndex,reviewedConditionalServiceScope:true}};
  const b=Buffer.from(JSON.stringify(nextDaily)),s=Buffer.from(JSON.stringify(nextSigning));
@@ -110,7 +112,7 @@ export function prepareP6ConditionalPolicyCandidate({dailyBytes,signingBytes,tra
  // weaker replica. These calls have no database or signing capability.
  const e={P6_PHASE7_PRE_LANE_EVIDENCE_AUTHORITY_FINGERPRINT_SHA256:fp,P6_PHASE7_PRE_PROOF_REVIEWER_FINGERPRINT_SHA256:proof,
   P6_PHASE7_PRE_LANE_EVIDENCE_AUTHORITY_PUBLIC_KEY_BASE64:raw,P6_CONDITIONAL_LATER_METADATA_READ_ENABLED:"1"};
- if(!deriveP6ConditionalT24Scope(nextDaily)||!admitP6ConditionalT24Reviewer(e,nextDaily,trust)||!admitP6ConditionalLaterReviewer(e,nextDaily,trust))hold("ACTUAL_ADMISSION");
+ if(!deriveP6NativeT24PolicyTransition(nextDaily)||!deriveP6ConditionalT24Scope(nextDaily)||!admitP6ConditionalT24Reviewer(e,nextDaily,trust)||!admitP6ConditionalLaterReviewer(e,nextDaily,trust))hold("ACTUAL_ADMISSION");
  const result={status:"CONDITIONAL_POLICY_CANDIDATE_PREPARED_NOT_INSTALLED",firstEligibleRunDayIndex:prospective.runDayIndex,
   dailySha256:hash(b),signingSha256:hash(s),transportSha256:hash(t),reviewSha256,reviewedConditionalThroughUtc,
   nativePolicyPreserved:true,standaloneNoT24Approved:false,protectedActualReadbackVerified:false,providerCalls:0,databaseWrites:0,githubWrites:0,paidGo:false};
