@@ -290,7 +290,17 @@ export async function conditionalPreparedRead(restricted,ctx){
   const r=z.rows[0];
   if(z.rowCount!==1||r?.ro!=="on"||!Number.isSafeInteger(r.prepared)||r.prepared<0)hold("CONDITIONAL_CUSTODY_PREPARED_READ");
   return {count:r.prepared,clock:new Date(r.observed).toISOString()};
- }finally{if(tx)await c.query("ROLLBACK").catch(()=>{});c.release();}
+ }finally{
+  // An unacknowledged BEGIN or ROLLBACK leaves transaction state unknown.
+  // Discard the pooled connection; never emit a successful custody receipt
+  // if the read-only transaction's cleanup could not be confirmed.
+  if(!tx)c.release(true);
+  else{
+   try{await c.query("ROLLBACK");}
+   catch{c.release(true);hold("CONDITIONAL_CUSTODY_ROLLBACK_UNVERIFIED");}
+   c.release();
+  }
+ }
 }
 /** One explicit owner-approved incident using existing protected credentials.
  * The existing daily reviewer signs the exact late fixed registration scope

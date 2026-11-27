@@ -1,7 +1,7 @@
 import {test} from "node:test";
 import assert from "node:assert/strict";
 import {createHash,generateKeyPairSync} from "node:crypto";
-import {admitP6NonpaidSourceDayGithub,loadP6ReviewedDayPlans,selectP6NonpaidSourceDay,projectP6ConditionalPolicyCustody}
+import {admitP6NonpaidSourceDayGithub,loadP6ReviewedDayPlans,selectP6NonpaidSourceDay,projectP6ConditionalPolicyCustody,conditionalPreparedRead}
  from "../scripts/v39_phase6_nonpaid_source_day_github_runtime_v39.mjs";
 const h=b=>createHash("sha256").update(b).digest("hex"),sha=c=>c.repeat(64),code="f".repeat(40);
 const fp=k=>h(k.export({format:"der",type:"spki"}));
@@ -197,4 +197,38 @@ test("T102 protected future conditional custody is explicit owner-only, no publi
  assert.throws(()=>projectP6ConditionalPolicyCustody(ctx,plans,f.calendar,f.indexes,iso(now+2*3600000),0,e),/CONDITIONAL_CUSTODY_NOT_UNSIGNED/);
  f.indexes[4].claim_n=1;
  assert.throws(()=>projectP6ConditionalPolicyCustody(ctx,plans,f.calendar,f.indexes,iso(now),0,e),/CONDITIONAL_CUSTODY_NOT_UNSIGNED/);
+});
+
+test("T103 conditional custody refuses uncertain transaction cleanup and discards the client",async()=>{
+ const ctx={trust:{manifestSha256:sha("a")},requestedDay:5};
+ function fake(failAt=[]){
+  const statements=[],releases=[];
+  const client={async query(sql,args){
+   const step=sql.startsWith("BEGIN")?"begin":sql.startsWith("SET LOCAL")?"timeout":sql.startsWith("SELECT")?"read":sql==="ROLLBACK"?"rollback":"unexpected";
+   statements.push(step);
+   if(failAt.includes(step))throw Error("injected "+step);
+   if(step==="read"){
+    assert.deepEqual(args,[ctx.trust.manifestSha256,ctx.requestedDay]);
+    return {rowCount:1,rows:[{prepared:0,observed:iso(now),ro:"on"}]};
+   }
+  },release(destroy){releases.push(destroy===true?"discard":"reuse");}};
+  return {pool:{async connect(){return client;}},statements,releases};
+ }
+ let x=fake();
+ assert.deepEqual(await conditionalPreparedRead(x.pool,ctx),{count:0,clock:iso(now)});
+ assert.deepEqual(x.statements,["begin","timeout","read","rollback"]);assert.deepEqual(x.releases,["reuse"]);
+ x=fake(["rollback"]);
+ await assert.rejects(conditionalPreparedRead(x.pool,ctx),/CONDITIONAL_CUSTODY_ROLLBACK_UNVERIFIED/);
+ assert.deepEqual(x.statements,["begin","timeout","read","rollback"]);assert.deepEqual(x.releases,["discard"]);
+ x=fake(["begin"]);
+ await assert.rejects(conditionalPreparedRead(x.pool,ctx),/injected begin/);
+ assert.deepEqual(x.statements,["begin"]);assert.deepEqual(x.releases,["discard"]);
+ for(const step of ["timeout","read"]){
+  x=fake([step]);
+  await assert.rejects(conditionalPreparedRead(x.pool,ctx),new RegExp("injected "+step));
+  assert.equal(x.statements.at(-1),"rollback");assert.deepEqual(x.releases,["reuse"]);
+  x=fake([step,"rollback"]);
+  await assert.rejects(conditionalPreparedRead(x.pool,ctx),/CONDITIONAL_CUSTODY_ROLLBACK_UNVERIFIED/);
+  assert.equal(x.statements.at(-1),"rollback");assert.deepEqual(x.releases,["discard"]);
+ }
 });

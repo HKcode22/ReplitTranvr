@@ -63,6 +63,7 @@ F = failure family or evidenced defect; I = corrective implementation; C = incom
 | F045 | Code-discovered; repair staged | Future conditional reviewer clock was applied globally to earlier native-only signed day acquisition. No live recurrence proved. | I102 |
 | F046 | Actual owner cutover draining; permanent progress repair staged | Normal 130-minute all-live gap unavailable at signed overlap; prior helper lacked partial merged-pin recovery. I104 exact owner maintenance pauses new SOURCE only and preserves admitted workers; actual 06:38Z route pause accepted. Silent drain poll obscures progress; I106 adds exact metadata counts without changing quiet scope. | I104, I106 |
 | F047 | Code-discovered; staged preventive fix, no live redirect evidence | One explicit fetch attempt could follow HTTP redirect and make an unreserved second physical request. Real Node loopback default followed two requests; manual redirect one. No evidence this caused F017. | I107 |
+| F048 | Code-discovered candidate defect; staged, no production recurrence | I108 conditional prepared-query read swallowed an uncertain ROLLBACK and released the client normally; a successful custody projection could follow unverified cleanup. Unknown BEGIN also previously released normally. No production execution of I108 established. | I109 |
 
 ## Implementations
 
@@ -212,12 +213,13 @@ F = failure family or evidenced defect; I = corrective implementation; C = incom
 | I106 | Staged, not active owner process | Report validated target and relay active counts plus elapsed/remaining per drain poll; unchanged exact all-main guard and failure semantics. | F046 |
 | I107 | Staged; Node redirect behavior reproduced locally | Scoped onePhysicalAttemptOnly FIDS uses manual redirect; refuse redirect without Location logging, body acceptance, extra reservation or retry; legacy unchanged. Fixed redirect diagnostic and audit class. | F047 |
 | I108 | Staged; actual protected execution outstanding | Reuse existing protected nonpaid daily runtime with explicit owner-only future conditional custody read-only mode; authenticate three policies, 31 plans, real genesis and prepared count and existing public reviewer pins; no signing or publication. | F027 |
+| I109 | Staged; exact CI required | Fail closed on uncertain rollback and discard pooled client on unknown BEGIN/ROLLBACK in the existing nonpaid custody reader. No new SQL, roles, policy, or paid action. | F048 |
 
 ## Completion components (not gates)
 
 | ID | Status | Component | Failure IDs | Implementation IDs |
 |---|---|---|---|---|
-| C001 | Partial; conditional T24/later synthetic integration evidence passed | Conditional permit/proof/registry integrated on #977, actual native lane/proof/publisher actor preflight 45913505491 passed; conditional commissioning and actual restricted positive task remain unverified; conditional T6/T90 signer integrated, T070/T071 actual disposable PG16 and T072 witnessed-only synthetic SQL passed; production protected policy, live signer and complete actual observation still outstanding. | F005, F018, F027, F043, F044, F045 | I005, I014, I016, I034, I054, I055, I058, I066, I067, I068, I070, I071, I072, I073, I074, I075, I076, I077, I078, I085, I091, I092, I094, I095, I101, I102, I108 |
+| C001 | Partial; conditional T24/later synthetic integration evidence passed | Conditional permit/proof/registry integrated on #977, actual native lane/proof/publisher actor preflight 45913505491 passed; conditional commissioning and actual restricted positive task remain unverified; conditional T6/T90 signer integrated, T070/T071 actual disposable PG16 and T072 witnessed-only synthetic SQL passed; production protected policy, live signer and complete actual observation still outstanding. | F005, F018, F027, F043, F044, F045, F048 | I005, I014, I016, I034, I054, I055, I058, I066, I067, I068, I070, I071, I072, I073, I074, I075, I076, I077, I078, I085, I091, I092, I094, I095, I101, I102, I108, I109 |
 | C002 | Partial | Conditional features and independent T24 issuer/proof integration CI passed; conditional later proof/registry path tested in T070/T071 and witnessed-only synthetic T072; lawful actual Packet B custody and production issue remain open. | F027, F030, F031, F033, F043, F044 | I014, I024, I025, I026, I028, I029, I031, I033, I053, I054, I055, I058, I066, I070, I072, I073, I074, I075, I076, I078, I085, I091, I092, I094, I095, I101 |
 | C003 | Open; isolated regression extended | Distinct conditional schedule-revision POST pairing; signed comparator boundary tests, actual issuer/pairing outstanding | F005, F029, F042 | I005, I081, I088, I093 |
 | C004 | Open; candidate evidence parity staged | Same-leg physical gate-out observability, honest censoring; I081 rejects reused evidence at candidate stage, real external physical milestone evidence not certified | F029, F042 | I005, I081, I088, I093 |
@@ -371,7 +373,8 @@ T IDs are permanent scenarios, not claims of passing CI. Each references existin
 | T099 | Actual production read-only passed 06:38Z | 42 exact run-to-plan/ledger/clock and case-control counts, negative synthetic drift checks; no HTTP wire or billing claim. | F017 | I105 | C006, C008 | tests/phase5b_maintenance_and_f017_owner_v39.test.mjs |
 | T100 | Staged; exact CI required | Ten bounded exact metadata reads, valid counts, active or unreadable state refuses quiet, progress output. | F046 | I106 | C009, C010 | tests/phase5b_maintenance_and_f017_owner_v39.test.mjs |
 | T101 | Exact focused source diagnostics 45959378438 passed on 29992ff2; full offline safety pending | Real loopback redirects one request in scoped lane, five redirect statuses, unchanged legacy, uncertain transport/503 no retry, refused durable reservation zero GET, fixed diagnostic; production deployment separate. | F047 | I107 | C006, C009 | tests/phase5b_fids_response_diagnostics_v39.test.ts; tests/phase5b_source_diagnostics_v39.test.mjs |
-| T102 | Staged; actual restricted SQL readback not yet executed | Explicit owner-only future day, protected base admission, plan pins, unsigned day/clock and zero prepared, no private values or writes. | F027 | I108 | C001 | tests/phase6_nonpaid_source_day_github_runtime_v39.test.mjs |
+| T102 | Real PG16 restricted fixture implemented; exact CI and protected production readback pending | Explicit owner-only future day, protected base admission, plan pins, unsigned day/clock and zero prepared, no private values or writes; actual SQL SELECT, denied UPDATE/SELECT, rollback and connection reuse under disposable login. | F027 | I108 | C001 | tests/phase6_nonpaid_source_day_github_runtime_v39.test.mjs; tests/phase5b_conditional_query_scope_real_pg16_v39.mjs |
+| T103 | Staged; exact CI required | Successful read requires acknowledged rollback; BEGIN ambiguity and failed rollback destroy pooled client and refuse receipt; read/timeout error with successful rollback preserves original rejection and allows reuse. | F048 | I109 | C001 | tests/phase6_nonpaid_source_day_github_runtime_v39.test.mjs |
 
 ## Scientific and retention authorities
 
@@ -681,3 +684,8 @@ Exact 28e86964 all 12 PR workflows successful. Latest failed workflow census sin
 ## Nov26 continuation — T100 actual CI correction
 
 [Checkpoint](checkpoints/2026-11-26_PHASE5B_T100_SHELL_MOCK_CI_CORRECTION.md). Actual #980 focused red run 45957311340, job 140366658743: escaped newline in I106 mock produced invalid JSON. Preserve original archival blob; correct successor printf and test exact hash. Existing F046/I106/T100, no new family. Exact successor CI required, #979 unaffected.
+
+
+## Nov26 23:44 PST continuation — restricted custody transaction parity
+
+[Checkpoint](checkpoints/2026-11-26_PHASE5B_T102_T103_CUSTODY_TRANSACTION_PARITY.md). #979 still open exact bce39a3d; main c2bb8e18. #980 had advanced to 93bb3195, using tsx for actual T102 restricted disposable PG16 regression; exact CI pending. F048/I109/T103 address candidate-only uncertain cleanup. Do not infer production recurrence or positive PRE from this fixture. Preserve active owner procedure, original signed Day4 and independent retention; no competing cutover. F48 I109 T103 C10.
