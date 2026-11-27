@@ -1,11 +1,11 @@
 {
-  "asOfUtc": "2026-11-27T09:07:06.284Z",
+  "asOfUtc": "2026-11-27T10:19:57.804830Z",
   "exactCandidate": "c4408c621a84a2549355d935cca7333c5527d3c2",
   "canonicalRegister": "../phase6/RECOVERY_REGISTER.md",
   "counts": {
-    "narrowCorrected": 10,
+    "narrowCorrected": 12,
     "exactCiGreenPendingDeployment": 10,
-    "partialOrOpen": 35,
+    "partialOrOpen": 33,
     "historicalLoss": 2
   },
   "failures": [
@@ -120,14 +120,15 @@
     },
     {
       "id": "F009",
-      "classification": "PARTIAL_OR_OPEN",
+      "classification": "NARROW_CORRECTION_RECORDED",
       "implementations": [
         "I007"
       ],
-      "next": "Verify heartbeat and both retention jobs at current pin",
-      "closureStatus": "NOT_CLOSED",
+      "next": "Preserve the narrowly evidenced correction; reopen only on material new evidence",
+      "closureStatus": "CLOSED",
       "scientificRisk": "OPERATIONAL",
-      "workstream": "release_reliability"
+      "workstream": "release_reliability",
+      "closureEvidence": "Nov23 heartbeat premature direct activation and wrong expiry multi-job recognition; later paused-route classification. [Checkpoint](checkpoints/2026-11-23_PHASE6_HEARTBEAT_AUTONOMOUS_WORKFLOW_AUDIT.md); on Nov27 the current relay primary run 45981089260 matched target run 45981121682 and verified its workflow identity on main 2b9cb404da863aede54d9069e440ff32bcf6d00e. Both primary FIDS expiry and Phase7 expiry jobs completed successfully at the current pin (140444983503 and 140444983969). FIDS readback showed 58 live originals, zero eligible or hard-due originals, zero unbound originals and no deletion STOP; private expiry showed zero due packets, indexes, heads and operational metadata; Phase7 showed zero live or due links, bundles or fragments. Primary FIDS/private expiry reported databaseWritesPossible=false, zero provider calls and zero object deletions; Phase7 reported zero provider calls and zero deleted links, bundles or fragments. Backup/PITR and full retention deployment remain unverified."
     },
     {
       "id": "F010",
@@ -496,14 +497,15 @@
     },
     {
       "id": "F035",
-      "classification": "PARTIAL_OR_OPEN",
+      "classification": "NARROW_CORRECTION_RECORDED",
       "implementations": [
         "I032"
       ],
-      "next": "Exact relay fixture and actual rolling wake",
-      "closureStatus": "NOT_CLOSED",
+      "next": "Preserve the narrowly evidenced correction; reopen only on material new evidence",
+      "closureStatus": "CLOSED",
       "scientificRisk": "OPERATIONAL",
-      "workstream": "release_reliability"
+      "workstream": "release_reliability",
+      "closureEvidence": "Relay isolated fixture failures were recorded in run 45525733215: extra active-state GETs, unknown active-read deferral and pin rejection fixture. The exact relay fixture now passes in [PR #31](https://github.com/HKcode22/TravnrClockRelay/pull/31), head 6c6cbd36e9838ad519ba2c8403c0e2e12ed51f7f, merged as 2d96b22345908aa4334335aa899aec71b2fec2cb. Actual rolling wake 45980961590 completed with INDEPENDENT_WAKE_COMPLETE_NOT_COLLECTION_PROOF, six safe lane acknowledgments, zero relay provider calls and zero database writes. This closes the fixture/wake correction only; it is not collection or outcome proof."
     },
     {
       "id": "F036",
@@ -763,8 +765,8 @@
     }
   ],
   "binaryClosure": {
-    "closed": 10,
-    "notClosed": 47,
+    "closed": 12,
+    "notClosed": 45,
     "definition": "CLOSED only for an explicitly evidenced, narrowly defined correction already recorded; no broader component or future recurrence guarantee. Partial, candidate-only, historical loss with unverified recurrence prevention, and missing positive production proof are NOT_CLOSED. No previously closed ID reopened."
   },
   "riskDefinition": {

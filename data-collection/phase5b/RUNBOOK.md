@@ -8,3 +8,12 @@
 6. Finish F/C work by actual closure evidence in closure matrix, not CI alone. Future nonmaterial refactors wait until stable positive collection. All times UTC unless stated.
 
 Actual Day2 4902 historical members, no raw or global P7 records. Stage14 already persists PRE + Packet B atomically, so fix upstream admission/conditional commissioning. Do not solve a missing PRE by bypassing source cutoff or retention. Follow-on I121/T115 isolates custody from signing/publishing credentials; #980 readback precedes any follow-on release.
+
+
+## Live readback — Nov27 10:19Z
+
+Main `2b9cb404da863aede54d9069e440ff32bcf6d00e`, relay `2d96b22345908aa4334335aa899aec71b2fec2cb`, and exact #980 head `c4408c621a84a2549355d935cca7333c5527d3c2` remain unchanged. #980 is still open/draft and its 26 exact workflow paths passed. The owner's second exact helper run held `QUIET_AND_GAP / ACTIVE_NO_CANCEL`; live Actions still showed 16 P5 SOURCE children in progress. Do not rerun or cancel while active. The next T24 window begins 11:45Z; after that actual window drains, let the existing helper require a fresh full 130-minute gap before cutover.
+
+Primary relay `45981089260` verified target identity `45981121682`; that exact-main target then completed primary FIDS expiry and Phase7 expiry jobs `140444983503` and `140444983969` successfully. Both independent readbacks showed no due work, zero provider calls and zero object deletions. Backup/PITR and complete-retention proof remain false. Rolling relay `45980961590` acknowledged six safe lanes and explicitly did not prove collection. PRE/T24/enrollment runs `45980989222`, `45980989191`, and `45980985177` returned no-due/no-prospective results; no positive PRE or Packet B exists.
+
+The binary matrix now closes F009 and F035 only for the proven operational heartbeat/retention and fixture/rolling-wake criteria. F005/F010/F026/F027/F029/F042 remain P0 scientific NOT_CLOSED. Do not relax scientific identity, cutoff, physical-label, rights, split or budget safeguards to increase counts.

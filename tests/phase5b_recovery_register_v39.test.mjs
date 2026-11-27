@@ -91,7 +91,7 @@ test("T060 each named failure in a multi-failure T must match its own implementa
 });
 
 const matrixPath=new URL("../data-collection/phase5b/closure-matrix.json",import.meta.url);
-const reviewedClosedIds=Object.freeze(["F001","F002","F004","F006","F013","F022","F025","F028","F043","F052"]);
+const reviewedClosedIds=Object.freeze(["F001","F002","F004","F006","F009","F013","F022","F025","F028","F035","F043","F052"]);
 function validateClosure(m,rows){
  const fs=rows.filter(r=>r[0].startsWith("F"));
  assert.equal(m.failures.length,fs.length,"lost failure");
@@ -132,6 +132,8 @@ test("T116 refuses premature closure, duplicates, omissions, count and risk drif
  bad(m=>{m.failures.pop();});
  bad(m=>{m.binaryClosure.closed++;});
  bad(m=>{m.failures.find(f=>f.id==="F026").scientificRisk="OPERATIONAL";});
+ bad(m=>{m.failures.find(f=>f.id==="F009").closureEvidence="retention ACK only";});
+ bad(m=>{m.failures.find(f=>f.id==="F035").closureEvidence="relay wake ACK only";});
  bad(m=>{m.failures.find(f=>f.id==="F022").closureEvidence="unsupported";});
  bad(m=>{m.failures.find(f=>f.id==="F032").implementations.pop();});
 });
