@@ -6,3 +6,7 @@
 - F050: custody inventory omitted nested nativeLaterReview.dayAppendPolicy.conditionalLaterPreScope even though I094 candidate assembler explicitly rejects its preexistence. I111 counts it as the eighth additive field. T105 tests nested-only, absent, seven-of-eight, all present with no commissioning claim.
 - F048 clarification: actual Stage28 dedicated adapter always destroys the connection on release; the candidate defect was potentially false successful read receipt after failed cleanup, not actual production pool contamination. Prior direct disposable pool regression verifies generic discard/reuse behavior.
 - No changes to f.8, Packet A/B, Amendment E, C+D, all 16 canonical features, rights/retention, 20/5/6 chronology, existing cutoffs, budget or STOP. Exact new CI required. No new gate. Conditional policy installation and actual positive PRE still outstanding.
+
+## Immediate shape correction
+
+The first staged b2a327e4 implementation counted the native nested field as required. I094 actual assembler preserves the native append policy and adds the marker in conditionalLaterDayAppendPolicy. Corrected I111 to count the successor field and independently classify any unexpected native marker as PARTIAL_HOLD, even with all successor fields present. T105 now verifies both. Same F050/I111/T105, not a new production defect. Exact successor CI required.

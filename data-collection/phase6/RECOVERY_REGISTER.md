@@ -65,7 +65,7 @@ F = failure family or evidenced defect; I = corrective implementation; C = incom
 | F047 | Code-discovered; staged preventive fix, no live redirect evidence | One explicit fetch attempt could follow HTTP redirect and make an unreserved second physical request. Real Node loopback default followed two requests; manual redirect one. No evidence this caused F017. | I107 |
 | F048 | Candidate defect corrected; exact 7ba7d1ee CI 23/23 passed, production unverified | I108 swallowed an uncertain ROLLBACK; could return a success receipt despite unverified cleanup. Actual Stage28 adapter already destroys every connection on release; no actual pooled reuse or production recurrence established. Direct disposable pool fixture exercises cleanup semantics. | I109 |
 | F049 | Candidate commissioning scope defect; staged | Requested day selector can skip an earlier unsigned prospective conditional day; violates next unsigned commissioning target. No production execution or recurrence. | I110 |
-| F050 | Candidate commissioning diagnostic defect; staged | Nested native day-append conditional scope omitted from custody field-state inventory despite candidate assembler requiring its absence; could report false ABSENT or ALL_FIELDS_PRESENT. No actual commissioning proof or recurrence. | I111 |
+| F050 | Candidate commissioning diagnostic defect; staged | Nested conditional successor scope omitted from custody inventory; unexpected marker on original native append policy also not detected. Could report false ABSENT or ALL_FIELDS_PRESENT. No actual commissioning proof or recurrence. | I111 |
 
 ## Implementations
 
@@ -217,7 +217,7 @@ F = failure family or evidenced defect; I = corrective implementation; C = incom
 | I108 | Staged; actual protected execution outstanding | Reuse existing protected nonpaid daily runtime with explicit owner-only future conditional custody read-only mode; authenticate three policies, 31 plans, real genesis and prepared count and existing public reviewer pins; no signing or publication. | F027 |
 | I109 | Exact 7ba7d1ee CI 23/23 passed; production unverified | Fail closed on uncertain rollback; explicit discard on unknown BEGIN/ROLLBACK. Existing Stage28 adapter already always destroys underlying session. No new SQL, roles, policy or paid action. | F048 |
 | I110 | Staged; exact CI required | Reuse day selector to validate earlier prospective conditional days and require complete genesis before inspecting a later requested day. Never alter signed dates or data. | F049 |
-| I111 | Staged; exact CI required | Include nested dayAppendPolicy.conditionalLaterPreScope in protected custody field-state diagnostic, aligned with existing candidate assembler. Presence never certifies approval. | F050 |
+| I111 | Staged; exact CI required | Include nested conditionalLaterDayAppendPolicy.conditionalLaterPreScope in protected field inventory; any marker on original native dayAppendPolicy is PARTIAL_HOLD. Aligned with existing candidate assembler. Presence never certifies approval. | F050 |
 
 ## Completion components (not gates)
 
@@ -380,7 +380,7 @@ T IDs are permanent scenarios, not claims of passing CI. Each references existin
 | T102 | Exact 7ba7d1ee PG16 and focused CI passed; protected production readback pending | Explicit owner-only future day, protected base admission, plan pins, unsigned day/clock and zero prepared, no private values or writes; actual SQL SELECT, denied UPDATE/SELECT, rollback and connection reuse under disposable login. | F027 | I108 | C001 | tests/phase6_nonpaid_source_day_github_runtime_v39.test.mjs; tests/phase5b_conditional_query_scope_real_pg16_v39.mjs |
 | T103 | Exact 7ba7d1ee focused CI passed; production unverified | Successful read requires acknowledged rollback; BEGIN ambiguity and failed rollback destroy pooled client and refuse receipt; read/timeout error with successful rollback preserves original rejection and allows reuse. | F048 | I109 | C001 | tests/phase6_nonpaid_source_day_github_runtime_v39.test.mjs |
 | T104 | Staged; exact CI required | Reject earlier unsigned or partial prospective day; allow earlier complete genesis; earlier actual calendar drift refused. | F049 | I110 | C001 | tests/phase6_nonpaid_source_day_github_runtime_v39.test.mjs |
-| T105 | Staged; exact CI required | Nested-only conditional field is PARTIAL_HOLD; seven of eight fields partial; all eight present is not commissioning proof. | F050 | I111 | C001 | tests/phase6_nonpaid_source_day_github_runtime_v39.test.mjs |
+| T105 | Staged; exact CI required | Native marker is PARTIAL_HOLD even with complete successor; seven of eight successor fields partial; all eight present is not commissioning proof. | F050 | I111 | C001 | tests/phase6_nonpaid_source_day_github_runtime_v39.test.mjs |
 
 ## Scientific and retention authorities
 
@@ -700,3 +700,5 @@ Exact 28e86964 all 12 PR workflows successful. Latest failed workflow census sin
 ## Nov26 late PST — custody scope parity
 
 [Checkpoint](checkpoints/2026-11-27_PHASE5B_CONDITIONAL_CUSTODY_SCOPE_PARITY.md). Exact #980 7ba7d1ee all 23 PR runs passed including both focused PG16 jobs. F049/I110/T104 and F050/I111/T105 extend I108 read-only projection to refuse skipping earlier future unsigned days and count all eight additive fields. Correct F048 precision: actual Stage28 adapter destroys every checked-out connection, so the defect was false successful cleanup evidence, not proven pooled reuse. No owner deployment or paid call; #979 remains open, original Day4 signed scope unchanged. F50 I111 T105 C10.
+
+F050 correction on immediate successor: the eighth required marker belongs to conditionalLaterDayAppendPolicy, not native dayAppendPolicy. Native marker must independently HOLD. The preceding staged commit b2a327e4 counted the wrong nested path; do not deploy it. Same F/I/T family, no production occurrence.

@@ -262,7 +262,10 @@ export function projectP6ConditionalPolicyCustody(ctx,plans,calendar,indexRows,o
  const p=ctx.p,q=ctx.q,v=p.nativeLaterReview;
  const fields=[p.conditionalPreFeatureReview,p.conditionalT24PermitReview,p.conditionalLaterPermitReview,
   q.conditionalServicePolicy,v?.conditionalT24Scope,v?.conditionalLaterDayAppendPolicy,v?.nativeT24PolicyTransition,
-  v?.dayAppendPolicy?.conditionalLaterPreScope];
+  v?.conditionalLaterDayAppendPolicy?.conditionalLaterPreScope];
+ // The original native append policy must remain unchanged. A marker there
+ // is unexpected even if the separate conditional successor is complete.
+ const unexpectedNativeMarker=v?.dayAppendPolicy?.conditionalLaterPreScope!==undefined;
  const present=fields.filter(x=>x!==undefined).length;
  let last=-Infinity;
  for(const x of plans.filter(z=>z.runDayIndex>=ctx.requestedDay)){
@@ -286,7 +289,7 @@ export function projectP6ConditionalPolicyCustody(ctx,plans,calendar,indexRows,o
   observedDbClockUtc:observedUtc,exactThreePolicyDigestsValidated:true,exact31PlanPinsValidated:true,
   canonicalNativePredecessorBytes:Buffer.from(JSON.stringify(p)).equals(ctx.policyBytes),
   nativePolicyPresent,baseIntervalCoversRemainingStudy,remainingServiceEndUtc:new Date(last).toISOString(),
-  conditionalPolicyFieldState:present===0?"ABSENT":present===fields.length?"ALL_FIELDS_PRESENT_NOT_COMMISSIONED_PROOF":"PARTIAL_HOLD",
+  conditionalPolicyFieldState:unexpectedNativeMarker?"PARTIAL_HOLD":present===0?"ABSENT":present===fields.length?"ALL_FIELDS_PRESENT_NOT_COMMISSIONED_PROOF":"PARTIAL_HOLD",
   publicActorsVerified,conditionalMetadataEnabled:env.P6_CONDITIONAL_LATER_METADATA_READ_ENABLED==="1",
   actualConditionalPolicyInstalledVerified:false,actualConditionalPreCommitVerified:false,
   providerCalls:0,databaseWrites:0,githubWrites:0,signaturesIssued:0,phase6PaidGo:false});

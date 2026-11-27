@@ -264,7 +264,9 @@ test("T105 custody accounts for the nested day-append conditional scope",()=>{
  Object.assign(custom.q={...ctx.q},{conditionalServicePolicy:marker});
  Object.assign(p.nativeLaterReview,{conditionalT24Scope:marker,conditionalLaterDayAppendPolicy:marker,nativeT24PolicyTransition:marker});
  assert.equal(run().conditionalPolicyFieldState,"PARTIAL_HOLD");
- p.nativeLaterReview.dayAppendPolicy.conditionalLaterPreScope=marker;
+ p.nativeLaterReview.conditionalLaterDayAppendPolicy={conditionalLaterPreScope:marker};
  const all=run();assert.equal(all.conditionalPolicyFieldState,"ALL_FIELDS_PRESENT_NOT_COMMISSIONED_PROOF");
  assert.equal(all.actualConditionalPolicyInstalledVerified,false);
+ p.nativeLaterReview.dayAppendPolicy.conditionalLaterPreScope=marker;
+ assert.equal(run().conditionalPolicyFieldState,"PARTIAL_HOLD");
 });
