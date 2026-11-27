@@ -10,7 +10,7 @@
  * lawful long-term retention, provider outcome or Phase6 GO.
  */
 import { createHash } from "node:crypto";
-import { fetchFidsAirport, type FidsResponseDiagnostic } from "./aerodataboxLimiter_v3";
+import { fetchFidsAirport, type FidsResponseDiagnostic, type FidsFetchOptions } from "./aerodataboxLimiter_v3";
 import { fetchFidsPopulation, type FidsCensusParams, type FidsQueryObservation, type PopulationRow } from "./fidsCensus_v3";
 import { P5_CANONICAL_IDENTITY_VERSION } from "./flightInstanceCanonical_v3";
 import { verifyPreparedDailyDraw, inspectP6Day1FixedDrawForLaterSource, type PreparedDayForReadback, type PreparedDrawRow } from "./phase5EarlyPreselectionReadback_v39";
@@ -24,6 +24,14 @@ const P5_UNIT_PRICE=2;
 const RIGHT_WINDOW_MS=23*3_600_000;
 
 function refuse(code:string):never{throw Error("REFUSED_P5_FIDS_SOURCE_"+code);}
+/** Assert the already frozen request intent at the last pre-reservation
+ * adapter boundary. This is not evidence of server-side filter behavior. */
+export function requireP5ScopedFidsFetchFrame(opts:FidsFetchOptions|undefined,category:"fids_base"|"fids_split"):void{
+ if(opts?.direction!=="Departure"||opts.strictDepartureList!==true||opts.strictArrivalList!==false||
+    opts.withLeg!==true||opts.withLocation!==false||opts.withCancelled!==true||opts.withCodeshared!==true||
+    opts.withCargo!==false||opts.withPrivate!==false||opts.category!==category)
+  refuse("UNSIGNED_OR_MISROUTED_SOURCE_REQUEST");
+}
 function millis(v:string,label:string):number{
  if(!ISO.test(v))refuse(label+"_FORMAT");
  const ms=Date.parse(v);
@@ -312,11 +320,9 @@ export async function runP5ScopedFidsSource(
   };
   const result=await fetchFidsPopulation(sourceParams,{
     fetchAirport:async(airport,from,to,opts)=>{
-      if(airport!==q.icao||from!==p.localFrom||to!==p.localTo||
-         opts?.direction!=="Departure"||
-         opts?.strictDepartureList!==true||
-         opts?.strictArrivalList!==false)
+      if(airport!==q.icao||from!==p.localFrom||to!==p.localTo)
         refuse("UNSIGNED_OR_MISROUTED_SOURCE_REQUEST");
+      requireP5ScopedFidsFetchFrame(opts,first.restCategory);
       return fetchFidsAirport(airport,from,to,{
         ...opts,onePhysicalAttemptOnly:true,fetchImpl:ports.fetchImpl,
         onResponseDiagnostic:ports.onResponseDiagnostic,
