@@ -1,7 +1,7 @@
 import {test} from "node:test";
 import assert from "node:assert/strict";
 import {createHash,generateKeyPairSync} from "node:crypto";
-import {admitP6NonpaidSourceDayGithub,loadP6ReviewedDayPlans,selectP6NonpaidSourceDay,projectP6ConditionalPolicyCustody,conditionalPreparedRead}
+import {admitP6NonpaidSourceDayGithub,loadP6ReviewedDayPlans,selectP6NonpaidSourceDay,projectP6ConditionalPolicyCustody,conditionalPreparedRead,readP6ConditionalCommitmentReview}
  from "../scripts/v39_phase6_nonpaid_source_day_github_runtime_v39.mjs";
 const h=b=>createHash("sha256").update(b).digest("hex"),sha=c=>c.repeat(64),code="f".repeat(40);
 const fp=k=>h(k.export({format:"der",type:"spki"}));
@@ -318,4 +318,24 @@ test("T117 optional commitment review is admitted only for owner protected custo
  assert.equal(admitP6NonpaidSourceDayGithub({...e,P6_CONDITIONAL_COMMITMENT_REVIEW_SHA256:sha("a")}).mode,"conditional_custody");
  assert.throws(()=>admitP6NonpaidSourceDayGithub({...e,P6_CONDITIONAL_COMMITMENT_REVIEW_SHA256:"wrong"}),/CONDITIONAL_COMMITMENT_REVIEW_SCOPE/);
  assert.throws(()=>admitP6NonpaidSourceDayGithub({...f.env,P6_CONDITIONAL_COMMITMENT_REVIEW_SHA256:sha("a")}),/CONDITIONAL_COMMITMENT_REVIEW_SCOPE/);
+});
+
+test("T121 exact owner commitment review metadata transport needs no local predecessor or new main commit",()=>{
+ const f=fixture(),e=custodyEnv({...f.env,GITHUB_EVENT_NAME:"workflow_dispatch",GITHUB_ACTOR:"HKcode22",P6_NONPAID_SOURCE_CONFIRM:"VERIFY_FUTURE_CONDITIONAL_POLICY_CUSTODY_NO_PROVIDER",P6_NONPAID_SOURCE_REQUESTED_DAY:"5"});
+ const review=Buffer.from(JSON.stringify({schema:"v39.phase5b.prospective-conditional-commissioning-commitment-review.v1",firstEligibleRunDayIndex:5,basePolicyCommitmentSha256:sha("a")}));
+ const input={...e,P6_CONDITIONAL_COMMITMENT_REVIEW_SHA256:h(review),P6_CONDITIONAL_COMMITMENT_REVIEW_BASE64:review.toString("base64")};
+ assert.equal(admitP6NonpaidSourceDayGithub(input).mode,"conditional_custody");
+ assert.deepEqual(readP6ConditionalCommitmentReview(input,5,()=>{throw Error("must not read file");}),review);
+ assert.deepEqual(readP6ConditionalCommitmentReview({...input,P6_CONDITIONAL_COMMITMENT_REVIEW_BASE64:""},5,p=>{
+  assert.equal(p,"data-collection/phase5b/reviews/prospective-conditional-commissioning-day-05.json");return review;
+ }),review);
+ assert.equal(readP6ConditionalCommitmentReview(e,5),null);
+ for(const delta of [{GITHUB_ACTOR:"other"},{GITHUB_EVENT_NAME:"schedule"},{P6_NONPAID_SOURCE_CONFIRM:"ONE_APPROVED_PROSPECTIVE_SOURCE_DAY_NONPAID_PREPARE_PUBLISH"},{P6_CONDITIONAL_COMMITMENT_REVIEW_SHA256:""},{P6_NONPAID_SOURCE_REQUESTED_DAY:"6"}])
+  assert.throws(()=>readP6ConditionalCommitmentReview({...input,...delta},5),/CONDITIONAL_COMMITMENT_REVIEW_SCOPE/);
+ assert.throws(()=>admitP6NonpaidSourceDayGithub({...e,P6_CONDITIONAL_COMMITMENT_REVIEW_BASE64:review.toString("base64")}),/CONDITIONAL_COMMITMENT_REVIEW_SCOPE/);
+ assert.throws(()=>readP6ConditionalCommitmentReview({...input,P6_CONDITIONAL_COMMITMENT_REVIEW_SHA256:sha("b")},5),/UNPINNED_APPROVAL_BYTES/);
+ assert.throws(()=>readP6ConditionalCommitmentReview({...input,P6_CONDITIONAL_COMMITMENT_REVIEW_BASE64:review.toString("base64")+"="},5),/INVALID_CONDITIONAL_COMMITMENT_REVIEW/);
+ const wrong=Buffer.from(review.toString().replace('"firstEligibleRunDayIndex":5','"firstEligibleRunDayIndex":6'));
+ assert.throws(()=>readP6ConditionalCommitmentReview({...input,P6_CONDITIONAL_COMMITMENT_REVIEW_SHA256:h(wrong),P6_CONDITIONAL_COMMITMENT_REVIEW_BASE64:wrong.toString("base64")},5),/CONDITIONAL_COMMITMENT_REVIEW_DAY/);
+ assert.throws(()=>readP6ConditionalCommitmentReview({...input,P6_CONDITIONAL_COMMITMENT_REVIEW_BASE64:""},5,()=>{throw Error("absent");}),/CONDITIONAL_COMMITMENT_REVIEW_MISSING/);
 });

@@ -178,3 +178,6 @@ Read [the permanent seven-priority and seven-requirement F/I/C/T crosswalk](data
 
 
 **Nov27 I126/T120:** historical owner finalizer already wrote six-policy/31-static bundle (see issue #413 comment 7073928717 and corrected helper blob 3b039908026814238290b7fcb230bc3e3b75bbb0). Inspect existing bounded private directories only, compare one composite commitment with actual protected custody before any proposed install; never reconstruct, export secrets, or claim local match proves protected bytes. I124/T118 exact run 46002504853 passed; I125/T119 exact run 46005309221 passed. No closure promotion or #980 change.
+
+
+**Nov27 actual owner T120:** exact test 2/2 PASS; read-only local inventory returned HOLD_NO_EXACT_LOCAL_PREDECESSOR with directoriesChecked=0, all effects zero. This is NOT protected secret absence; no rerun/recreate old bundle. I127/T121 enables bounded exact reviewed commitment metadata as owner-only protected preview input, with original file fallback; no policy export or install. #980 remains unchanged; protected custody after safe cutover, then separate exact commissioning.

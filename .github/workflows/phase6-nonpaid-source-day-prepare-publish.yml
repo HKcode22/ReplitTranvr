@@ -14,6 +14,11 @@ on:
         required: false
         default: ''
         type: string
+      conditional_review_base64:
+        description: 'Optional base64 of exact reviewed commitment metadata, never policy bytes or secrets; custody preview only'
+        required: false
+        default: ''
+        type: string
       confirm:
         description: 'Confirm exact reviewed day, current calendar, or VERIFY_FUTURE_CONDITIONAL_POLICY_CUSTODY_NO_PROVIDER'
         required: true
@@ -83,6 +88,7 @@ jobs:
     timeout-minutes: 15
     env:
       P6_CONDITIONAL_COMMITMENT_REVIEW_SHA256: ${{ inputs.conditional_review_sha256 }}
+      P6_CONDITIONAL_COMMITMENT_REVIEW_BASE64: ${{ inputs.conditional_review_base64 }}
       P6_NONPAID_SOURCE_REQUESTED_DAY: ${{ inputs.run_day_index }}
       P6_NONPAID_SOURCE_CONFIRM: ${{ inputs.confirm }}
       P6_NONPAID_SOURCE_SCHEDULE_ENABLED: ${{ vars.P6_NONPAID_SOURCE_SCHEDULE_ENABLED }}

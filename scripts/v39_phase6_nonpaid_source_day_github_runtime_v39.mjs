@@ -64,6 +64,28 @@ function url(raw,login){
 const modeOf=env=>env.GITHUB_EVENT_NAME==="schedule"?"schedule":
  env.P6_NONPAID_SOURCE_CONFIRM===CONDITIONAL_CUSTODY_CONFIRM?"conditional_custody":
  env.P6_NONPAID_SOURCE_CONFIRM===CURRENT_CONFIRM?"current_dispatch":env.P6_NONPAID_SOURCE_CONFIRM===DAY1_CONFIRM?"day1_recovery":"manual";
+/** Optional owner-dispatched review metadata, not policy or credentials.
+ * Retain the original committed review-file route; the exact digest and
+ * actual protected custody are mandatory for either transport. */
+export function readP6ConditionalCommitmentReview(env,day,read=readFileSync){
+ const digest=env.P6_CONDITIONAL_COMMITMENT_REVIEW_SHA256,raw=env.P6_CONDITIONAL_COMMITMENT_REVIEW_BASE64;
+ if(!digest&&!raw)return null;
+ if(env.GITHUB_EVENT_NAME!=="workflow_dispatch"||env.GITHUB_ACTOR!=="HKcode22"||
+    modeOf(env)!=="conditional_custody"||!SHA.test(digest??"")||
+    !Number.isInteger(day)||day<5||day>31||String(day)!==env.P6_NONPAID_SOURCE_REQUESTED_DAY)
+  hold("CONDITIONAL_COMMITMENT_REVIEW_SCOPE");
+ let bytes;
+ if(raw)bytes=raw64(raw,16000,"CONDITIONAL_COMMITMENT_REVIEW");
+ else{
+  const path="data-collection/phase5b/reviews/prospective-conditional-commissioning-day-"+String(day).padStart(2,"0")+".json";
+  try{bytes=read(path);}catch{hold("CONDITIONAL_COMMITMENT_REVIEW_MISSING");}
+ }
+ const decision=json(bytes,digest,16000);
+ if(!decision||typeof decision!=="object"||Array.isArray(decision)||
+  decision.schema!=="v39.phase5b.prospective-conditional-commissioning-commitment-review.v1"||
+  decision.firstEligibleRunDayIndex!==day)hold("CONDITIONAL_COMMITMENT_REVIEW_DAY");
+ return bytes;
+}
 export function admitP6NonpaidSourceDayGithub(env){
  if(!env||env.GITHUB_ACTIONS!=="true"||env.GITHUB_REPOSITORY!=="HKcode22/ReplitTranvr"||
     env.GITHUB_REF!=="refs/heads/main"||!["workflow_dispatch","schedule"].includes(env.GITHUB_EVENT_NAME)||
@@ -77,7 +99,8 @@ export function admitP6NonpaidSourceDayGithub(env){
     env.NODE_TLS_REJECT_UNAUTHORIZED==="0")
   hold("NOT_APPROVED_REAL_MAIN_NONPAID_RUNTIME");
  const mode=modeOf(env);
- if(env.P6_CONDITIONAL_COMMITMENT_REVIEW_SHA256&&(mode!=="conditional_custody"||!SHA.test(env.P6_CONDITIONAL_COMMITMENT_REVIEW_SHA256)))hold("CONDITIONAL_COMMITMENT_REVIEW_SCOPE");
+ if((env.P6_CONDITIONAL_COMMITMENT_REVIEW_SHA256||env.P6_CONDITIONAL_COMMITMENT_REVIEW_BASE64)&&
+    (mode!=="conditional_custody"||!SHA.test(env.P6_CONDITIONAL_COMMITMENT_REVIEW_SHA256??"")))hold("CONDITIONAL_COMMITMENT_REVIEW_SCOPE");
  if(mode==="conditional_custody"?env.GITHUB_EVENT_NAME!=="workflow_dispatch"||env.GITHUB_ACTOR!=="HKcode22"||!/^(?:[5-9]|[12][0-9]|3[01])$/.test(env.P6_NONPAID_SOURCE_REQUESTED_DAY??""):
     mode==="day1_recovery"?env.GITHUB_EVENT_NAME!=="workflow_dispatch"||env.P6_NONPAID_SOURCE_REQUESTED_DAY!=="1":mode!=="manual"?env.P6_NONPAID_SOURCE_SCHEDULE_ENABLED!=="true"||Boolean(env.P6_NONPAID_SOURCE_REQUESTED_DAY)||
     (mode==="schedule"?Boolean(env.P6_NONPAID_SOURCE_CONFIRM):env.P6_NONPAID_SOURCE_CONFIRM!==CURRENT_CONFIRM):
@@ -381,6 +404,7 @@ async function registerOrReadDay1(ctx,plan){
 }
 export async function runP6NonpaidSourceDayGithub(env){
  const ctx=admitP6NonpaidSourceDayGithub(env),plans=loadP6ReviewedDayPlans(ctx);
+ const reviewBytes=ctx.mode==="conditional_custody"?readP6ConditionalCommitmentReview(env,ctx.requestedDay):null;
  const raw=new pg.Pool({connectionString:ctx.prepareUrl,max:1,connectionTimeoutMillis:8000,query_timeout:40000});
  const restricted=makeP5Stage28DedicatedRolePool(raw,{group:"prepare",reviewedDedicatedLogin:PREPARE_LOGIN,
   forbiddenApplicationLogin:"phase5_p30_pre_login_20261107"});
@@ -396,10 +420,7 @@ export async function runP6NonpaidSourceDayGithub(env){
    if(Math.abs(utc(count.clock)-utc(i.now))>120000)hold("CONDITIONAL_CUSTODY_CLOCK_DRIFT");
    const receipt=projectP6ConditionalPolicyCustody(ctx,plans,c.calendar,i.rows,count.clock,count.count,env);
    const reviewSha256=env.P6_CONDITIONAL_COMMITMENT_REVIEW_SHA256;
-   if(!reviewSha256)return receipt;
-   const path="data-collection/phase5b/reviews/prospective-conditional-commissioning-day-"+String(ctx.requestedDay).padStart(2,"0")+".json";
-   let reviewBytes;
-   try{reviewBytes=readFileSync(path);}catch{hold("CONDITIONAL_COMMITMENT_REVIEW_MISSING");}
+   if(!reviewBytes)return receipt;
    const candidatePreview=previewP6ConditionalCandidateFromCommitment({dailyBytes:ctx.policyBytes,signingBytes:ctx.signingPolicyBytes,
     transportBytes:raw64(env.P6_NONPAID_TRANSPORT_TRUST_BASE64,8000,"TRANSPORT_TRUST"),trust:ctx.trust,reviewBytes,reviewSha256,
     publicPins:{laneFingerprintSha256:env.P6_PHASE7_PRE_LANE_EVIDENCE_AUTHORITY_FINGERPRINT_SHA256,proofFingerprintSha256:env.P6_PHASE7_PRE_PROOF_REVIEWER_FINGERPRINT_SHA256,
