@@ -1,5 +1,5 @@
 {
-  "asOfUtc": "2026-11-27T10:19:57.804830Z",
+  "asOfUtc": "2026-11-27T11:05:28Z",
   "exactCandidate": "c4408c621a84a2549355d935cca7333c5527d3c2",
   "canonicalRegister": "../phase6/RECOVERY_REGISTER.md",
   "counts": {
@@ -128,7 +128,7 @@
       "closureStatus": "CLOSED",
       "scientificRisk": "OPERATIONAL",
       "workstream": "release_reliability",
-      "closureEvidence": "Nov23 heartbeat premature direct activation and wrong expiry multi-job recognition; later paused-route classification. [Checkpoint](checkpoints/2026-11-23_PHASE6_HEARTBEAT_AUTONOMOUS_WORKFLOW_AUDIT.md); on Nov27 the current relay primary run 45981089260 matched target run 45981121682 and verified its workflow identity on main 2b9cb404da863aede54d9069e440ff32bcf6d00e. Both primary FIDS expiry and Phase7 expiry jobs completed successfully at the current pin (140444983503 and 140444983969). FIDS readback showed 58 live originals, zero eligible or hard-due originals, zero unbound originals and no deletion STOP; private expiry showed zero due packets, indexes, heads and operational metadata; Phase7 showed zero live or due links, bundles or fragments. Primary FIDS/private expiry reported databaseWritesPossible=false, zero provider calls and zero object deletions; Phase7 reported zero provider calls and zero deleted links, bundles or fragments. Backup/PITR and full retention deployment remain unverified."
+      "closureEvidence": "Nov23 heartbeat premature direct activation and wrong expiry multi-job recognition; later paused-route classification. [Checkpoint](checkpoints/2026-11-23_PHASE6_HEARTBEAT_AUTONOMOUS_WORKFLOW_AUDIT.md); on Nov27 the current relay primary run 45981089260 matched target run 45981121682 and verified its workflow identity on main 2b9cb404da863aede54d9069e440ff32bcf6d00e. Both primary FIDS expiry and Phase7 expiry jobs completed successfully at the current pin (140444983503 and 140444983969). FIDS readback showed 58 live originals, zero eligible or hard-due originals, zero unbound originals and no deletion STOP; private expiry showed zero due packets, indexes, heads and operational metadata; Phase7 showed zero live or due links, bundles or fragments. Primary FIDS/private expiry reported databaseWritesPossible=false, zero provider calls and zero object deletions; Phase7 reported zero provider calls and zero deleted links, bundles or fragments. Backup/PITR and full retention deployment remain unverified. Additional current-main evidence: retention target 45987416536 and jobs 140466490165/140466490583 completed at 11:05Z. FIDS readback reported 64 live originals, zero eligible/hard-due/unbound originals, no deletion STOP, zero provider calls, and databaseWritesPossible=false; private and Phase7 readbacks reported zero due items, zero live/due links/bundles/fragments and zero deletions. Relay 45987383815 verified the exact target ID while it was still queued; the target later completed successfully. Backup/PITR and complete retention deployment remain unverified."
     },
     {
       "id": "F010",

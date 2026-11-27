@@ -28,3 +28,24 @@ The latest Actions read found 12 active P5 SOURCE children, all on the exact pro
 #981 remains open/draft at exact head `9e8cfb67856da586a9a1975cb776909ffb4ebdcd`, stacked on #980. Exact run `45984268175` passed both `fixed-metadata-only` (job `140455741701`) and `conditional-query-owner-real-pg16` (job `140455741288`), including the restricted query against disposable PostgreSQL 16. This proves candidate CI only.
 
 Latest current-main retention evidence remains run `45981121682`; primary relay `45981089260` verified the target identity. Rolling relay `45980961590` acknowledged six safe lanes without collection proof. No positive PRE or Packet B is evidenced. Day4 T24 is scheduled to begin at 11:45Z; let the existing window and active children finish naturally, then allow the existing helper's fresh STOP/task/quiet/full-130-minute checks to decide whether a later safe window exists.
+
+## Live readback — Nov27 11:05:28Z
+
+Production main `2b9cb404da863aede54d9069e440ff32bcf6d00e`, relay main `2d96b22345908aa4334335aa899aec71b2fec2cb`, and #980 exact head `c4408c621a84a2549355d935cca7333c5527d3c2` are unchanged. #980 remains open/draft with 26 required workflow paths green; the owner's second exact helper run remains held at `QUIET_AND_GAP / ACTIVE_NO_CANCEL`. Keep admitted workers running; do not rerun or cancel.
+
+At 11:05Z, the Actions snapshot showed 12 active P5 SOURCE children on main, from the 10:19Z, 10:39Z and 10:49Z groups. #981 remains open/draft and stacked on #980. Its previous exact head `462054186d795d538e0d73f01e1d6d4a26956b70` passed both jobs in CI run `45985616917`; the current checkpoint update is docs-only and requires its own exact-head verification.
+
+Primary retention target `45987416536` completed successfully at the exact main pin. FIDS before/after readback showed 64 live originals, zero eligible or hard-due originals, zero unbound originals and no deletion STOP; no provider calls or database writes were possible. The private expiry readback showed zero due packets, indexes, expired heads, foreign-due records or due operational metadata. Phase7 readback showed zero live/due links, bundles and fragments and zero deletions. `completeRetentionDeploymentVerified=false` and `backupOrPitrVerified=false`. Primary relay `45987383815` verified the exact target run ID while its target was still queued; the target later completed successfully. Relay verification is not execution or collection proof.
+
+Latest scheduled checks on main:
+- Daily preparation `45986569418`: `NO_ELIGIBLE_UNPUBLISHED_FUTURE_DAY_NO_WRITE`; no eligible, missed or too-late day, and Day5 draw count remains zero.
+- T24 readback `45986565826`: `NO_DUE_CURRENT_PRIVATE_T24_PACKETS`.
+- PRE tick `45986566001`: `NO_DUE_CURRENT_PRIVATE_LATER_SHARDS`.
+- Source queue `45986562468`: `NO_DUE_SOURCE_NO_DISPATCH`, 56 queue queries, no paid GETs by the parent; full signed calendar coverage is not certified by this response.
+- Enrollment `45986562492`: `NO_PROSPECTIVE_CURRENT_SIGNED_LATER_PACKETS` and `NO_DUE_T24_STUDY_DAYS`.
+- Native POST producer `45986562468`: `NO_PROSPECTIVE_NATIVE_POST_WINDOW`.
+- Rolling relay `45986537891`: six lane ACKs, zero provider calls/database writes, explicitly `INDEPENDENT_WAKE_COMPLETE_NOT_COLLECTION_PROOF`.
+
+No positive PRE, durable Packet B, positive POST, or independent same-leg physical label is evidenced. The owner inventory remains 100 timely bindings, 52 expired Day2 originals/4,902 historical observations, 48 live Day3 originals/2,000 observations, zero cutoff-safe or linked PRE rows, and zero global Phase7 fragments/bundles/links at its 09:07Z readback. The global 64-original retention count is a newer operational count, not a study-attributed inventory.
+
+Day4 T24 is scheduled to begin at 11:45Z and run through 15:30Z. After its natural drain, use only the existing helper with its fresh STOP, task, quiet and full 130-minute guard. Do not bypass it, merge #980 early, or change signed scope.
