@@ -1,6 +1,6 @@
 /**
  * Source-controlled FREE-TIER AeroDataBox airport-feed coverage diagnostic.
- * EXACTLY 2 airport status GETs (WSSS and YSSY); 2 FREE balance GETs
+ * Historical default 2 airport status GETs (WSSS and YSSY); F017 mode 4 fixed incident airports; 2 FREE balance GETs
  * independently compare RapidAPI API-units and subscription credits.
  * No FIDS GET, Flight Alert CREATE, retry, POST/DELETE or database write.
  * The documented "/health/services/airports/{icao}/feeds" is FREE TIER:
@@ -11,6 +11,11 @@
  */
 import "dotenv/config";
 const BASE="https://aerodatabox.p.rapidapi.com";
+const mode=process.argv[2]??"GATE05_WSSS_YSSY";
+if(process.argv.length>3||!["GATE05_WSSS_YSSY","F017_DAY3_FOUR_SLOT_FREE_FEEDS"].includes(mode))
+ throw Error("GATE05_FREE_FEED_SCOPE");
+const airports=mode==="F017_DAY3_FOUR_SLOT_FREE_FEEDS"?["YSSY","KBUF","LFQQ","NZNP"]:["WSSS","YSSY"];
+const allowed=new Set(["/subscriptions/balance",...airports.map(a=>"/health/services/airports/"+a+"/feeds")]);
 const key=process.env.AERODATABOX_API_KEY;
 if(!key || key.trim().length<10)throw Error("GATE05_FREE_FEED_AUTH_MISSING");
 const auth={
@@ -30,7 +35,7 @@ function safeHeader(h,name){
   return value===null?null:value.slice(0,90).replace(/[^a-zA-Z0-9,:.; +\/-]/g,"");
 }
 async function onlyGet(path){
-  if(!/^\/(?:subscriptions\/balance|health\/services\/airports\/(?:WSSS|YSSY)\/feeds)$/.test(path))
+  if(!allowed.has(path))
     throw Error("GATE05_FREE_FEED_UNREVIEWED_PATH");
   if(lastGetStartMs!==null){
     const delay=Math.max(0,MIN_GET_START_SPACING_MS-(Date.now()-lastGetStartMs));
@@ -42,11 +47,12 @@ async function onlyGet(path){
     method:"GET",headers:auth,redirect:"error",signal:AbortSignal.timeout(9000)
   });
   if(r.status!==200){
+    if(mode==="F017_DAY3_FOUR_SLOT_FREE_FEEDS"&&r.status===204&&path.includes("/feeds"))return {body:null,headers:r.headers};
     console.error(JSON.stringify({
       status:"GATE05_FREE_FEED_HTTP_HOLD",
       httpStatus:r.status,
       requestKind:path.includes("/feeds")?"AIRPORT_FEED":"BALANCE",
-      airport:path.includes("WSSS")?"WSSS":path.includes("YSSY")?"YSSY":null,
+      airport:airports.find(a=>path==="/health/services/airports/"+a+"/feeds")??null,
       requestsAttempted:attempts,
       noPaidFidsRequests:true,noRetries:true,finalBalanceCompared:false,
       rateLimit:{
@@ -88,14 +94,15 @@ const before=await onlyGet("/subscriptions/balance");
 const unitBefore=quotaRemaining(before.headers);
 const creditsBefore=balanceCredits(before.body);
 const rows=[];
-for(const icao of ["WSSS","YSSY"]){
+for(const icao of airports){
   const {body}=await onlyGet("/health/services/airports/"+icao+"/feeds");
   rows.push({
     icao,
-    scheduleFeed:statusOf(body.flightSchedulesFeed),
-    liveFeed:statusOf(body.liveFlightUpdatesFeed),
-    adsbFeed:statusOf(body.adsbUpdatesFeed),
-    generalAvailabilityPresent:Boolean(body.generalAvailability),
+    healthHttpStatus:body===null?204:200,
+    scheduleFeed:statusOf(body?.flightSchedulesFeed),
+    liveFeed:statusOf(body?.liveFlightUpdatesFeed),
+    adsbFeed:statusOf(body?.adsbUpdatesFeed),
+    generalAvailabilityPresent:Boolean(body?.generalAvailability),
     timestampActualityProven:false,
     scheduledWheelsOffSourceProven:false
   });
@@ -108,10 +115,11 @@ console.log(JSON.stringify({
   schema:"v39.gate05.free-airport-feed-custody.v1",
   status:quotaStable?"FREE_FEED_READBACK_QUOTA_STABLE":
     "FREE_FEED_QUOTA_OR_BALANCE_CHANGED_CAUSE_UNDETERMINED",
+  scope:mode, historicalFidsCauseCertified:false, databaseWrites:0,
   providerMethods:["GET"],
   providerPaths:{
     accountBalance:2,
-    freeAirportFeeds:2,
+    freeAirportFeeds:airports.length,
     fids:0,subCreates:0,providerDeletes:0
   },
   quotaApiUnitsBefore:unitBefore,

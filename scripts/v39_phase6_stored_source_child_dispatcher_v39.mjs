@@ -73,10 +73,13 @@ function validateInputs(p){
 export async function proveNoPriorUncertainStoredDispatch({history,currentRunId,fetcher,headers}){
  if(!history.workflow_runs.some(x=>x.id===currentRunId))
   fail("CURRENT_SCHEDULE_NOT_VISIBLE_IN_COMPLETE_HISTORY");
- for(const run of history.workflow_runs){
+ const prior=history.workflow_runs.filter(run=>run.id!==currentRunId);
+ // Bounded concurrent metadata GETs preserve all-attempt inspection, but
+ // avoid consuming the 120s freshness window on a serial history walk.
+ // Never dispatch until every member of every batch has passed.
+ const inspect=async run=>{
   // A successful latest workflow attempt can hide an earlier uncertain
   // dispatch step after a manual rerun. Inspect all attempts even on success.
-  if(run.id===currentRunId)continue;
   const rr=await fetcher(ROOT+"/actions/runs/"+run.id+"/jobs?per_page=100&filter=all",{method:"GET",headers});
   if(!rr.ok)fail("PRIOR_PARENT_JOBS_UNAVAILABLE");
   const data=await rr.json();
@@ -99,6 +102,10 @@ export async function proveNoPriorUncertainStoredDispatch({history,currentRunId,
    // Prior ambiguity in a still-due overlap; max source lead 105m, 3h fence.
    fail("PREVIOUS_DISPATCH_UNCERTAIN_NO_REPLAY");
   }
+ };
+ for(let i=0;i<prior.length;i+=4){
+  const results=await Promise.allSettled(prior.slice(i,i+4).map(inspect));
+  for(const result of results)if(result.status==="rejected")throw result.reason;
  }
 }
 const summary=(status,more={})=>Object.freeze({schema:"v39.phase6.stored-source-dispatch-controller.v1",
@@ -198,7 +205,12 @@ export async function runP6StoredSourceDispatcher(env,options={}){
  const acknowledged=[];
  for(const p of proposals){
   if(Math.abs(now()-historyClock)>120000)
-   return summary("STALE_REMAINING_PLAN_DEFERRED_NO_REPLAY",{acknowledgedGithubChildCount:acknowledged.length,acknowledgedGithubRunIds:acknowledged});
+   return summary("STALE_REMAINING_PLAN_DEFERRED_NO_REPLAY",{...capacityEvidence,
+    activeSourceChildCountBefore:active,acknowledgedGithubChildCount:acknowledged.length,acknowledgedGithubRunIds:acknowledged,
+    staleDeferredCount:proposals.length-acknowledged.length,
+    remainingDueNotDispatchedCount:capacityEvidence.capacityDeferredCount+proposals.length-acknowledged.length,
+    inFlightCap:CAP.inFlightCap,perTickCap:CAP.perTickCap,maxLeadMinutes:CAP.maxLeadMinutes,
+    unavailableSelectedDayCount:unavailableDays,unavailableSelectedDueQueryCount:unavailableQueries});
   try{
    const res=await fetcher(ROOT+"/actions/workflows/"+CHILD+"/dispatches",{
     method:"POST",headers:{...headers,"Content-Type":"application/json"},

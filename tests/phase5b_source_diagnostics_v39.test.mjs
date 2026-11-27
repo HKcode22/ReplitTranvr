@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import {sourceDiagnosticLine,readSafeSourceDiagnosticLines,sourceHttpDiagnosticLabel,postDiagnostic,sourceDbDiagnosticLabel,sourceChildFailureDiagnostic} from "../scripts/v39_phase5b_source_diagnostics_v39.mjs";
+import {sourceDiagnosticLine,readSafeSourceDiagnosticLines,sourceHttpDiagnosticLabel,postDiagnostic,sourceDbDiagnosticLabel,sourceChildFailureDiagnostic,readSafeTimestampedSourceDiagnostics,classifyP6PaidChildReceipt} from "../scripts/v39_phase5b_source_diagnostics_v39.mjs";
 test("only fixed complete diagnostic lines are returned, never arbitrary captured data",()=>{
  const ok=sourceDiagnosticLine("RESERVATION_CONFIRMED");
  const no=sourceDiagnosticLine("HTTP_AUTH_REJECTED");
@@ -65,4 +65,109 @@ test("T054 frozen 31-day split distinguishes unprepared denominator, source miss
  assert.throws(()=>projectP6SignedCalendarCoverage(calendar,[{...r,elapsed_unreserved:41}],dup,at),/COUNT_OR_CLOCK_CONTRADICTION/);
  assert.throws(()=>projectP6SignedCalendarCoverage(calendar,[r,r],dup,at),/COUNT_OR_CLOCK_CONTRADICTION/);
  assert.throws(()=>projectP6SignedCalendarCoverage(calendar.map(d=>d.run_day_index===21?{...d,evaluation_partition:"train"}:d),[r],dup,at),/FROZEN_CALENDAR_OR_SPLIT_DRIFT/);
+});
+
+test("T080 paid child evidence requires exact job/step and complete actual diagnostic, not HTTP/ACK/CI color",()=>{
+ const run={id:123,head_sha:"a".repeat(40),event:"workflow_dispatch",head_branch:"main",run_attempt:1,status:"completed",conclusion:"failure"};
+ const paid="Authenticate real private PG16 signed index and query, then ORIGINAL one-physical-GET child",actor="Admission for real actor preflight ONLY (no paid capability)";
+ const job={name:"exact-private-source-existing-one-get-child",run_id:123,head_sha:run.head_sha,run_attempt:1,status:"completed",conclusion:"failure",
+  steps:[{name:actor,conclusion:"skipped"},{name:paid,conclusion:"success",started_at:"2026-11-25T06:39:58Z",completed_at:"2026-11-25T07:00:02Z"}]};
+ const log=(...d)=>d.map(x=>"2026-11-25T07:00:02.9278707Z P6_SOURCE_DIAG "+x).join("\n");
+ const complete=log("PREARM_COMMITTED","RESERVATION_CONFIRMED","HTTP_OK","ORIGINAL_PERSIST_CONFIRMED","OUTCOME_TIMELY");
+ const result=classifyP6PaidChildReceipt(run,[job],complete);
+ assert.equal(result.status,"TIMELY_ORIGINAL_REPORTED_BY_CHILD");assert.equal(result.providerBillingVerified,false);assert.equal(result.actualPreCommitVerified,false);
+ assert.equal(classifyP6PaidChildReceipt(run,[job],log("PREARM_COMMITTED","RESERVATION_CONFIRMED","HTTP_OK","OUTCOME_UNOBSERVED")).status,"HTTP_OK_NO_ORIGINAL_PROOF");
+ assert.equal(classifyP6PaidChildReceipt(run,[job],log("PREARM_COMMITTED","RESERVATION_CONFIRMED","HTTP_RATE_LIMIT","OUTCOME_UNOBSERVED")).status,"RATE_LIMIT_NO_ORIGINAL_PROOF");
+ assert.equal(classifyP6PaidChildReceipt(run,[job],complete+"\n"+log("OUTCOME_LATE")).status,"CONTRADICTORY_DIAGNOSTICS_REVIEW");
+ assert.equal(classifyP6PaidChildReceipt(run,[job],complete.replace("OUTCOME_TIMELY","OUTCOME_LATE")).status,"LATE_ORIGINAL_REPORTED_BY_CHILD");
+ assert.equal(classifyP6PaidChildReceipt(run,[job],null).status,"PAID_STEP_LOG_UNAVAILABLE_OR_NO_DIAGNOSTIC");
+ assert.equal(classifyP6PaidChildReceipt(run,[{...job,steps:[{name:actor,conclusion:"success"},{name:paid,conclusion:"skipped"}]}],complete).status,"NONPAID_ACTOR_PREFLIGHT_NO_COLLECTION");
+ assert.equal(classifyP6PaidChildReceipt({...run,run_attempt:2},[job],complete).status,"RUN_IDENTITY_UNVERIFIED");
+ assert.equal(classifyP6PaidChildReceipt(run,[{...job,head_sha:"b".repeat(40)}],complete).status,"JOB_IDENTITY_UNVERIFIED");
+ assert.deepEqual(readSafeTimestampedSourceDiagnostics('2026-11-25T07:00:02Z echo "P6_SOURCE_DIAG HTTP_OK"\n'+log("HTTP_OK extra-private")+'\n'+log("HTTP_OK")),["HTTP_OK"]);
+ assert.doesNotMatch(JSON.stringify(result),/private|postgres:\/\//);
+});
+
+test("T081 real GitHub masked step name and second-precision interval retain timely SOURCE while independently labeling failed PRE",()=>{
+ const run={id:45562205543,head_sha:"b4c6c283e506747c3d662aa61c969f57b26cd4d4",event:"workflow_dispatch",head_branch:"main",run_attempt:1,status:"completed",conclusion:"failure"};
+ const paid={name:"Authenticate real private PG***6 signed index and query, then ORIGINAL one-physical-GET child",conclusion:"success",number:11,started_at:"2026-11-25T06:39:58Z",completed_at:"2026-11-25T07:00:02Z"};
+ const actor={name:"Admission for real actor preflight ONLY (no paid capability)",conclusion:"skipped",number:4};
+ const pre={name:"Review and publish later PRE using existing private registry (NONPAID, separately approved)",conclusion:"failure",number:12};
+ const job={name:"exact-private-source-existing-one-get-child",run_id:run.id,head_sha:run.head_sha,run_attempt:1,status:"completed",conclusion:"failure",steps:[actor,paid,pre]};
+ // Actual historical SOURCE markers and timestamps; follow-on failure is a
+ // synthetic combination, not an assertion that this historical PRE failed.
+ const log=[
+ "2026-11-25T06:39:57.999Z P6_SOURCE_DIAG HTTP_RATE_LIMIT",
+ "2026-11-25T07:00:02.9278707Z P6_SOURCE_DIAG PREARM_COMMITTED",
+ "2026-11-25T07:00:02.9283201Z P6_SOURCE_DIAG RESERVATION_CONFIRMED",
+ "2026-11-25T07:00:02.9284739Z P6_SOURCE_DIAG HTTP_OK",
+ "2026-11-25T07:00:02.9286870Z P6_SOURCE_DIAG ORIGINAL_PERSIST_CONFIRMED",
+ "2026-11-25T07:00:02.9287789Z P6_SOURCE_DIAG OUTCOME_TIMELY",
+ "2026-11-25T07:00:03.000Z P6_SOURCE_DIAG OUTCOME_LATE"
+ ].join("\n");
+ const result=classifyP6PaidChildReceipt(run,[job],log);
+ assert.equal(result.status,"TIMELY_ORIGINAL_REPORTED_BY_CHILD");
+ assert.equal(result.followOnPre,"STEP_FAILED_OR_INTERRUPTED");
+ assert.equal(result.actualPreCommitVerified,false);
+ assert.ok(!result.diagnostics.includes("HTTP_RATE_LIMIT")&&!result.diagnostics.includes("OUTCOME_LATE"));
+ assert.equal(classifyP6PaidChildReceipt(run,[{...job,steps:[actor,{...paid,name:paid.name.replace("PG***6","PG***")},pre]}],log).status,"STEP_SCOPE_UNVERIFIED");
+ assert.equal(classifyP6PaidChildReceipt(run,[{...job,steps:[actor,{...paid,started_at:null},pre]}],log).status,"PAID_STEP_CLOCK_UNVERIFIED");
+ assert.equal(classifyP6PaidChildReceipt(run,[{...job,steps:[actor,paid,{...pre,conclusion:"success"}]}],log).followOnPre,"STEP_SUCCEEDED_NOT_COMMIT_PROOF");
+ assert.equal(classifyP6PaidChildReceipt(run,[{...job,steps:[actor,paid,pre,pre]}],log).status,"STEP_SCOPE_UNVERIFIED");
+});
+
+
+import {selectP6PaidChildAuditRuns,sourceOriginalChildFailureCode} from "../scripts/v39_phase5b_source_diagnostics_v39.mjs";
+import {projectP6SourceSlotCoverage} from "../scripts/v39_phase5b_signed_calendar_coverage_owner.mjs";
+test("T091 full prearm cannot hide terminal SOURCE failures from the bounded audit",()=>{
+ const rows=Array.from({length:100},(_,i)=>({id:2000-i,status:i<24?"in_progress":"completed",created_at:new Date(Date.UTC(2026,10,27,4,20)-i*10000).toISOString()}));
+ const x=selectP6PaidChildAuditRuns({total_count:120,workflow_runs:rows});
+ assert.equal(x.activeMetadataRows,24);assert.equal(x.terminalMetadataRows,76);assert.equal(x.terminalSelected,64);assert.equal(x.terminalOmitted,12);
+ assert.equal(x.selected.length,88);assert.equal(x.selected[24].id,1976);assert.equal(x.allMatchingMetadataInspected,false);
+ assert.throws(()=>selectP6PaidChildAuditRuns({total_count:120,workflow_runs:rows.slice(1)}),/AUDIT_METADATA_UNVERIFIED/);
+ assert.throws(()=>selectP6PaidChildAuditRuns({total_count:100,workflow_runs:[rows[0],...rows.slice(0,99)]}),/AUDIT_METADATA_UNVERIFIED/);
+});
+test("T091 exact observed no-content remains unobserved and no replay; generic and contradictory results are not relabeled",()=>{
+ const labels=["PREARM_COMMITTED","RESERVATION_CONFIRMED","HTTP_STARTED","HTTP_NO_CONTENT","FIDS_BODY_UNAVAILABLE","OUTCOME_UNOBSERVED"];
+ const raw=labels.map(sourceDiagnosticLine).join("\n");
+ const child={status:1,stdout:Buffer.from(raw),stderr:Buffer.from("private suppressed")};
+ assert.equal(sourceOriginalChildFailureCode(child),"ORIGINAL_HTTP_NO_CONTENT_UNOBSERVED_NO_REPLAY");
+ assert.equal(sourceChildFailureDiagnostic("ORIGINAL_SUBPROCESS",{message:"HOLD_P6_REAL_PRIVATE_SOURCE_CHILD_"+sourceOriginalChildFailureCode(child)}).category,"SOURCE_HTTP_NO_CONTENT_UNOBSERVED");
+ assert.equal(sourceOriginalChildFailureCode({...child,stdout:raw.replace("HTTP_NO_CONTENT","HTTP_RESET_CONTENT")}),"ORIGINAL_HTTP_RESET_CONTENT_UNOBSERVED_NO_REPLAY");
+ for(const x of [{...child,signal:"SIGTERM"},{...child,status:null},{...child,status:0},{...child,stdout:raw.replace("HTTP_STARTED","INNER_ADMITTED")},{...child,stdout:raw+"\nP6_SOURCE_DIAG ORIGINAL_PERSIST_STARTED"},{...child,stdout:raw+"\nP6_SOURCE_DIAG HTTP_OK"}])
+  assert.equal(sourceOriginalChildFailureCode(x),"ORIGINAL_ONE_GET_CHILD_FAILED_AMBIGUOUS_NO_REPLAY");
+ const run={id:45916017872,head_sha:"c2bb8e18dfcf64ea815745da59ede62f53e448bb",event:"workflow_dispatch",head_branch:"main",run_attempt:1,status:"completed",conclusion:"failure"};
+ const job={name:"exact-private-source-existing-one-get-child",run_id:run.id,head_sha:run.head_sha,run_attempt:1,status:"completed",conclusion:"failure",steps:[
+  {name:"Admission for real actor preflight ONLY (no paid capability)",conclusion:"skipped"},
+  {name:"Authenticate real private PG***6 signed index and query, then ORIGINAL one-physical-GET child",conclusion:"failure",started_at:"2026-11-27T00:19:40Z",completed_at:"2026-11-27T01:45:39Z"}]};
+ const log=labels.map(x=>"2026-11-27T01:45:39.4611591Z P6_SOURCE_DIAG "+x).join("\n");
+ const result=classifyP6PaidChildReceipt(run,[job],log);
+ assert.equal(result.status,"HTTP_NO_CONTENT_UNOBSERVED_NO_ORIGINAL_PROOF");assert.equal(result.actualPreCommitVerified,false);assert.equal(result.providerBillingVerified,false);
+ assert.equal(classifyP6PaidChildReceipt(run,[job],log.replace("HTTP_NO_CONTENT","HTTP_RESET_CONTENT")).status,"HTTP_RESET_CONTENT_UNOBSERVED_NO_ORIGINAL_PROOF");
+ assert.equal(classifyP6PaidChildReceipt(run,[job],log.replace("OUTCOME_UNOBSERVED","OUTCOME_TIMELY")).status,"CONTRADICTORY_DIAGNOSTICS_REVIEW");
+});
+test("T092 slot denominator retains missing reservations and reconciles all 93 horizon cells",()=>{
+ const cells=Array.from({length:31},(_,i)=>["T-24h","T-6h","T-90m"].map(horizon=>({day:i+1,horizon,prepared:null}))).flat();
+ const base={prepared:8,reservations:4,bindings:2,timely_bindings:2,elapsed_unreserved:1,open_unreserved:0,future_unreserved:3,stopped_unreserved:0};
+ cells[7]={day:3,horizon:"T-6h",...base};
+ const row={run_day_index:3,horizon:"T-6h",slot_id:"HUB",airport_icao:"WSSS",...base,reserved_units:8,normalized_member_observations:100};
+ assert.equal(projectP6SourceSlotCoverage([row],cells)[0].reserved_without_binding,2);
+ for(const rows of [[{...row,reserved_units:7}],[{...row,bindings:1}],[{...row,slot_id:"UNKNOWN"}],[row,row],[{...row,normalized_member_observations:20001}],[]])
+  assert.throws(()=>projectP6SourceSlotCoverage(rows,cells),/SLOT_/);
+});
+
+import {selectP6RunReceiptScope,projectP6RunReceiptRows} from "../scripts/v39_phase5b_signed_calendar_coverage_owner.mjs";
+test("T093 exact run-level custody corroboration detects missing, duplicate and contradictory ledger evidence",()=>{
+ const positive="TIMELY_ORIGINAL_REPORTED_BY_CHILD",negative="HTTP_NO_CONTENT_UNOBSERVED_NO_ORIGINAL_PROOF";
+ const scope=selectP6RunReceiptScope([{runId:1,status:positive},{runId:2,status:negative},{runId:3,status:"RUN_NOT_TERMINAL"}]);
+ const base={run_day_index:3,horizon:"T-6h",reserved:true};
+ const a={...base,run_id:"1",slot_id:"HUB",airport_icao:"YSSY",bound:true,timely:true};
+ const b={...base,run_id:"2",slot_id:"MID_A",airport_icao:"KBUF",bound:false,timely:false};
+ const out=projectP6RunReceiptRows(scope,[a,b]);
+ assert.equal(out.selectedRuns,2);assert.equal(out.excludedReceiptCount,1);
+ assert.deepEqual(out.rows.map(x=>[x.airport_icao,x.bound,x.timely_bindings]),[["YSSY",1,1],["KBUF",0,0]]);
+ assert.equal(out.httpStatusIndependentlyVerified,false);assert.equal(out.actualPreCommitVerified,false);
+ for(const rows of [[a],[a,a],[a,{...b,reserved:false}],[a,{...b,bound:true}],[{...a,timely:false},b],[a,{...b,run_id:"3"}]])assert.throws(()=>projectP6RunReceiptRows(scope,rows),/RUN_RECEIPT_/);
+ assert.throws(()=>selectP6RunReceiptScope([{runId:1,status:positive},{runId:1,status:negative}]),/RUN_RECEIPT_IDENTITY/);
+ assert.throws(()=>selectP6RunReceiptScope([{runId:3,status:"RUN_NOT_TERMINAL"}]),/RUN_RECEIPT_SCOPE/);
 });

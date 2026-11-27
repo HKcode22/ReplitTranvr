@@ -8,15 +8,24 @@ set +x
 umask 077
 R=HKcode22/ReplitTranvr
 L=HKcode22/TravnrClockRelay
+MODE="${1:-}"
+TARGET_ONLY=0
+TARGET_PR=977
 OLD=f4fe806dbda9695f181aee3b16d7285c42e44f93
 ROLD=9188891698958e03d6fc4bf964266f560c36a6d0
 RH=6c6cbd36e9838ad519ba2c8403c0e2e12ed51f7f
+if [[ "$MODE" == DEPLOY_EXACT_REVIEWED_SOURCE_ONLY_TARGET_979 ]];then
+ TARGET_ONLY=1
+ TARGET_PR=979
+ OLD=c2bb8e18dfcf64ea815745da59ede62f53e448bb
+ ROLD=2d96b22345908aa4334335aa899aec71b2fec2cb
+fi
 H="${2:-}"
 ENV=phase6-protected-runtime
 stage=ADMISSION
 hold(){ echo "HOLD_SOURCE_ONLY_CUTOVER stage=$stage reason=$1" >&2;exit 2; }
 trap 'echo "SOURCE_ONLY_CUTOVER_INTERRUPTED stage=$stage; inspect actual main and pins; never blindly replay" >&2' ERR
-[[ "${1:-}" == DEPLOY_EXACT_REVIEWED_SOURCE_ONLY_SUCCESSOR && "$H" =~ ^[a-f0-9]{40}$ ]] || hold EXACT_MODE
+[[ ( "$MODE" == DEPLOY_EXACT_REVIEWED_SOURCE_ONLY_SUCCESSOR || "$MODE" == DEPLOY_EXACT_REVIEWED_SOURCE_ONLY_TARGET_979 ) && "$H" =~ ^[a-f0-9]{40}$ && "$#" == 2 ]] || hold EXACT_MODE
 [[ "$(gh api user --jq .login)" == HKcode22 ]] || hold OWNER
 main(){ gh api "repos/$1/git/ref/heads/main" --jq .object.sha; }
 tree(){ gh api "repos/$1/git/commits/$2" --jq .tree.sha; }
@@ -53,7 +62,9 @@ ci(){
  local repo="$1" head="$2" minimum="$3" j
  j="$(gh api "repos/$repo/actions/runs?head_sha=$head&event=pull_request&per_page=100")"
  jq -e --arg h "$head" --argjson n "$minimum" '.total_count<=100 and (.workflow_runs|length)==.total_count and .total_count>=$n and all(.workflow_runs[];.head_sha==$h and .status=="completed" and .conclusion=="success" and .run_attempt==1)' <<<"$j" >/dev/null || hold EXACT_CI_NOT_ALL_GREEN
- if [[ "$repo" == "$R" ]];then
+ if [[ "$repo" == "$R" && "$TARGET_ONLY" == 1 ]];then
+  target_only_ci_ok "$j" "$head" || hold MANDATORY_CI_MISSING
+ elif [[ "$repo" == "$R" ]];then
   jq -e '([.workflow_runs[].name] as $n | ["V3.9 Offline Safety","Phase5B source diagnostics offline tests","Phase5B conditional T24 existing witness path real PG16 (NO paid)","Phase5 V0091 genuine-source-to-V0087 scoped enrollment PG16 (NO PROVIDER)","Phase5B exact executable successor compatibility","Phase5B Phase7 actual role executable admission"] | all(. as $x|$n|index($x)!=null))' <<<"$j" >/dev/null || hold MANDATORY_CI_MISSING
  fi
  echo "EXACT_CI_PASS repo=$repo head=$head count=$(jq -r .total_count <<<"$j")"
@@ -86,6 +97,27 @@ pin(){
 }
 
 # BEGIN SOURCE ONLY TESTED GUARDS
+# Exact paths, not dynamic run-name or a minimum count alone.
+target_only_ci_ok(){
+ local j="$1" h="$2"
+ jq -e --arg h "$h" '
+ .total_count<=100 and (.workflow_runs|length)==.total_count and .total_count>=12 and
+ all(.workflow_runs[];.head_sha==$h and .status=="completed" and .conclusion=="success" and .run_attempt==1) and
+ ([.workflow_runs[].path] as $p | [
+ ".github/workflows/v39-phase0-offline.yml",
+ ".github/workflows/phase5b-source-diagnostics-offline.yml",
+ ".github/workflows/phase5b-phase7-role-successor.yml",
+ ".github/workflows/phase5b-runtime-successor-compatibility.yml",
+ ".github/workflows/phase5-one-signed-future-post-v0083-main-manual.yml",
+ ".github/workflows/phase6-source-existing-p5-child-admission-offline-no-provider.yml",
+ ".github/workflows/phase5-source-upcoming-queue-main-scheduled-readonly.yml",
+ ".github/workflows/phase5-public-frozen-private-flight-packet-leak-guard.yml",
+ ".github/workflows/phase5-actual-source-native-flight-candidates-readonly-manual.yml",
+ ".github/workflows/phase2g-yssy-p25-published-identity-readonly.yml",
+ ".github/workflows/phase2g-yssy-p25-release-no-provider-ci.yml",
+ ".github/workflows/phase2g-yssy-p25-release-postgres-ci.yml"
+ ] | all(. as $x|$p|index($x)!=null))' <<<"$j" >/dev/null
+}
 # Database time, not runner wall clock, determines the prospective no-cutover gap.
 # 90-minute stored prearm + 40-minute deployment reserve. Open due work is fatal.
 gap_ok(){
@@ -134,14 +166,42 @@ wait_all_quiet(){
   sleep 10
  done
 }
+# The durable queue retains terminal history; requiring an empty table
+# would prohibit every future safe deployment after the first genuine PRE.
+# Do not waive ambiguous writes or quarantined tasks.
+cutover_pre_tasks_ok(){
+ local j="$1"
+ jq -es '
+  ([.[]|select(.status=="P6_SOURCE_RESERVATION_AND_STOP_READONLY")]) as $s |
+  ([.[]|select(.status=="P6_PRIVATE_PACKET_AND_PRE_TASK_CUSTODY_READONLY")]) as $t |
+  ($s|length)==1 and ($t|length)==1 and
+  $s[0].unresolvedStops==0 and
+  $s[0].providerCalls==0 and $s[0].productionWrites==0 and
+  $t[0].providerCalls==0 and $t[0].productionWrites==0 and
+  ($s[0].at|type=="string") and $s[0].at==$t[0].at and
+  ($t[0].tasks|type=="array") and
+  ([$t[0].tasks[]|[.horizon,.state]]|unique|length)==($t[0].tasks|length) and
+  all($t[0].tasks[];
+    (.horizon=="T-24h" or .horizon=="T-6h" or .horizon=="T-90m") and
+    (.tasks|type=="number" and .>0 and .==floor) and
+    (.tasks_with_snapshot_ref|type=="number" and .>=0 and .==floor) and
+    (.linked_cutoff_safe_verified|type=="number" and .>=0 and .==floor) and
+    ((.state=="VERIFIED_ON_TIME" and .tasks_with_snapshot_ref==.tasks and .linked_cutoff_safe_verified==.tasks) or
+     (.state=="MISSED" and .tasks_with_snapshot_ref==0 and .linked_cutoff_safe_verified==0)))
+ ' <<<"$j" >/dev/null
+}
 # END SOURCE ONLY TESTED GUARDS
 blob(){ gh api "repos/$R/git/blobs/$1" --jq .content | base64 --decode > "$2"; [[ "$(git hash-object "$2")" == "$1" ]] || hold BLOB_MISMATCH; }
 stage=EXACT_CI
-ci "$R" "$H" 31
-ci "$L" "$RH" 1
-# The relay patch modifies only relay.mjs and relay.test.mjs; its exact PR
-# triggers the external-clock offline tests, not unrelated admin workflows.
-[[ "$(statecheck "$R" 977 "$OLD" "$H")" == OPEN && "$(statecheck "$L" 31 "$ROLD" "$RH")" == OPEN ]] || hold NO_BLIND_REPLAY
+if [[ "$TARGET_ONLY" == 1 ]];then
+ ci "$R" "$H" 12
+ [[ "$(main "$L")" == "$ROLD" ]] || hold RELAY_BASE_DRIFT
+ [[ "$(statecheck "$R" "$TARGET_PR" "$OLD" "$H")" == OPEN ]] || hold NO_BLIND_REPLAY
+else
+ ci "$R" "$H" 31
+ ci "$L" "$RH" 1
+ [[ "$(statecheck "$R" "$TARGET_PR" "$OLD" "$H")" == OPEN && "$(statecheck "$L" 31 "$ROLD" "$RH")" == OPEN ]] || hold NO_BLIND_REPLAY
+fi
 blob 3ee5830338e6e121befdb6d324e9c61311dc28ea "$TMP/pins.sh"
 blob 018a350036ebe0f2b326e322b586d4ef9b343dd1 "$TMP/census.mjs"
 blob cc7121bbb91715ce066ae2c84e5656227853a473 "$TMP/funnel.cjs"
@@ -152,19 +212,28 @@ bash "$TMP/pins.sh" "$OLD" "$ROLD" SOURCE_ONLY > "$TMP/pin-output"
 grep -Fxq P6_POST_CUTOVER_VARIABLE_READBACK_PASS_SOURCE_ONLY_NO_WRITES "$TMP/pin-output" || hold OLD_PIN_READBACK
 # No raw originals, no writes; check actual STOP and any existing queue tasks.
 node "$TMP/funnel.cjs" > "$TMP/funnel"
-jq -es '([.[]|select(.status=="P6_SOURCE_RESERVATION_AND_STOP_READONLY")]|length)==1 and ([.[]|select(.status=="P6_SOURCE_RESERVATION_AND_STOP_READONLY")][0].unresolvedStops==0) and ([.[]|select(.status=="P6_PRIVATE_PACKET_AND_PRE_TASK_CUSTODY_READONLY")]|length)==1 and ([.[]|select(.status=="P6_PRIVATE_PACKET_AND_PRE_TASK_CUSTODY_READONLY")][0].tasks|length)==0' "$TMP/funnel" >/dev/null || hold STOP_OR_EXISTING_PRE_TASKS
+cutover_pre_tasks_ok "$(cat "$TMP/funnel")" || hold STOP_OR_UNSETTLED_PRE_TASKS
 stage=PREMERGE_RETENTION
 bash "$TMP/retention.sh" ENSURE_EXACT_CURRENT_MAIN_FULL_RETENTION_BASELINE "$OLD"
 stage=QUIET_AND_GAP
 wait_all_quiet
+# Recheck STOP and task state after the retention baseline and wait. A
+# pre-wait census is not evidence that no new task has appeared.
+node "$TMP/funnel.cjs" > "$TMP/funnel"
+cutover_pre_tasks_ok "$(cat "$TMP/funnel")" || hold STOP_OR_UNSETTLED_PRE_TASKS
+funnel_observed="$(jq -ser '.[]|select(.status=="P6_SOURCE_RESERVATION_AND_STOP_READONLY")|.at' "$TMP/funnel")"
 node "$TMP/census.mjs" > "$TMP/census"
 gap_ok "$(cat "$TMP/census")" || hold NO_SAFE_PROSPECTIVE_GAP
 # Also require clock freshness to prevent stale census reuse after the quiet wait.
 observed="$(jq -r .observedAtUtc "$TMP/census")"
 [[ "$(date -u +%s)" -ge "$(date -u -d "$observed" +%s)" && "$(( $(date -u +%s)-$(date -u -d "$observed" +%s) ))" -le 60 ]] || hold CENSUS_CLOCK
+now_epoch="$(date -u +%s)"
+funnel_epoch="$(date -u -d "$funnel_observed" +%s)" || hold TASK_CENSUS_CLOCK
+[[ "$now_epoch" -ge "$funnel_epoch" && "$((now_epoch-funnel_epoch))" -le 60 ]] || hold TASK_CENSUS_CLOCK
 all_main_quiet || hold ACTIVE_NO_CANCEL
 stage=TARGET_MERGE
-merge_exact "$R" 977 "$OLD" "$H"
+[[ "$(main "$L")" == "$ROLD" ]] || hold RELAY_BASE_DRIFT
+merge_exact "$R" "$TARGET_PR" "$OLD" "$H"
 NEW="$(main "$R")"
 stage=TARGET_RUNTIME_AND_RETENTION_PINS
 pin "$R" P6_PHASE5B_RUNTIME_EXECUTABLE_SHA "$OLD" "$NEW" "$ENV"
@@ -176,6 +245,15 @@ grep -Fxq P6_POST_CUTOVER_VARIABLE_READBACK_PASS_SOURCE_ONLY_NO_WRITES "$TMP/pin
 stage=NEW_TARGET_RETENTION
 bash "$TMP/retention.sh" ENSURE_EXACT_CURRENT_MAIN_FULL_RETENTION_BASELINE "$NEW"
 echo "SOURCE_ONLY_TARGET_DEPLOYED_AND_RETENTION_BASELINE main=$NEW"
+if [[ "$TARGET_ONLY" == 1 ]];then
+ stage=FINAL_TARGET_ONLY_READBACK
+ [[ "$(main "$L")" == "$ROLD" ]] || hold RELAY_BASE_DRIFT
+ bash "$TMP/pins.sh" "$NEW" "$ROLD" SOURCE_ONLY > "$TMP/pin-output"
+ grep -Fxq P6_POST_CUTOVER_VARIABLE_READBACK_PASS_SOURCE_ONLY_NO_WRITES "$TMP/pin-output" || hold FINAL_PIN_READBACK
+ echo "SOURCE_ONLY_TARGET_SUCCESSOR_DEPLOYED target=$NEW relay_unchanged=$ROLD"
+ echo "NO_PAID_DISPATCH_NO_ROUTE_CHANGE_NO_POLICY_REWRITE_NO_MIGRATION; verify actual independent pulse and paid child separately"
+ exit 0
+fi
 # Do not unwind the successfully deployed target if the separate relay quiet
 # window disappears. Report the exact stage and do not repeat target merge.
 stage=RELAY_MERGE

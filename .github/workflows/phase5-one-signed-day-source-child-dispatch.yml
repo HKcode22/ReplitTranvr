@@ -287,7 +287,8 @@ jobs:
         with:
           node-version: '20'
           cache: npm
-      - run: npm ci --include=dev --no-audit --no-fund
+      - id: pre_actor_dependencies
+        run: npm ci --include=dev --no-audit --no-fund
       # Separate step-scoped secrets, exact pinned code and one ephemeral
       # OS/runner trust boundary. Before any paid GET in the autonomous
       # native mode, real restricted actors and V0106 custody must be ready.
@@ -486,7 +487,8 @@ jobs:
           npx --no-install tsx scripts/v39_phase6_stored_source_postcommit_native_later_v39.mjs
 
       - name: Stop private PRE role processes and verify scratch cleanup
-        if: ${{ always() && inputs.private_transport == 'stored' && (inputs.confirm == 'ONLY_PRE_INDEPENDENT_ACTOR_PREFLIGHT_NO_PROVIDER' || (inputs.confirm == 'ONE_SIGNED_SOURCE_CHILD_MAX_ONE_PAID_GET' && vars.P6_NATIVE_LATER_RUNTIME_ENABLED == '1')) }}
+        # No local role can start until dependencies are installed.
+        if: ${{ always() && steps.pre_actor_dependencies.outcome == 'success' && inputs.private_transport == 'stored' && (inputs.confirm == 'ONLY_PRE_INDEPENDENT_ACTOR_PREFLIGHT_NO_PROVIDER' || (inputs.confirm == 'ONE_SIGNED_SOURCE_CHILD_MAX_ONE_PAID_GET' && vars.P6_NATIVE_LATER_RUNTIME_ENABLED == '1')) }}
         env:
           V39_PHASE6_PROCESS_ARMED: '0'
           P6_PHASE7_PRE_SAME_RUNNER_HANDOFF_APPROVED: ${{ secrets.P6_PHASE7_PRE_SAME_RUNNER_HANDOFF_APPROVED }}

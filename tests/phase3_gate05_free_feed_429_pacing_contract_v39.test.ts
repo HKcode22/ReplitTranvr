@@ -24,7 +24,10 @@ describe("Free-tier Gate05 airport coverage probe: rate-limited host, no retries
     expect(content).toContain("x-ratelimit-requests-remaining");
     expect(content).toContain("x-ratelimit-api-units-remaining");
     expect(content).toContain("noPaidFidsRequests:true,noRetries:true");
-    expect(content).toContain('for(const icao of ["WSSS","YSSY"])');
+    expect(content).toContain('for(const icao of airports)');
+    expect(content).toContain('["YSSY","KBUF","LFQQ","NZNP"]');
+    expect(content).toContain('if(!allowed.has(path))');
+    expect(content).toContain('historicalFidsCauseCertified:false');
     expect(content).not.toContain('method:"POST"');
     expect(content).not.toContain('method:"DELETE"');
     expect(content).not.toContain("subscribeWebhook(");

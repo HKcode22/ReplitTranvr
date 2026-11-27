@@ -34,6 +34,36 @@ export function deriveP6ConditionalT24Scope(policy){
   hold("CONDITIONAL_T24_SCOPE_NOT_SEPARATELY_APPROVED");
  return Object.freeze({...c});
 }
+/** Current protected policy digest must be authenticated by caller. Only
+ * an exact additive successor may retain the native predecessor digest. */
+export function deriveP6NativeT24PolicyTransition(policy){
+ const v=policy?.nativeLaterReview,tr=v?.nativeT24PolicyTransition;
+ if(tr===undefined)return undefined;
+ if(!keys(tr,["schema","previousDailyPolicySha256","firstConditionalRunDayIndex","conditionalEffectiveUtc"])||
+    tr.schema!=="v39.phase5b.native-t24-policy-transition.v1"||!H.test(tr.previousDailyPolicySha256??"")||
+    !Number.isSafeInteger(tr.firstConditionalRunDayIndex)||tr.firstConditionalRunDayIndex<5||tr.firstConditionalRunDayIndex>31||
+    !deriveP6ConditionalT24Scope(policy)||!policy.conditionalT24PermitReview||!policy.conditionalLaterPermitReview||
+    !v.conditionalLaterDayAppendPolicy||utc(tr.conditionalEffectiveUtc)!==utc(policy.conditionalT24PermitReview.validFromUtc)||
+    tr.conditionalEffectiveUtc!==policy.conditionalLaterPermitReview.validFromUtc||
+    tr.conditionalEffectiveUtc!==v.conditionalLaterDayAppendPolicy.validFromUtc)
+  hold("INVALID_NATIVE_T24_POLICY_TRANSITION");
+ const prior={...policy,nativeLaterReview:{...v}};
+ delete prior.conditionalPreFeatureReview;
+ delete prior.conditionalT24PermitReview;
+ delete prior.conditionalLaterPermitReview;
+ delete prior.nativeLaterReview.conditionalT24Scope;
+ delete prior.nativeLaterReview.conditionalLaterDayAppendPolicy;
+ delete prior.nativeLaterReview.nativeT24PolicyTransition;
+ if(hash(bytes(prior))!==tr.previousDailyPolicySha256)hold("NATIVE_T24_PREDECESSOR_BYTES_DRIFT");
+ return Object.freeze({...tr});
+}
+export function matchesP6T24RegistryPolicyDigest(t,r,conditional){
+ if(r?.policySha256===t.expectedT24PolicySha256)return true;
+ const tr=t.nativeT24PolicyTransition;
+ return !conditional&&Boolean(tr)&&H.test(tr.previousDailyPolicySha256??"")&&
+  r?.policySha256===tr.previousDailyPolicySha256&&Number.isSafeInteger(r.runDayIndex)&&
+  r.runDayIndex>=1&&r.runDayIndex<tr.firstConditionalRunDayIndex;
+}
 const hold=s=>{throw Error("HOLD_P6_PRIVATE_T24_REGISTRY_"+s);};
 const hash=b=>createHash("sha256").update(b).digest("hex");
 const bytes=o=>Buffer.from(JSON.stringify(o),"utf8");
@@ -101,7 +131,7 @@ export function verifyP6T24PrivateRegistry({trust:t,index,registryBytes,wire,obs
   "reviewedCodeSha","manifestSha256","rightsSha256","releaseSha256","policySha256","reviewedAtUtc","validUntilUtc","retentionNotAfterUtc","reviewerFingerprintSha256",...(conditional?["conditionalT24Scope"]:[])])||
     r.schema!==(conditional?conditionalReviewSchema:reviewSchema)||r.audience!==(conditional?conditionalAudience:AUD)||!REG.test(r.logicalPath??"")||r.registrySha256!==hash(registryBytes)||
     r.reviewedCodeSha!==t.reviewedCodeSha||r.manifestSha256!==t.manifestSha256||r.rightsSha256!==t.rightsSha256||r.releaseSha256!==t.releaseSha256||
-    r.policySha256!==t.expectedT24PolicySha256||r.reviewerFingerprintSha256!==t.expectedT24ReviewerFingerprintSha256||
+    !matchesP6T24RegistryPolicyDigest(t,r,conditional)||r.reviewerFingerprintSha256!==t.expectedT24ReviewerFingerprintSha256||
     !Number.isSafeInteger(r.runDayIndex)||r.runDayIndex<1||r.runDayIndex>31||
     !Number.isSafeInteger(r.shardIndex)||r.shardIndex<1||r.shardIndex>100000||
     reg.schema!==(conditional?conditionalSchema:schema)||reg.runDayIndex!==r.runDayIndex||reg.shardIndex!==r.shardIndex||
