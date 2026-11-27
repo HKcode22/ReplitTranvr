@@ -76,3 +76,15 @@ On 2026-11-27 at 11:11Z, #981 exact CI run 45988378322 had one failure: job 1404
 This repair synchronizes the canonical F009 evidence row with the already-reviewed closure-matrix evidence and records the failed exact-head test. It changes no failure IDs, closure labels, scientific scope, or production code. Exact CI on the repair commit is pending. At 11:19:28Z, 20 P5 SOURCE child runs were queued or in progress (four newly queued, 16 in progress); scheduled work and lease-watchdog work were also active. Preserve all active work; no helper rerun, cancellation, paid provider call, production database write, merge, or deployment was issued.
 
 **Next action:** verify all exact-head #981 CI jobs for this repair commit, then continue the existing failure-by-failure audit without promoting a scoped closure or treating no-due work as collection proof.
+
+## 11:47Z exact CI, candidate test audit, and live deployment health
+
+The F009 evidence-parity repair on #981 head `51267a1b16d5cf76f04c5f65a8fa940a2772aa6d` completed exact run `45989825020` successfully at 11:46:49Z: fixed-metadata job `140474523073` and disposable PostgreSQL 16 job `140474523431` both passed. T116 now passes after the recovery-register F009 evidence was synchronized to the closure matrix. The earlier run `45988378322` remains recorded as the test that caught the mismatch; it was not a new production recurrence.
+
+The #980 candidate remains at exact head `c4408c621a84a2549355d935cca7333c5527d3c2`; its 26 required workflow paths passed. Exact source-diagnostics run `45967215064` passed 38 Node tests and 15 Vitest files / 178 tests. Those logs cover the loopback redirect path (T101), HTTP partial/unexpected-success and transport diagnostics (T111/T112), and the scoped FIDS request-frame test file (T113). The offline suite proves candidate behavior only. The register statuses for F047, F055–F057, I107, I117–I119, T101, and T111–T113 now cite that exact CI evidence; every family remains `NOT_CLOSED` pending production deployment/observation. F052 remains narrowly `CLOSED`.
+
+A read-only Replit publish lookup reports deployment status `success`; a direct GET to the public root returned HTTP 200 and the health payload identified `phase2g-callback-only`, with provider-call and provider-mutation flags false. The endpoint exposes no Git SHA and is a callback-service health check, not Phase5B SOURCE/PRE or deployment evidence.
+
+At 11:47:44Z, 24 P5 SOURCE child runs were in progress, including a fresh four-child wave; the oldest active run began 10:39Z. Do not cancel or restart them. The exact #980 owner helper remains held by the existing ACTIVE_NO_CANCEL guard. Production main `2b9cb404da863aede54d9069e440ff32bcf6d00e` and relay main `2d96b22345908aa4334335aa899aec71b2fec2cb` are unchanged. No provider call, production database write, merge, deployment, policy change, backfill, or science-scope change was initiated here.
+
+This register/status synchronization is a documentation-only follow-up on #981. Its new exact-head check is pending. Keep all closure labels binary; no positive PRE, Packet B, POST, or physical gate-out evidence is added by these CI results.
