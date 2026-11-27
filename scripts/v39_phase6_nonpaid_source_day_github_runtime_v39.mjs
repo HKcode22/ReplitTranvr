@@ -281,7 +281,7 @@ export function projectP6ConditionalPolicyCustody(ctx,plans,calendar,indexRows,o
   actualConditionalPolicyInstalledVerified:false,actualConditionalPreCommitVerified:false,
   providerCalls:0,databaseWrites:0,githubWrites:0,signaturesIssued:0,phase6PaidGo:false});
 }
-async function conditionalPreparedRead(restricted,ctx){
+export async function conditionalPreparedRead(restricted,ctx){
  const c=await restricted.connect();let tx=false;
  try{
   await c.query("BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY");tx=true;
