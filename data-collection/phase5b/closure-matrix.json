@@ -213,7 +213,8 @@
       "id": "F022",
       "classification": "PARTIAL_OR_OPEN",
       "implementations": [
-        "I020"
+        "I020",
+        "I120"
       ],
       "next": "Retention-aware inventory separates expired metadata and retained content"
     },
@@ -264,7 +265,8 @@
         "I084",
         "I086",
         "I087",
-        "I090"
+        "I090",
+        "I120"
       ],
       "next": "Preserve historical loss and prevent prospective recurrence"
     },

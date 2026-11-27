@@ -21,5 +21,6 @@ test("T114 read-only owner transaction emits no successful receipt on rollback f
  const calls=[];const c={async query(sql){calls.push(sql);if(sql.startsWith("SELECT current_database"))return {rows:[{db:true,owner:true,login:true,primary:true,ro:true,at:new Date(at)}]};if(sql.startsWith("SELECT manifest_sha256"))return {rows:[{manifest_sha256:"a".repeat(64)}]};if(sql.includes("WITH bound"))return {rows:[row]};if(sql.startsWith("SELECT split,horizon"))return {rows:[]};if(sql.includes("derived_release_bundle_v39"))return {rows:[b]};if(sql==="ROLLBACK")throw Error("fixture lost rollback");return {rows:[]};}};
  await assert.rejects(()=>readInventory(c),/lost rollback/);
  assert.equal(calls[0],"BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY");
+ assert.equal(calls.filter(x=>x==="ROLLBACK").length,1);
  assert.ok(calls.every(x=>!/^(INSERT|UPDATE|DELETE|COMMIT|ALTER|CREATE)\b/i.test(x)));
 });

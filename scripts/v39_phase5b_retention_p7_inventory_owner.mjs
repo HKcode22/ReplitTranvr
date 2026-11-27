@@ -64,7 +64,7 @@ export async function readInventory(c){
   const fragments=(await c.query("SELECT split,horizon,count(*)::int rows,count(*) FILTER(WHERE research_expiry_utc>transaction_timestamp())::int unexpired FROM phase7_private.pre_fragment_v39 GROUP BY 1,2 ORDER BY 1,2")).rows;
   const bundles=(await c.query("SELECT count(*)::int rows,count(*) FILTER(WHERE research_expiry_utc>transaction_timestamp())::int unexpired,(SELECT count(*)::int FROM phase7_private.pre_source_link_v39) links,(SELECT count(*)::int FROM phase7_private.pre_preservation_policy_v39) policies FROM phase7_private.derived_release_bundle_v39")).rows[0];
   const result=project(rows,fragments,bundles,new Date(id.at).toISOString());
-  await c.query("ROLLBACK");begun=false;
+  begun=false;await c.query("ROLLBACK");
   return result;
  }finally{if(begun)await c.query("ROLLBACK");}
 }
