@@ -97,8 +97,28 @@ export function requireP5CdFrozenStage17WitnessForEnrollment(
   hold("FROZEN_STAGE17_T24_WITNESS_DIGEST_OR_IDENTITY_DRIFT");
 }
 
-const QUERY="SELECT clean.phase5_cd_register_source_flight_v39("+
- "$1,$2,$3,$4,$5::timestamptz,$6,$7,$8,$9,$10) AS task_id";
+/** I144: only an explicitly reviewed conditional witnessed permit selects
+ * V0114's receipt-bearing overload. Native, T24 and standalone callers
+ * retain the original strict ten-argument database admission. */
+export function makeP5CdReviewedSourceRegistrationCall(
+ permit:P5Stage14SingleFlightPrePermit,packetSha256:string,mode:"REGISTER"|"ENSURE"
+):{sql:string;args:unknown[]}{
+ if(mode!=="REGISTER"&&mode!=="ENSURE")hold("EXACT_REGISTRATION_CALL_MODE");
+ const args=makeP5CdV0091RegisterArgs(permit,packetSha256);
+ const conditionalLater=permit.identityEvidenceTier==="CONDITIONAL_QUERY_FILTERED_SERVICE"&&
+  (permit.horizon==="T-6h"||permit.horizon==="T-90m");
+ if(conditionalLater&&permit.reviewedStandaloneLaterNoT24&&permit.reviewedT24WitnessReceipt!==undefined)
+  hold("FROZEN_STAGE17_T24_WITNESS_DIGEST_OR_IDENTITY_DRIFT");
+ const conditionalWitness=conditionalLater&&!permit.reviewedStandaloneLaterNoT24;
+ if(conditionalWitness){
+  requireP5CdFrozenStage17WitnessForEnrollment(permit);
+  args.push(JSON.stringify(permit.reviewedT24WitnessReceipt));
+ }
+ const parameters="$1,$2,$3,$4,$5::timestamptz,$6,$7,$8,$9,$10"+(conditionalWitness?",$11::jsonb":"");
+ return {sql:mode==="REGISTER"?
+  "SELECT clean.phase5_cd_register_source_flight_v39("+parameters+") AS task_id":
+  "SELECT * FROM clean.phase5_cd_ensure_exact_source_flight_v39("+parameters+")",args};
+}
 export async function runP5CdGithubOneSourceEnrollment(
  env:NodeJS.ProcessEnv
 ){
@@ -159,8 +179,8 @@ export async function runP5CdGithubOneSourceEnrollment(
    reviewedDedicatedLogin:"phase5_p30_prepare_login_20261107",
    forbiddenApplicationLogin:"phase5_runtime_application_login"
   });
-  const r=await prepare.query(QUERY,
-   makeP5CdV0091RegisterArgs(permit,frozen.packetSha256));
+  const registration=makeP5CdReviewedSourceRegistrationCall(permit,frozen.packetSha256,"REGISTER");
+  const r=await prepare.query(registration.sql,registration.args);
   const id=String(r.rows[0]?.task_id??"");
   if(r.rowCount!==1||!/^[1-9][0-9]{0,18}$/.test(id))
    hold("REGISTRATION_COMMIT_ACK_UNKNOWN_DO_NOT_RETRY");

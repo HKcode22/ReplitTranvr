@@ -14,12 +14,11 @@ import {readP6CurrentLaterQueueRosters} from "../server/lib/disruption/phase6Pri
 import {verifyP5CdGithubFrozenCodeLineage} from "../server/lib/disruption/phase5CdGithubCodeLineage_v39";
 import {requireP5CdGithubPreparePrivateDayScope} from "../server/lib/disruption/phase5CdGithubPrepareRegistrationGate_v39";
 import {verifyP5CdFrozenRoster,type P5CdFrozenRoster,type P5CdVerifiedTaskPacket} from "../server/lib/disruption/phase5CdGithubBoundedPreTick_v39";
-import {makeP5CdV0091RegisterArgs,requireP5CdLaterEvidenceForEnrollment} from "./v39_phase5_cd_github_one_source_bound_enqueue_v39";
+import {makeP5CdReviewedSourceRegistrationCall,requireP5CdLaterEvidenceForEnrollment} from "./v39_phase5_cd_github_one_source_bound_enqueue_v39";
 import {preflightP5Stage14ReviewedPermitV39} from "../server/lib/disruption/phase5V0079SingleBoundFlightPreWriter_v39";
 import {makeP5Stage28DedicatedRolePool} from "../server/lib/disruption/phase5Stage28DedicatedRolePool_v39";
 const hold=(s:string):never=>{throw Error("HOLD_P6_PRIVATE_RESTARTABLE_ENROLL_"+s);};
 const SHA=/^[a-f0-9]{64}$/;
-const QUERY="SELECT * FROM clean.phase5_cd_ensure_exact_source_flight_v39($1,$2,$3,$4,$5::timestamptz,$6,$7,$8,$9,$10)";
 export function admitP6PrivateLaterEnrollment(env:NodeJS.ProcessEnv){
  const scoped=requireP5CdGithubPreparePrivateDayScope(env);
  const currentDispatch=isP6CurrentEnrollmentDispatch(env,"LATER");
@@ -116,7 +115,8 @@ export async function executeP6PrivateEnrollmentBatch(db:Queryer,packets:ReturnT
   if(now+2000>=cutoff){expired++;continue;}
   // One autocommit SQL function call; unknown ACK stops immediately.
   // A later exact restart is safe because V0100 checks every stored binding.
-  const q=await db.query(QUERY,makeP5CdV0091RegisterArgs(entry.permit,entry.packetSha256));
+  const registration=makeP5CdReviewedSourceRegistrationCall(entry.permit,entry.packetSha256,"ENSURE");
+  const q=await db.query(registration.sql,registration.args);
   const x=q.rows[0];
   if(q.rowCount!==1||!x||!/^\d{1,19}$/.test(String(x.task_id))||
      String(x.task_id)==="0"||typeof x.newly_registered!=="boolean")

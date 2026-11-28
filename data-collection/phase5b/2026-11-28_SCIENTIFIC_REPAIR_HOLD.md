@@ -14,6 +14,7 @@ Preserve the adopted V3.9 f.8 plan, Packet A/B boundaries, canonical Amendment E
 | I141 | T137 | Pause only the reviewed admission/preparation switches; verify effective overrides, preserve retention and refuse uncertain writes. |
 | I142 | T138 | Deploy into a verified paused and drained state without requiring an unrelated future paid-schedule gap; retain exact code, transaction, retention and pin checks. |
 | I143 | T139 | Keep the authentic original T24 reference when a later conditional service schedule changes. Authenticate custody and persisted witness before rechecking the current SOURCE, cutoff, lead, staleness and independent proof; keep native and conditional evidence paths separate. |
+| I144 | T140 | Complete frozen-T preservation at actual database enrollment through explicit witnessed registration/replay overloads. Verify the reviewed receipt against the actual unique T24 witness and PRE; keep existing native/standalone calls strict, source geometry and expiry unchanged, and witness access limited to required metadata. |
 
 These are candidate repairs. Existing failure closures do not change merely because a test passes. Canonical register and detailed runbook updates require their separate publication.
 
@@ -23,7 +24,7 @@ A paused deployment must independently verify outstanding work and transaction s
 
 ## Bounded prospective validation
 
-A genuine paid canary must use exact already-authorized future query slots and existing protected actors, with enforceable request and budget limits before any paid call. The proposed ceiling is one T24 SOURCE attempt, one T6 SOURCE attempt, one T90 SOURCE attempt and one authorized native POST attempt: at most four physical GET attempts and eight existing API units, subject to any smaller existing allowance.
+A genuine paid canary must use exact already-authorized future query slots and existing protected actors, with enforceable request and budget limits before any paid call. The proposed ceiling is one T24 SOURCE attempt, one T6 SOURCE attempt, one T90 SOURCE attempt and one separately authorized POST attempt for the same eligible cohort: at most four physical GET attempts and eight existing API units, subject to any smaller existing allowance. The POST path must accept that cohort's actual identity tier; conditional PRE alone does not qualify for a native-only POST path.
 
 This proposal is not an implemented admission whitelist or a claim of execution. Count uncertain attempts against the ceiling; do not add retries or replacement queries to obtain a successful result. Do not broadly restart unattended collection to run the canary.
 

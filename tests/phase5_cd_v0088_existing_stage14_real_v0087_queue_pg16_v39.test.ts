@@ -4,6 +4,7 @@ import type {P5SignedSourceBatchRegistry} from "../server/lib/disruption/phase5S
 import {verifyP5CdFrozenRoster,type P5CdFrozenRoster} from "../server/lib/disruption/phase5CdGithubBoundedPreTick_v39";
 import {verifyPhase7SignedPreFieldProof} from "../server/lib/disruption/phase7SignedPreFieldProof_v39";
 import {executeP6PrivateEnrollmentBatch} from "../scripts/v39_phase6_private_later_restartable_enrollment_v39";
+import {makeP5CdV0091RegisterArgs,makeP5CdReviewedSourceRegistrationCall} from "../scripts/v39_phase5_cd_github_one_source_bound_enqueue_v39";
 /**
  * The source fixture below is the same verified synthetic FIDS-original,
  * normalized flight-population and V0079 binding fixture reused from the
@@ -787,6 +788,9 @@ active("Phase5 C+D actual Stage14 source-bound parallel PRE on disposable PG16",
   if(witnessed){
    expect(P7).toBe(true);
    const t24=t.getTime()-86400000,preAt=iso(t24-90000),witnessAt=iso(t24-60000),readbackAt=iso(t24-45000);
+   // PostgreSQL keeps microseconds; the existing pg/JS receipt transports
+   // milliseconds. This positive case must not lose an authentic anchor.
+   const storedWitnessAt=witnessAt.replace(/Z$/,"456Z");
    const qid24="b23e4567-e89b-42d3-a456-42661417400"+suffix,hash24=sha("historical CI T24 response "+caseKey),query24=sha("historical CI T24 query "+caseKey);
    const version=base.selectedTConfig.milestone+":"+base.selectedTConfig.version+":"+base.selectedTConfig.artifactHash;
    const fixture=await admin.connect();
@@ -799,7 +803,7 @@ active("Phase5 C+D actual Stage14 source-bound parallel PRE on disposable PG16",
     // Seed only a historical synthetic row under the guarded disposable
     // admin. Restore the one time-dependent trigger in the same transaction.
     await fixture.query("ALTER TABLE clean.phase5_t24_postcommit_witness_v39 DISABLE TRIGGER p5_t24_witness_before_insert_v39");
-    await fixture.query("INSERT INTO clean.phase5_t24_postcommit_witness_v39(snapshot_id,flight_instance_id,population_query_id,fids_response_hash,source_query_digest,rights_review_sha256,selected_t_native_utc,selected_t_version,t24_cutoff_utc,frame_hash,config_hash,post_pre_commit_db_observed_at_utc) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)",[row.id,flight,qid24,hash24,query24,rights,t,version,iso(t24),base.reviewedFrameSha256,base.reviewedConfigSha256,witnessAt]);
+    await fixture.query("INSERT INTO clean.phase5_t24_postcommit_witness_v39(snapshot_id,flight_instance_id,population_query_id,fids_response_hash,source_query_digest,rights_review_sha256,selected_t_native_utc,selected_t_version,t24_cutoff_utc,frame_hash,config_hash,post_pre_commit_db_observed_at_utc) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)",[row.id,flight,qid24,hash24,query24,rights,t,version,iso(t24),base.reviewedFrameSha256,base.reviewedConfigSha256,storedWitnessAt]);
     await fixture.query("ALTER TABLE clean.phase5_t24_postcommit_witness_v39 ENABLE TRIGGER p5_t24_witness_before_insert_v39");
     const bare:Omit<P5Stage24ReviewedT24Receipt,"receiptSha256">={schema:"v39.phase5.stage24.externally-reviewed-stage17-receipt.v1",snapshotId:row.id,flightInstanceId:flight,selectedTNativeUtc:t.toISOString(),frozenT24CutoffUtc:iso(t24),expectedSelectedTVersion:version,t24OriginalFidsSha256:hash24,t24SourceQueryDigestSha256:query24,t24FrameSha256:base.reviewedFrameSha256,t24ConfigSha256:base.reviewedConfigSha256,witnessDbObservedAtUtc:witnessAt,stage17PostCommitReadbackAtUtc:readbackAt};
     witness={...bare,receiptSha256:digestP5Stage24ReviewedReceipt(bare)};
@@ -832,8 +836,80 @@ active("Phase5 C+D actual Stage14 source-bound parallel PRE on disposable PG16",
   const prep=new Pool({connectionString:"postgresql://phase5_p30_prepare_login_20261107:ci-only@localhost:5432/neondb?sslmode=disable",max:1});
   try{const c=await prep.connect();try{
    await c.query("SET ROLE phase5_fids_prepare_prod_20261107");
+   const oldSql="SELECT clean.phase5_cd_register_source_flight_v39($1,$2,$3,$4,$5::timestamptz,$6,$7,$8,$9,$10) AS task_id";
+   const args=makeP5CdV0091RegisterArgs(p,packetSha);
+   if(witnessed){
+    // Old native/standalone signature stays strict even when a genuine
+    // witness exists. Only an explicit reviewed receipt selects V0114.
+    await expect(c.query(oldSql,args)).rejects.toThrow("P5_CD_V0091_SOURCE_MEMBER_NOT_NATIVE_OPERATING_LEG");
+    const exact=makeP5CdReviewedSourceRegistrationCall(p,packetSha,"REGISTER");
+    const rehash=(delta:Record<string,unknown>)=>{const r={...witness!,...delta};return {...r,receiptSha256:digestP5Stage24ReviewedReceipt(r as P5Stage24ReviewedT24Receipt)};};
+    const malformed=[null,[],{...witness!,snapshotId:[witness!.snapshotId]},{...witness!,snapshotId:Number(witness!.snapshotId)},
+     {...witness!,unexpected:true},{...witness!,receiptSha256:sha("incorrect receipt digest")},
+     rehash({snapshotId:"999999999999999999"}),rehash({flightInstanceId:"leg:g5a:"+sha("wrong service")}),
+     rehash({selectedTNativeUtc:iso(t.getTime()+60000)}),rehash({frozenT24CutoffUtc:iso(t.getTime()-86400000+1)}),
+     rehash({t24OriginalFidsSha256:sha("wrong T24 original")}),rehash({t24SourceQueryDigestSha256:sha("wrong T24 query")}),
+     rehash({t24FrameSha256:sha("wrong T24 frame")}),rehash({t24ConfigSha256:sha("wrong T24 config")}),
+     rehash({expectedSelectedTVersion:"wrong-version"}),rehash({witnessDbObservedAtUtc:iso(t.getTime()-86400000-181000)}),
+     rehash({stage17PostCommitReadbackAtUtc:iso(t.getTime()-86400000)})];
+    for(const receipt of malformed)
+     await expect(c.query(exact.sql,[...args,JSON.stringify(receipt)])).rejects.toThrow(/P5B_V0114_/);
+    const wrongRights=[...exact.args];wrongRights[8]=sha("wrong rights");
+    await expect(c.query(exact.sql,wrongRights)).rejects.toThrow("P5B_V0114_PERSISTED_T24_WITNESS_MISMATCH");
+    const stale=[...exact.args];stale[9]=1;
+    await expect(c.query(exact.sql,stale)).rejects.toThrow("P5_CD_V0091_REAL_SOURCE_OR_FRAME_TIME_NOT_QUALIFIED");
+    const wrongOriginal=[...exact.args];wrongOriginal[7]=sha("wrong current original");
+    await expect(c.query(exact.sql,wrongOriginal)).rejects.toThrow("P5_CD_V0091_REAL_SOURCE_OR_FRAME_TIME_NOT_QUALIFIED");
+    const guards=()=>admin.query("SELECT c.relname,t.tgname,t.tgenabled FROM pg_trigger t JOIN pg_class c ON c.oid=t.tgrelid WHERE t.tgname IN ('trg_flight_population_fids_immutable','trg_fids_query_response_immutable') ORDER BY t.tgname");
+    const constraints=()=>admin.query("SELECT c.relname,k.conname,k.convalidated,pg_get_constraintdef(k.oid) AS definition FROM pg_constraint k JOIN pg_class c ON c.oid=k.conrelid WHERE k.conrelid IN ('clean.flight_population'::regclass,'clean.fids_query_response'::regclass) AND k.contype='c' ORDER BY c.relname,k.conname");
+    const originalGuards=(await guards()).rows,originalConstraints=(await constraints()).rows;
+    // Corrupt-state refusal tests only, inside a disposable admin rollback.
+    // Reenable the immutable UPDATE trigger before calling the real
+    // restricted admission; retain every CHECK throughout. NULL member
+    // response/availability/role are already forbidden by fids_complete.
+    for(const bad of [
+     {table:"flight_population",trigger:"trg_flight_population_fids_immutable",column:"canonical_flight_instance_id",value:null},
+     {table:"flight_population",trigger:"trg_flight_population_fids_immutable",column:"dep_airport_icao",value:null},
+     {table:"flight_population",trigger:"trg_flight_population_fids_immutable",column:"dep_scheduled_utc",value:end},
+     {table:"flight_population",trigger:"trg_flight_population_fids_immutable",column:"available_at",value:new Date(ownCutoff+1000)},
+     {table:"fids_query_response",trigger:"trg_fids_query_response_immutable",column:"response_hash",value:null}
+    ]){
+     const corrupt=await admin.connect();
+     try{
+      await corrupt.query("BEGIN");
+      await corrupt.query("ALTER TABLE clean."+bad.table+" DISABLE TRIGGER "+bad.trigger);
+      const changed=await corrupt.query("UPDATE clean."+bad.table+" SET "+bad.column+"=$1 WHERE population_query_id=$2::uuid"+
+       (bad.table==="flight_population"?" AND analytic_identity_id=$3":"")+" RETURNING "+bad.column+" AS poisoned",bad.table==="flight_population"?[bad.value,qid2,flight]:[bad.value,qid2]);
+      expect(changed.rowCount).toBe(1);expect(changed.rows[0].poisoned).toEqual(bad.value);
+      await corrupt.query("ALTER TABLE clean."+bad.table+" ENABLE TRIGGER "+bad.trigger);
+      await corrupt.query("SET LOCAL ROLE phase5_fids_prepare_prod_20261107");
+      await expect(corrupt.query(exact.sql,exact.args)).rejects.toThrow(bad.table==="flight_population"?
+       "P5_CD_V0091_SOURCE_MEMBER_NOT_NATIVE_OPERATING_LEG":"P5_CD_V0091_REAL_SOURCE_OR_FRAME_TIME_NOT_QUALIFIED");
+     }finally{await corrupt.query("ROLLBACK");corrupt.release();}
+    }
+    const ambiguous=await admin.connect();
+    try{
+     await ambiguous.query("BEGIN");
+     const added=await ambiguous.query("INSERT INTO clean.flight_snapshots(flight_instance_id,prediction_state,horizon,prediction_cutoff_utc,selected_t_milestone_utc,selected_t_version,population_query_id,fids_response_hash,frame_hash,config_hash,builder_version,created_at) SELECT flight_instance_id,prediction_state,horizon,prediction_cutoff_utc-interval '1 minute',selected_t_milestone_utc-interval '1 minute',selected_t_version,population_query_id,fids_response_hash,frame_hash,config_hash,'historical-ci-ambiguous',created_at FROM clean.flight_snapshots WHERE id=$1::bigint RETURNING id",[witness!.snapshotId]);
+     expect(added.rowCount).toBe(1);
+     await ambiguous.query("SET LOCAL ROLE phase5_fids_prepare_prod_20261107");
+     await expect(ambiguous.query(exact.sql,exact.args)).rejects.toThrow("P5B_V0114_PERSISTED_T24_WITNESS_MISMATCH");
+    }finally{await ambiguous.query("ROLLBACK");ambiguous.release();}
+    expect((await guards()).rows).toEqual(originalGuards);expect((await constraints()).rows).toEqual(originalConstraints);
+    expect((await admin.query("SELECT count(*)::int n FROM clean.flight_snapshots WHERE flight_instance_id=$1 AND horizon='T-24h'",[flight])).rows[0].n).toBe(1);
+    expect((await admin.query("SELECT count(*)::int n FROM clean.phase5_cd_pre_task_v39 WHERE flight_instance_id=$1",[flight])).rows[0].n).toBe(0);
+   }else{
+    const shifted=[...args];shifted[4]=iso(t.getTime()+60000);
+    await expect(c.query(oldSql,shifted)).rejects.toThrow("P5_CD_V0091_SOURCE_MEMBER_NOT_NATIVE_OPERATING_LEG");
+   }
    expect((await executeP6PrivateEnrollmentBatch(c,[{entry,cutoff:ownCutoff}])).newlyRegistered).toBe(1);
    expect((await executeP6PrivateEnrollmentBatch(c,[{entry,cutoff:ownCutoff}])).alreadyRegistered).toBe(1);
+   if(witnessed){
+    const exact=makeP5CdReviewedSourceRegistrationCall(p,packetSha,"ENSURE");
+    await expect(c.query(exact.sql,[...args,JSON.stringify({...witness!,receiptSha256:sha("invalid replay receipt")})])).rejects.toThrow("P5B_V0114_REVIEWED_RECEIPT_DIGEST");
+    const changed={...witness!,t24SourceQueryDigestSha256:sha("changed replay anchor")};
+    await expect(c.query(exact.sql,[...args,JSON.stringify({...changed,receiptSha256:digestP5Stage24ReviewedReceipt(changed)})])).rejects.toThrow("P5B_V0114_PERSISTED_T24_WITNESS_MISMATCH");
+   }
    await expect(executeP6PrivateEnrollmentBatch(c,[{entry:{...entry,packetSha256:sha("different signed packet")},cutoff:ownCutoff}])).rejects.toThrow("P6_V0100_EXISTING_TASK_IDENTITY_OR_PACKET_CONFLICT");
   }finally{c.release(true);}}finally{await prep.end();}
   const claimed=(await admin.query("SELECT * FROM clean.phase5_cd_claim_due_v39('ci-conditional-later',1,90)")).rows;
