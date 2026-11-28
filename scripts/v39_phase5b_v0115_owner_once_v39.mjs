@@ -17,7 +17,7 @@ const OWNER="neondb_owner",READER="phase7_post_scoped_prod20261120";
 const NATIVE="phase7_private.read_bound_pre_group_v39(text,bigint,text,text,integer,text,text)";
 const CONDITIONAL="phase7_private.read_bound_conditional_t6_group_v39(text,bigint,text,text,integer,text,text,text)";
 const RESULT="TABLE(group_id uuid, contract_sha256 text, profile_sha256 text, packet_sha256 text, packet_bytes bytea)";
-const repo="HKcode22/ReplitTranvr",relay="2d96b22345908aa4334335aa899aec71b2fec2cb",parent="0dc3a42f0cd62feb596fb8bffea643d3c1f490c2";
+const repo="HKcode22/ReplitTranvr",relay="2d96b22345908aa4334335aa899aec71b2fec2cb",parent="f441a5e6cde2a6bf8d3ca4be6b5b3219aa1c04fe";
 const pauseBlob="c47c4d688d746f3e7c8f3119d3eb9068c3840c30";
 const need=(x,code)=>{if(!x)throw Error("HOLD_P5B_V0115_"+code);};
 const blob=b=>createHash("sha1").update("blob "+b.length+"\0").update(b).digest("hex");
@@ -107,11 +107,14 @@ async function cli(){
  pinned(bytes,nativeBytes);need(blob(readFileSync(pauseFile))===pauseBlob,"PAUSE_BLOB");
  const guard=async()=>{
   need(gh(["api","user","--jq",".login"])==="HKcode22"&&api("/git/ref/heads/main").object.sha===main,"MAIN_OR_OWNER_DRIFT");
-  const pr=api("/pulls/984");
-  need(pr.merged===true&&pr.merge_commit_sha===main&&pr.head.sha===parent&&api("/git/commits/"+main).tree.sha===api("/git/commits/"+parent).tree.sha,"EXACT_MERGED_984_REQUIRED");
+  // V0115 must not be installed under #984: its writer-role check
+  // would reject the eighth function and strand all new PRE.
+  const pr=api("/pulls/985");
+  need(pr.merged===true&&pr.merge_commit_sha===main&&pr.head.sha===reviewedHelperHead&&
+    api("/compare/"+parent+"..."+main).status==="ahead"&&api("/git/commits/"+main).tree.sha===api("/git/commits/"+reviewedHelperHead).tree.sha,"EXACT_MERGED_985_REQUIRED");
   need(api("/contents/"+V0115_PATH+"?ref="+main).sha===V0115_BLOB&&api("/contents/"+NATIVE_PATH+"?ref="+main).sha===NATIVE_BLOB&&api("/contents/"+SELF+"?ref="+reviewedHelperHead).sha===blob(self),"EXACT_REVIEWED_EXECUTABLE");
   const runs=api("/actions/runs?head_sha="+reviewedHelperHead+"&event=pull_request&per_page=100");
-  need(Number.isSafeInteger(runs.total_count)&&runs.total_count>=3&&runs.total_count<=100&&runs.workflow_runs.length===runs.total_count&&runs.workflow_runs.every(r=>r.head_sha===reviewedHelperHead&&r.event==="pull_request"&&r.run_attempt===1&&r.status==="completed"&&r.conclusion==="success")&&["phase5-v0091-source-bound-registration-disposable-pg16.yml","phase5b-source-diagnostics-offline.yml","v39-phase0-offline.yml"].every(f=>runs.workflow_runs.some(r=>r.path===".github/workflows/"+f)),"EXACT_HELPER_CI");
+  need(Number.isSafeInteger(runs.total_count)&&runs.total_count>=29&&runs.total_count<=100&&runs.workflow_runs.length===runs.total_count&&runs.workflow_runs.every(r=>r.head_sha===reviewedHelperHead&&r.event==="pull_request"&&r.run_attempt===1&&r.status==="completed"&&r.conclusion==="success")&&["phase5-v0091-source-bound-registration-disposable-pg16.yml","phase5b-source-diagnostics-offline.yml","v39-phase0-offline.yml","phase5-reviewed-replit-callback-only-build-no-provider.yml"].every(f=>runs.workflow_runs.some(r=>r.path===".github/workflows/"+f)),"EXACT_HELPER_CI");
   const v=JSON.parse(execFileSync("bash",[pauseFile,"VERIFY_PAUSED_ADMISSIONS_AND_FUTURE_PUBLICATION",main,relay],{encoding:"utf8",timeout:90000,stdio:["ignore","pipe","ignore"]}));
   const age=Date.now()-Date.parse(v.observedAtUtc);
   need(v.status==="PAUSED_ADMISSIONS_AND_FUTURE_SOURCE_PUBLICATION_VERIFIED_READONLY"&&v.targetMainSha===main&&v.relayMainSha===relay&&v.existingProtectedOverridesVerified===true&&v.retentionAndRuntimePinsPreserved===true&&v.runtimePinConvergenceCertified===true&&v.drainState==="QUIESCENT"&&Array.isArray(v.activeAfter)&&v.activeAfter.length===0&&v.phase6PaidGo===false&&v.automaticResume===false&&v.githubVariableWritesAttempted===0&&v.githubVariableWritesConfirmed===0&&v.providerCalls===0&&v.databaseWrites===0&&age>=0&&age<=60000,"PAUSE_READBACK");

@@ -6,6 +6,8 @@ BASE=24df876fc612c0e4fdfb6f69585ed90bcc56f9b8
 BASE_982=697501b9443837018414082434cbe798ab835f92
 BASE_POST=9426eda5f749e43b1e798b1c308f5c428f696882
 BASE_P7=a02e3d6eddc378871f030848235746de160b71e5
+BASE_985=f441a5e6cde2a6bf8d3ca4be6b5b3219aa1c04fe
+WORKER_985_INPUTS=(server/lib/disruption/phase7PrePolicyCommission_v39.ts)
 WORKER_P7_INPUTS=(
  server/lib/disruption/phase5V0083FuturePostOriginalDb_v39.ts
  server/lib/disruption/phase6LaterT24EvidenceBatchReadOnly_v39.ts
@@ -30,7 +32,7 @@ WORKER_982_INPUTS=(
 PIN=c3c3050e12c4e327f9c82c35c95f856f3c1cbd20
 WRAPPER=scripts/v39_phase5_callback_release_v5_reviewed_build_v39.sh
 hold(){ echo PHASE5B_WORKER_ONLY_CALLBACK_SCOPE_HOLD >&2; exit 2; }
-[[ "$#" == 2 && ( "$1" == "$BASE" || "$1" == "$BASE_982" || "$1" == "$BASE_POST" || "$1" == "$BASE_P7" ) && "$2" =~ ^[a-f0-9]{40}$ && "$(git rev-parse HEAD)" == "$2" ]] || hold
+[[ "$#" == 2 && ( "$1" == "$BASE" || "$1" == "$BASE_982" || "$1" == "$BASE_POST" || "$1" == "$BASE_P7" || "$1" == "$BASE_985" ) && "$2" =~ ^[a-f0-9]{40}$ && "$(git rev-parse HEAD)" == "$2" ]] || hold
 git merge-base --is-ancestor "$1" HEAD || hold
 git merge-base --is-ancestor "$BASE" HEAD || hold
 git merge-base --is-ancestor "$PIN" HEAD || hold
@@ -39,9 +41,10 @@ git diff --quiet "$BASE" HEAD -- .replit scripts/v39_phase5_reviewed_source_buil
 changed="$(git diff --name-only --no-renames "$BASE" HEAD -- "${inputs[@]}")" || hold
 historical_inputs=(server/lib/disruption/phase5AmendmentEGateOutDelayLabel_v39.ts server/lib/disruption/phase5ConditionalPostOutcomeMatcher_v39.ts server/lib/disruption/phase5ConditionalPrePermitPreparation_v39.ts server/lib/disruption/phase5ConditionalSignedSchedulePair_v39.ts server/lib/disruption/phase5V0083FuturePostOriginalDb_v39.ts server/lib/disruption/phase6NativePostSignedPublication_v39.mjs server/lib/disruption/phase6PostNativePreCandidateReadOnce_v39.mjs server/lib/disruption/phase7LocalPrivatePreHandoff_v39.ts)
 expected_inputs=("${historical_inputs[@]}")
-if [[ "$1" == "$BASE_982" || "$1" == "$BASE_POST" || "$1" == "$BASE_P7" ]];then expected_inputs+=("${WORKER_982_INPUTS[@]}");fi
-if [[ "$1" == "$BASE_POST" || "$1" == "$BASE_P7" ]];then expected_inputs+=("${WORKER_POST_INPUTS[@]}");fi
-if [[ "$1" == "$BASE_P7" ]];then expected_inputs+=("${WORKER_P7_INPUTS[@]}");fi
+if [[ "$1" == "$BASE_982" || "$1" == "$BASE_POST" || "$1" == "$BASE_P7" || "$1" == "$BASE_985" ]];then expected_inputs+=("${WORKER_982_INPUTS[@]}");fi
+if [[ "$1" == "$BASE_POST" || "$1" == "$BASE_P7" || "$1" == "$BASE_985" ]];then expected_inputs+=("${WORKER_POST_INPUTS[@]}");fi
+if [[ "$1" == "$BASE_P7" || "$1" == "$BASE_985" ]];then expected_inputs+=("${WORKER_P7_INPUTS[@]}");fi
+if [[ "$1" == "$BASE_985" ]];then expected_inputs+=("${WORKER_985_INPUTS[@]}");fi
 expected="$(printf '%s\n' "${expected_inputs[@]}" | LC_ALL=C sort -u)"
 [[ "$(printf '%s\n' "$changed" | LC_ALL=C sort)" == "$expected" ]] || hold
 if [[ "$1" == "$BASE_982" ]];then
@@ -66,6 +69,12 @@ if [[ "$1" == "$BASE_P7" ]];then
  expected_p7="$(printf '%s\n' "${WORKER_P7_INPUTS[@]}" | LC_ALL=C sort)"
  [[ "$(printf '%s\n' "$changed_p7" | LC_ALL=C sort)" == "$expected_p7" ]] || hold
  git diff --quiet "$BASE_P7" HEAD -- .replit scripts/v39_phase5_reviewed_source_build_v39.sh 'scripts/v39_phase5_callback_release_*_reviewed_build_v39.sh' || hold
+fi
+if [[ "$1" == "$BASE_985" ]];then
+ changed_985="$(git diff --name-only --no-renames "$BASE_985" HEAD -- "${inputs[@]}")" || hold
+ expected_985="$(printf '%s\n' "${WORKER_985_INPUTS[@]}" | LC_ALL=C sort)"
+ [[ "$(printf '%s\n' "$changed_985" | LC_ALL=C sort)" == "$expected_985" ]] || hold
+ git diff --quiet "$BASE_985" HEAD -- .replit scripts/v39_phase5_reviewed_source_build_v39.sh 'scripts/v39_phase5_callback_release_*_reviewed_build_v39.sh' || hold
 fi
 git diff --quiet HEAD -- "${inputs[@]}" .replit "$WRAPPER" || hold
 git diff --cached --quiet -- "${inputs[@]}" .replit "$WRAPPER" || hold

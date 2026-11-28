@@ -237,7 +237,7 @@ test("T135 #982 reuses the exact guarded release and explicitly limits additiona
  assert.match(sourceCutover,/DEPLOY_EXACT_REVIEWED_SOURCE_ONLY_TARGET_982/);
  assert.match(sourceCutover,/RECOVER_EXACT_MERGED_SOURCE_ONLY_TARGET_982/);
  assert.match(sourceCutover,/TARGET_PR=982\s+OLD=697501b9443837018414082434cbe798ab835f92/);
- assert.match(sourceCutover,/if \[\[ "\$TARGET_PR" == 981 \|\| "\$TARGET_PR" == 982 \|\| "\$TARGET_PR" == 983 \|\| "\$TARGET_PR" == 984 \]\];then\s+target_981_ci_ok/);
+ assert.match(sourceCutover,/if \[\[ "\$TARGET_PR" == 981 \|\| "\$TARGET_PR" == 982 \|\| "\$TARGET_PR" == 983 \|\| "\$TARGET_PR" == 984 \|\| "\$TARGET_PR" == 985 \]\];then\s+target_981_ci_ok/);
  assert.match(sourceCutover,/"\$num" == 980 \|\| "\$num" == 981 \|\| "\$num" == 982/);
  const guard=readFileSync(new URL("../scripts/v39_phase5b_callback_worker_only_guard.sh",import.meta.url),"utf8");
  assert.match(guard,/BASE_982=697501b9443837018414082434cbe798ab835f92/);
@@ -332,8 +332,8 @@ test("paused #983 reuses exact mandatory checks, recovery, and callback isolatio
  assert.match(sourceCutover,/DEPLOY_EXACT_REVIEWED_PAUSED_TARGET_983/);
  assert.equal([...sourceCutover.matchAll(/RECOVER_EXACT_MERGED_PAUSED_TARGET_983/g)].length,4);
  assert.match(sourceCutover,/"\$num" == 982 \|\| "\$num" == 983/);
- assert.match(sourceCutover,/"\$TARGET_PR" == 982 \|\| "\$TARGET_PR" == 983 \|\| "\$TARGET_PR" == 984 \]\];then ci "\$R" "\$H" 29/);
- assert.match(sourceCutover,/"\$TARGET_PR" == 982 \|\| "\$TARGET_PR" == 983 \|\| "\$TARGET_PR" == 984 \]\];then target_980_pins_ok/);
+ assert.match(sourceCutover,/"\$TARGET_PR" == 982 \|\| "\$TARGET_PR" == 983 \|\| "\$TARGET_PR" == 984 \|\| "\$TARGET_PR" == 985 \]\];then ci "\$R" "\$H" 29/);
+ assert.match(sourceCutover,/"\$TARGET_PR" == 982 \|\| "\$TARGET_PR" == 983 \|\| "\$TARGET_PR" == 984 \|\| "\$TARGET_PR" == 985 \]\];then target_980_pins_ok/);
  for(const name of ["phase6-nonpaid-source-day-prepare-publish.yml","phase6-admission-diagnostics-offline.yml","phase5-reviewed-replit-callback-only-build-no-provider.yml"]){
   const y=readFileSync(new URL("../.github/workflows/"+name,import.meta.url),"utf8");
   const pr=y.split("  pull_request:\n")[1]?.split(/\n  [a-z_]+:/)[0];
@@ -348,9 +348,18 @@ test("paused #984 uses the exact #983 predecessor and retains all scientific gat
  assert.match(sourceCutover,/DEPLOY_EXACT_REVIEWED_PAUSED_TARGET_984/);
  assert.equal([...sourceCutover.matchAll(/RECOVER_EXACT_MERGED_PAUSED_TARGET_984/g)].length,4);
  assert.match(sourceCutover,/"\$num" == 983 \|\| "\$num" == 984/);
- assert.match(sourceCutover,/"\$TARGET_PR" == 983 \|\| "\$TARGET_PR" == 984 \]\];then ci "\$R" "\$H" 29/);
- assert.match(sourceCutover,/"\$TARGET_PR" == 983 \|\| "\$TARGET_PR" == 984 \]\];then target_980_pins_ok/);
- assert.match(sourceCutover,/"\$TARGET_PR" == 983 \|\| "\$TARGET_PR" == 984 \]\];then\s+target_981_ci_ok/);
+ assert.match(sourceCutover,/"\$TARGET_PR" == 983 \|\| "\$TARGET_PR" == 984 \|\| "\$TARGET_PR" == 985 \]\];then ci "\$R" "\$H" 29/);
+ assert.match(sourceCutover,/"\$TARGET_PR" == 983 \|\| "\$TARGET_PR" == 984 \|\| "\$TARGET_PR" == 985 \]\];then target_980_pins_ok/);
+ assert.match(sourceCutover,/"\$TARGET_PR" == 983 \|\| "\$TARGET_PR" == 984 \|\| "\$TARGET_PR" == 985 \]\];then\s+target_981_ci_ok/);
  assert.doesNotMatch(sourceCutover,/DEPLOY_EXACT_REVIEWED_SOURCE_ONLY_TARGET_984|RECOVER_EXACT_MERGED_SOURCE_ONLY_TARGET_984/);
  assert.doesNotMatch(sourceCutover,/gh variable set (?:P6_PRIVATE_SOURCE_STORED_DISPATCH_ENABLED|P6_PRIVATE_POST_PARENT_ENABLED|P6_NONPAID_SOURCE_SCHEDULE_ENABLED)/);
+});
+
+test("paused #985 requires exact #984 base, full prior mandatory CI and no paid mutation",()=>{
+ assert.match(sourceCutover,/TARGET_PR=985\s+OLD=f441a5e6cde2a6bf8d3ca4be6b5b3219aa1c04fe\s+ROLD=2d96b22345908aa4334335aa899aec71b2fec2cb\s+ROUTE_MODE=PAUSED/);
+ assert.equal([...sourceCutover.matchAll(/RECOVER_EXACT_MERGED_PAUSED_TARGET_985/g)].length,4);
+ assert.match(sourceCutover,/"\$num" == 984 \|\| "\$num" == 985/);
+ assert.match(sourceCutover,/"\$TARGET_PR" == 984 \|\| "\$TARGET_PR" == 985 \]\];then ci "\$R" "\$H" 29/);
+ assert.match(sourceCutover,/"\$TARGET_PR" == 984 \|\| "\$TARGET_PR" == 985 \]\];then target_980_pins_ok/);
+ assert.doesNotMatch(sourceCutover,/DEPLOY_EXACT_REVIEWED_SOURCE_ONLY_TARGET_985|RECOVER_EXACT_MERGED_SOURCE_ONLY_TARGET_985/);
 });
