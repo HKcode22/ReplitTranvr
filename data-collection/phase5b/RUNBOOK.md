@@ -98,3 +98,8 @@ I132/T126 `scripts/v39_phase5b_owner_wait_once_980.sh WAIT_ONCE_EXACT_REVIEWED_9
 
 
 Exact a11538e8 CI46013072497 completed both jobs successfully, including full offline/PG16. Explicit narrow acceptance closes F058 (actual private log visibility) and F059 (actual callback-test expectation), preserving original13 closures. Current15/59 scoped CLOSED,44NOT_CLOSED; no scientific P0/component closed. See reports/2026-11-27_exact_ci_a115.json and latest checkpoint. Owner wait handoff gates on that exact CI and performs one #980 helper invocation only after actual Day4 drain; actual deployment/conditional commission/PRE outcome still pending.
+
+
+## Nov27 #981 worker release and witnessed P7
+
+See [checkpoint](checkpoints/2026-11-27_WORKER_SUCCESSOR_AND_WITNESSED_P7.md). I134/T128 callback worker-only refusal passed on 46aaf6c2, production callback pin unchanged. I135/T129 combined real conditional queue/P7 standalone cases passed; witnessed-only fixture corrected after exact registry digest refusal. After final exact-head CI and fresh quiet window, use only the new exact #981 successor helper with owner authorization; no #980 replay. Then fresh Day5 protected custody, independently reviewed future-only policy commissioning, real witnessed PRE and independent Packet B readback. No production collection/closure claim.

@@ -410,9 +410,10 @@
         "I125",
         "I126",
         "I127",
-        "I128"
+        "I128",
+        "I135"
       ],
-      "next": "Protected policy custody, exact reviewed commissioning, positive conditional signature and PRE; actual protected commitment decision preview and separate authorized install/readback outstanding",
+      "next": "Verify exact witnessed-only combined PG16 regression, guarded worker release, actual protected Day5 commitment preview, authorized future-only commissioning and real source-linked PRE/Packet B. No retroactive markers or standalone exception.",
       "closureStatus": "NOT_CLOSED",
       "scientificRisk": "P0_SCIENTIFIC",
       "workstream": "preservation_admission"
@@ -572,7 +573,8 @@
         "I090",
         "I096",
         "I112",
-        "I132"
+        "I132",
+        "I134"
       ],
       "next": "Preserve exact reviewed pins and natural-drain/quiet helper; future overlaps still require fresh guard",
       "closureStatus": "CLOSED",
