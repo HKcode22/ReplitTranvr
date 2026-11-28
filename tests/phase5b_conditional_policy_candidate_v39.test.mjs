@@ -201,3 +201,32 @@ test("T133 staged successor uses exact protected preview, retains native base an
  assert.throws(()=>read({...readbackEnv,P6_PHASE5B_CONDITIONAL_INSTALL_TOKEN:env.P6_PHASE5B_CONDITIONAL_INSTALL_TOKEN}),/READBACK_WRITE_CAPABILITY_FORBIDDEN/);
  assert.throws(()=>admitP6ConditionalInstallAction({...env,P6_PHASE5B_CONDITIONAL_INSTALL_ACTION:CA.PREVIEW},"conditional_custody"),/PREVIEW_SCOPE/);
 });
+
+import {previewP6ConditionalDerivationRecipe,deriveP6ConditionalPolicyFromReviewedRecipe} from "../scripts/v39_phase5b_conditional_policy_candidate_v39.mjs";
+test("T144 tokenless deterministic recipe reproduces exact protected preview bytes without replaying custody clocks",()=>{
+ const base=p6ConditionalCommitment("base",baseDigests),{baseDigests:unused,...rest}=review;
+ const decision={...rest,schema:"v39.phase5b.prospective-conditional-commissioning-commitment-review.v1",basePolicyCommitmentSha256:base};
+ const reviewBytes=buf(decision),reviewSha256=sha(reviewBytes);
+ const custody={status:"P6_ACTUAL_PROTECTED_CONDITIONAL_POLICY_CUSTODY_READONLY",prospective,observedDbClockUtc:now,basePolicyCommitmentSha256:base,
+  exactThreePolicyDigestsValidated:true,exact31PlanPinsValidated:true,canonicalNativePredecessorBytes:true,nativePolicyPresent:true,baseIntervalCoversRemainingStudy:true,publicActorsVerified:true,
+  conditionalPolicyFieldState:"ABSENT",signingOrPublishingCapabilityPresent:false,actualConditionalPolicyInstalledVerified:false,actualConditionalPreCommitVerified:false,
+  providerCalls:0,databaseWrites:0,githubWrites:0,signaturesIssued:0,phase6PaidGo:false};
+ const args={...inputs,custody,reviewBytes,reviewSha256},pv=preview(args),expected=prepare(inputs);
+ const x=previewP6ConditionalDerivationRecipe(args);
+ assert.equal(x.recipe.candidateCommitmentSha256,pv.candidateCommitmentSha256);
+ assert.equal(x.actualConditionalPolicyInstalledVerified,false);assert.equal(x.githubWrites,0);
+ for(const d of [...Object.values(baseDigests),expected.dailySha256,expected.signingSha256,expected.transportSha256,fp])
+  assert(!JSON.stringify(x).includes(d));
+ const shared={reviewBytes,recipe:x.recipe,expectedRecipeSha256:x.recipeSha256};
+ const daily={...shared,kind:"daily",baseBytes:dailyBytes,expectedBaseSha256:baseDigests.daily,laneFingerprintSha256:fp};
+ const signing={...shared,kind:"signing",baseBytes:signingBytes,expectedBaseSha256:baseDigests.signing};
+ const db=deriveP6ConditionalPolicyFromReviewedRecipe(daily),sb=deriveP6ConditionalPolicyFromReviewedRecipe(signing);
+ assert.deepEqual(db,expected.privatePolicyBytes.daily);assert.deepEqual(sb,expected.privatePolicyBytes.signing);
+ const transport={...shared,kind:"transport",baseBytes:transportBytes,expectedBaseSha256:baseDigests.transport,derivedDailyBytes:db,derivedSigningBytes:sb};
+ assert.deepEqual(deriveP6ConditionalPolicyFromReviewedRecipe(transport),expected.privatePolicyBytes.transport);
+ for(const wrong of [{...daily,laneFingerprintSha256:h("wrong actor")},{...daily,expectedRecipeSha256:h("wrong recipe")},
+  {...daily,reviewBytes:buf({...decision,firstEligibleRunDayIndex:6})},{...daily,baseBytes:buf({...p,frameSha256:h("wrong frame")}),expectedBaseSha256:sha(buf({...p,frameSha256:h("wrong frame")}))},
+  {...transport,derivedDailyBytes:dailyBytes},{...transport,derivedSigningBytes:signingBytes}])
+  assert.throws(()=>deriveP6ConditionalPolicyFromReviewedRecipe(wrong),/HOLD_P6_CONDITIONAL_POLICY_CANDIDATE_/);
+ assert.throws(()=>previewP6ConditionalDerivationRecipe({...args,custody:{...custody,observedDbClockUtc:prospective.preparationOpensUtc}}),/HOLD_P6_CONDITIONAL_POLICY_CANDIDATE_/);
+});

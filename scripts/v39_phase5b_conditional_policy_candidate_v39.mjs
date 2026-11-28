@@ -48,6 +48,27 @@ function requirePlanCoverage(p,r,reviewedPlanBytes,prospective,decision){
  if(Date.parse(decision.validUntilUtc)<=last)hold("REVIEWED_PLAN_INTERVAL");
  return new Date(last).toISOString();
 }
+// Shared deterministic transform. The existing prospective compiler remains
+// responsible for actual custody, clocks, rights and actor admission.
+function buildConditionalDailyBytes(p,decision,fp,baseDailySha){
+ const v=p.nativeLaterReview,day=v.dayAppendPolicy;
+ const scope={protocolSha256:decision.protocolSha256,externalContentUseReviewSha256:decision.externalContentUseReviewSha256};
+ const interval={validFromUtc:decision.effectiveUtc,validUntilUtc:decision.validUntilUtc};
+ const delegation={approved:true,...scope,reviewerFingerprintSha256:fp,reportedScheduleSemanticsSha256:v.selectedTConfig.semanticsEvidenceSha256,...interval};
+ const nextDaily={...p,conditionalPreFeatureReview:{schema:"v39.phase5.conditional-pre-feature-review-policy.v1",approved:true,...scope,rightsSha256:p.rightsSha256},
+  conditionalT24PermitReview:{schema:"v39.phase5.conditional-t24-permit-review-delegation.v1",...delegation},
+  conditionalLaterPermitReview:{schema:"v39.phase5.conditional-later-permit-review-delegation.v1",...delegation,standaloneNoT24ProtocolSha256:null},
+  nativeLaterReview:{...v,conditionalT24Scope:scope,conditionalLaterDayAppendPolicy:{...day,...interval,conditionalLaterPreScope:scope},
+   nativeT24PolicyTransition:{schema:"v39.phase5b.native-t24-policy-transition.v1",previousDailyPolicySha256:baseDailySha,firstConditionalRunDayIndex:decision.firstEligibleRunDayIndex,conditionalEffectiveUtc:decision.effectiveUtc}}};
+ return Buffer.from(JSON.stringify(nextDaily));
+}
+function buildConditionalSigningBytes(q,decision){
+ return Buffer.from(JSON.stringify({...q,conditionalServicePolicy:{schema:"v39.phase5.conditional-source-signing-policy.v1",
+  protocolSha256:decision.protocolSha256,effectiveUtc:decision.effectiveUtc,firstEligibleRunDayIndex:decision.firstEligibleRunDayIndex,reviewedConditionalServiceScope:true}}));
+}
+function buildConditionalTransportBytes(r,b,s){
+ return Buffer.from(JSON.stringify({...r,dailyPolicySha256:hash(b),signingPolicySha256:hash(s)}));
+}
 export function prepareP6ConditionalPolicyCandidate({dailyBytes,signingBytes,transportBytes,baseDigests,trust,reviewBytes,reviewSha256,publicPins,prospective,observedUtc,reviewedPlanBytes}){
  // A reviewed decision must name exact old policy hashes and a future,
  // still-unpublished study day. An owner generic GO is not this record.
@@ -98,18 +119,10 @@ export function prepareP6ConditionalPolicyCandidate({dailyBytes,signingBytes,tra
  if(![fp,proof,v.laterReviewerFingerprintSha256,trust.dayReviewerFingerprintSha256,trust.queryReviewerFingerprintSha256].every(x=>H.test(x??""))||
     new Set([fp,proof,v.laterReviewerFingerprintSha256,trust.dayReviewerFingerprintSha256,trust.queryReviewerFingerprintSha256]).size!==5||
     !publicKeyMatches(raw,fp)||!publicKeyMatches(proofRaw,proof))hold("EXISTING_PUBLIC_ACTOR_PINS");
- const scope={protocolSha256:decision.protocolSha256,externalContentUseReviewSha256:decision.externalContentUseReviewSha256};
- const interval={validFromUtc:decision.effectiveUtc,validUntilUtc:decision.validUntilUtc};
- const delegation={approved:true,...scope,reviewerFingerprintSha256:fp,reportedScheduleSemanticsSha256:v.selectedTConfig.semanticsEvidenceSha256,...interval};
- const nextDaily={...p,conditionalPreFeatureReview:{schema:"v39.phase5.conditional-pre-feature-review-policy.v1",approved:true,...scope,rightsSha256:p.rightsSha256},
-  conditionalT24PermitReview:{schema:"v39.phase5.conditional-t24-permit-review-delegation.v1",...delegation},
-  conditionalLaterPermitReview:{schema:"v39.phase5.conditional-later-permit-review-delegation.v1",...delegation,standaloneNoT24ProtocolSha256:null},
-  nativeLaterReview:{...v,conditionalT24Scope:scope,conditionalLaterDayAppendPolicy:{...day,...interval,conditionalLaterPreScope:scope},
-   nativeT24PolicyTransition:{schema:"v39.phase5b.native-t24-policy-transition.v1",previousDailyPolicySha256:baseDigests.daily,firstConditionalRunDayIndex:decision.firstEligibleRunDayIndex,conditionalEffectiveUtc:decision.effectiveUtc}}};
- const nextSigning={...q,conditionalServicePolicy:{schema:"v39.phase5.conditional-source-signing-policy.v1",protocolSha256:scope.protocolSha256,effectiveUtc:decision.effectiveUtc,
-  firstEligibleRunDayIndex:decision.firstEligibleRunDayIndex,reviewedConditionalServiceScope:true}};
- const b=Buffer.from(JSON.stringify(nextDaily)),s=Buffer.from(JSON.stringify(nextSigning));
- const nextTransport={...r,dailyPolicySha256:hash(b),signingPolicySha256:hash(s)},t=Buffer.from(JSON.stringify(nextTransport));
+ const b=buildConditionalDailyBytes(p,decision,fp,baseDigests.daily);
+ const s=buildConditionalSigningBytes(q,decision);
+ const t=buildConditionalTransportBytes(r,b,s);
+ const nextDaily=JSON.parse(b.toString("utf8"));
  if(b.length>35000||s.length>20000||t.length>8000)hold("CANDIDATE_SIZE");
  // Reuse the actual protected public reviewer admission, not a new
  // weaker replica. These calls have no database or signing capability.
@@ -158,4 +171,74 @@ export function prepareP6ConditionalSuccessorStageFromCommitment(args,expectedCa
  const result={...x.receipt};
  Object.defineProperty(result,"privatePolicyBytes",{value:x.privatePolicyBytes,enumerable:false,writable:false});
  return Object.freeze(result);
+}
+
+/** Tokenless commissioning building block. No secret writes, clock replay,
+ * output of individual secret digests, activation or runtime authorization.
+ * A future protected caller must authenticate its exact preview and owner
+ * approval independently before pinning this recipe. Per-kind one-way
+ * commitments permit existing least-privilege consumers to derive only
+ * the policy they already possess; no need to distribute all three.
+ */
+const kinds=["daily","signing","transport"];
+const maximum={daily:35000,signing:20000,transport:8000};
+const policyCommit=(kind,side,digest)=>hash(JSON.stringify({schema:"v39.phase5b.conditional-derived-policy-commitment.v1",kind,side,digest}));
+export function previewP6ConditionalDerivationRecipe(args){
+ const x=compileP6ConditionalCandidateFromCommitment(args),v=x.receipt;
+ const predecessor={daily:args.dailyBytes,signing:args.signingBytes,transport:args.transportBytes};
+ const commitments=Object.fromEntries(kinds.map(k=>[k,Object.freeze({
+  predecessor:policyCommit(k,"predecessor",hash(predecessor[k])),
+  successor:policyCommit(k,"successor",hash(x.privatePolicyBytes[k]))
+ })]));
+ const recipe=Object.freeze({schema:"v39.phase5b.conditional-derivation-recipe.v1",reviewSha256:v.reviewSha256,
+  basePolicyCommitmentSha256:v.basePolicyCommitmentSha256,candidateCommitmentSha256:v.candidateCommitmentSha256,
+  commitments:Object.freeze(commitments)});
+ return Object.freeze({status:"CONDITIONAL_DERIVATION_RECIPE_PREVIEW_NOT_ACTIVE",
+  recipe,recipeSha256:hash(JSON.stringify(recipe)),actualConditionalPolicyInstalledVerified:false,
+  actualConditionalPreCommitVerified:false,providerCalls:0,databaseWrites:0,githubWrites:0,signaturesIssued:0,phase6PaidGo:false});
+}
+export function deriveP6ConditionalPolicyFromReviewedRecipe({kind,baseBytes,expectedBaseSha256,reviewBytes,recipe,expectedRecipeSha256,
+ laneFingerprintSha256,derivedDailyBytes,derivedSigningBytes}){
+ if(!kinds.includes(kind)||!exact(recipe,["schema","reviewSha256","basePolicyCommitmentSha256","candidateCommitmentSha256","commitments"])||
+  recipe.schema!=="v39.phase5b.conditional-derivation-recipe.v1"||
+  ![recipe.reviewSha256,recipe.basePolicyCommitmentSha256,recipe.candidateCommitmentSha256,expectedRecipeSha256].every(v=>typeof v==="string"&&H.test(v))||
+  hash(JSON.stringify(recipe))!==expectedRecipeSha256||!exact(recipe.commitments,kinds)||
+  kinds.some(k=>!exact(recipe.commitments[k],["predecessor","successor"])||
+    !Object.values(recipe.commitments[k]).every(v=>typeof v==="string"&&H.test(v))))
+  hold("DERIVATION_RECIPE_PIN");
+ const d=parse(reviewBytes,recipe.reviewSha256,16000);
+ if(!exact(d,["schema","ownerDelegatedTechnicalScopeReviewed","protocolSha256","externalContentUseReviewSha256","manifestSha256","rightsSha256","basePolicyCommitmentSha256","firstEligibleRunDayIndex","effectiveUtc","validUntilUtc","standaloneNoT24ProtocolSha256"])||
+  d.schema!=="v39.phase5b.prospective-conditional-commissioning-commitment-review.v1"||
+  d.ownerDelegatedTechnicalScopeReviewed!==true||d.standaloneNoT24ProtocolSha256!==null||
+  d.basePolicyCommitmentSha256!==recipe.basePolicyCommitmentSha256||
+  ![d.protocolSha256,d.externalContentUseReviewSha256,d.manifestSha256,d.rightsSha256].every(v=>typeof v==="string"&&H.test(v))||
+  !Number.isSafeInteger(d.firstEligibleRunDayIndex)||d.firstEligibleRunDayIndex<5||d.firstEligibleRunDayIndex>31||
+  !iso(d.effectiveUtc)||!iso(d.validUntilUtc)||d.effectiveUtc>=d.validUntilUtc)
+  hold("DERIVATION_REVIEW");
+ const p=parse(baseBytes,expectedBaseSha256,maximum[kind]);
+ if(policyCommit(kind,"predecessor",hash(baseBytes))!==recipe.commitments[kind].predecessor)
+  hold("DERIVATION_PREDECESSOR");
+ let out;
+ if(kind==="daily"){
+  if(typeof laneFingerprintSha256!=="string"||!H.test(laneFingerprintSha256)||derivedDailyBytes!==undefined||derivedSigningBytes!==undefined||
+   p.manifestSha256!==d.manifestSha256||p.rightsSha256!==d.rightsSha256||!p.nativeLaterReview?.selectedTConfig||!p.nativeLaterReview?.dayAppendPolicy)
+   hold("DERIVATION_DAILY_SCOPE");
+  out=buildConditionalDailyBytes(p,d,laneFingerprintSha256,expectedBaseSha256);
+ }else if(kind==="signing"){
+  if(laneFingerprintSha256!==undefined||derivedDailyBytes!==undefined||derivedSigningBytes!==undefined||
+   p.manifestSha256!==d.manifestSha256||p.rightsSha256!==d.rightsSha256)
+   hold("DERIVATION_SIGNING_SCOPE");
+  out=buildConditionalSigningBytes(p,d);
+ }else{
+  if(laneFingerprintSha256!==undefined||![derivedDailyBytes,derivedSigningBytes].every(Buffer.isBuffer)||
+   policyCommit("daily","successor",hash(derivedDailyBytes))!==recipe.commitments.daily.successor||
+   policyCommit("signing","successor",hash(derivedSigningBytes))!==recipe.commitments.signing.successor||
+   policyCommit("daily","predecessor",p.dailyPolicySha256)!==recipe.commitments.daily.predecessor||
+   policyCommit("signing","predecessor",p.signingPolicySha256)!==recipe.commitments.signing.predecessor)
+   hold("DERIVATION_TRANSPORT_SCOPE");
+  out=buildConditionalTransportBytes(p,derivedDailyBytes,derivedSigningBytes);
+ }
+ if(out.length>maximum[kind]||policyCommit(kind,"successor",hash(out))!==recipe.commitments[kind].successor)
+  hold("DERIVATION_SUCCESSOR");
+ return out;
 }

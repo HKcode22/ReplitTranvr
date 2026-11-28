@@ -421,9 +421,10 @@
         "I137",
         "I138",
         "I143",
-        "I144"
+        "I144",
+        "I148"
       ],
-      "next": "Deployed frozen-reference application and database repair; actual protected preview, separate stage/active readback, and genuine cutoff-safe PRE/Packet B required.",
+      "next": "Existing protected preview passed; owner declined new token. Deterministic tokenless recipe primitive candidate; integrate existing protected consumers, independent prospective activation/readback, then genuine PRE/Packet B.",
       "closureStatus": "NOT_CLOSED",
       "scientificRisk": "P0_SCIENTIFIC",
       "workstream": "preservation_admission"
