@@ -21,6 +21,7 @@ import {runP6StoredSourceDayPublication} from "../server/lib/disruption/phase6St
 import {commitP6Day1LateFixedRegistration} from "../server/lib/disruption/phase5EarlyAdaptiveDrawOwner_v39.ts";
 import {verifyP6Day1CommittedLateScope} from "../server/lib/disruption/phase6Day1LateRegistrationScope_v39.mjs";
 import {verifyP5EarlyDrawReadonlyAcl} from "./v39_phase5_github_six_slot_early_draw_owner_v39.ts";
+import {previewP6ConditionalCandidateFromCommitment} from "./v39_phase5b_conditional_policy_candidate_v39.mjs";
 const SHA=/^[a-f0-9]{64}$/,CODE=/^[a-f0-9]{40}$/;
 const PREPARE_LOGIN="phase5_p30_prepare_login_20261107";
 const CONFIRM="ONE_APPROVED_PROSPECTIVE_SOURCE_DAY_NONPAID_PREPARE_PUBLISH";
@@ -63,6 +64,28 @@ function url(raw,login){
 const modeOf=env=>env.GITHUB_EVENT_NAME==="schedule"?"schedule":
  env.P6_NONPAID_SOURCE_CONFIRM===CONDITIONAL_CUSTODY_CONFIRM?"conditional_custody":
  env.P6_NONPAID_SOURCE_CONFIRM===CURRENT_CONFIRM?"current_dispatch":env.P6_NONPAID_SOURCE_CONFIRM===DAY1_CONFIRM?"day1_recovery":"manual";
+/** Optional owner-dispatched review metadata, not policy or credentials.
+ * Retain the original committed review-file route; the exact digest and
+ * actual protected custody are mandatory for either transport. */
+export function readP6ConditionalCommitmentReview(env,day,read=readFileSync){
+ const digest=env.P6_CONDITIONAL_COMMITMENT_REVIEW_SHA256,raw=env.P6_CONDITIONAL_COMMITMENT_REVIEW_BASE64;
+ if(!digest&&!raw)return null;
+ if(env.GITHUB_EVENT_NAME!=="workflow_dispatch"||env.GITHUB_ACTOR!=="HKcode22"||
+    modeOf(env)!=="conditional_custody"||!SHA.test(digest??"")||
+    !Number.isInteger(day)||day<5||day>31||String(day)!==env.P6_NONPAID_SOURCE_REQUESTED_DAY)
+  hold("CONDITIONAL_COMMITMENT_REVIEW_SCOPE");
+ let bytes;
+ if(raw)bytes=raw64(raw,16000,"CONDITIONAL_COMMITMENT_REVIEW");
+ else{
+  const path="data-collection/phase5b/reviews/prospective-conditional-commissioning-day-"+String(day).padStart(2,"0")+".json";
+  try{bytes=read(path);}catch{hold("CONDITIONAL_COMMITMENT_REVIEW_MISSING");}
+ }
+ const decision=json(bytes,digest,16000);
+ if(!decision||typeof decision!=="object"||Array.isArray(decision)||
+  decision.schema!=="v39.phase5b.prospective-conditional-commissioning-commitment-review.v1"||
+  decision.firstEligibleRunDayIndex!==day)hold("CONDITIONAL_COMMITMENT_REVIEW_DAY");
+ return bytes;
+}
 export function admitP6NonpaidSourceDayGithub(env){
  if(!env||env.GITHUB_ACTIONS!=="true"||env.GITHUB_REPOSITORY!=="HKcode22/ReplitTranvr"||
     env.GITHUB_REF!=="refs/heads/main"||!["workflow_dispatch","schedule"].includes(env.GITHUB_EVENT_NAME)||
@@ -76,6 +99,8 @@ export function admitP6NonpaidSourceDayGithub(env){
     env.NODE_TLS_REJECT_UNAUTHORIZED==="0")
   hold("NOT_APPROVED_REAL_MAIN_NONPAID_RUNTIME");
  const mode=modeOf(env);
+ if((env.P6_CONDITIONAL_COMMITMENT_REVIEW_SHA256||env.P6_CONDITIONAL_COMMITMENT_REVIEW_BASE64)&&
+    (mode!=="conditional_custody"||!SHA.test(env.P6_CONDITIONAL_COMMITMENT_REVIEW_SHA256??"")))hold("CONDITIONAL_COMMITMENT_REVIEW_SCOPE");
  if(mode==="conditional_custody"?env.GITHUB_EVENT_NAME!=="workflow_dispatch"||env.GITHUB_ACTOR!=="HKcode22"||!/^(?:[5-9]|[12][0-9]|3[01])$/.test(env.P6_NONPAID_SOURCE_REQUESTED_DAY??""):
     mode==="day1_recovery"?env.GITHUB_EVENT_NAME!=="workflow_dispatch"||env.P6_NONPAID_SOURCE_REQUESTED_DAY!=="1":mode!=="manual"?env.P6_NONPAID_SOURCE_SCHEDULE_ENABLED!=="true"||Boolean(env.P6_NONPAID_SOURCE_REQUESTED_DAY)||
     (mode==="schedule"?Boolean(env.P6_NONPAID_SOURCE_CONFIRM):env.P6_NONPAID_SOURCE_CONFIRM!==CURRENT_CONFIRM):
@@ -119,20 +144,27 @@ export function admitP6NonpaidSourceDayGithub(env){
  try{dailyPublic=createPublicKey(reviewed.dailyReviewerPublicKeyPem);
   if(dailyPublic.asymmetricKeyType!=="ed25519"||fp(dailyPublic)!==reviewed.dailyReviewerFingerprintSha256)hold("INVALID_DAILY_REVIEWER_TRUST");
  }catch{hold("INVALID_DAILY_REVIEWER_TRUST");}
- const dailyKey=privateKey(env.P6_NONPAID_DAILY_REVIEWER_PRIVATE_KEY_BASE64,reviewed.dailyReviewerFingerprintSha256);
- const queryKey=privateKey(env.P6_NONPAID_QUERY_REVIEWER_PRIVATE_KEY_BASE64,trust.queryReviewerFingerprintSha256);
- const registryKey=privateKey(env.P6_NONPAID_REGISTRY_REVIEWER_PRIVATE_KEY_BASE64,trust.dayReviewerFingerprintSha256);
+ // Custody is read-only, not a signing or publisher readiness probe.
+ // Never inject private reviewer material or a publisher password into this
+ // branch. Ordinary prepare/publish still validates all original credentials.
+ const custodyOnly=mode==="conditional_custody";
+ if(custodyOnly&&[env.P6_NONPAID_DAILY_REVIEWER_PRIVATE_KEY_BASE64,env.P6_NONPAID_QUERY_REVIEWER_PRIVATE_KEY_BASE64,
+   env.P6_NONPAID_REGISTRY_REVIEWER_PRIVATE_KEY_BASE64,env.P6_PRIVATE_PUBLISHER_DATABASE_URL].some(Boolean))
+  hold("CONDITIONAL_CUSTODY_WRITE_CAPABILITY_FORBIDDEN");
+ const dailyKey=custodyOnly?undefined:privateKey(env.P6_NONPAID_DAILY_REVIEWER_PRIVATE_KEY_BASE64,reviewed.dailyReviewerFingerprintSha256);
+ const queryKey=custodyOnly?undefined:privateKey(env.P6_NONPAID_QUERY_REVIEWER_PRIVATE_KEY_BASE64,trust.queryReviewerFingerprintSha256);
+ const registryKey=custodyOnly?undefined:privateKey(env.P6_NONPAID_REGISTRY_REVIEWER_PRIVATE_KEY_BASE64,trust.dayReviewerFingerprintSha256);
  const prepare=url(env.P5_V39_PREPARE_DATABASE_URL,PREPARE_LOGIN),
   reader=url(env.P6_PRIVATE_READER_DATABASE_URL,trust.expectedReaderSessionLogin),
-  publisher=url(env.P6_PRIVATE_PUBLISHER_DATABASE_URL,reviewed.expectedPublisherSessionLogin);
- if(new Set([prepare.endpoint,reader.endpoint,publisher.endpoint]).size!==1)hold("CROSS_DATABASE_ENDPOINT");
+  publisher=custodyOnly?undefined:url(env.P6_PRIVATE_PUBLISHER_DATABASE_URL,reviewed.expectedPublisherSessionLogin);
+ if(new Set([prepare.endpoint,reader.endpoint,...(publisher?[publisher.endpoint]:[])]).size!==1)hold("CROSS_DATABASE_ENDPOINT");
  const lateRole=mode==="day1_recovery"?env.V39_P5_EARLY_DRAW_EFFECTIVE_ROLE:undefined;
  const late=mode==="day1_recovery"?url(env.V39_P5_EARLY_DRAW_DATABASE_URL,lateRole):undefined;
  if(late&& (lateRole!=="phase5_early_draw_prod20261115"||late.endpoint!==prepare.endpoint||p.manifestSha256!=="a596feb9b3d8a1d75c8856a2f2f6bc559a87d58fd18132bbfa0f48428965118e"||budget.budgetReleaseMode!=="COST_UPPER_BOUND"))hold("EXACT_EXISTING_DAY1_RECOVERY_ROLE_AND_MANIFEST");
  const receipt={mode,mainSha:env.GITHUB_SHA,requestedDay:["manual","day1_recovery","conditional_custody"].includes(mode)?Number(env.P6_NONPAID_SOURCE_REQUESTED_DAY):null,
   providerCalls:0,phase6PaidGo:false};
  Object.defineProperties(receipt,Object.fromEntries(Object.entries({p,q,reviewed,policyBytes,signingPolicyBytes,trust,
-  prepareUrl:prepare.raw,readerUrl:reader.raw,publisherUrl:publisher.raw,dailyKey,queryKey,registryKey,lateUrl:late?.raw,lateRole,
+  prepareUrl:prepare.raw,readerUrl:reader.raw,publisherUrl:publisher?.raw,dailyKey,queryKey,registryKey,lateUrl:late?.raw,lateRole,
   dailyPolicySha:env.P6_NONPAID_DAILY_POLICY_SHA256,signingPolicySha:env.P6_NONPAID_SIGNING_POLICY_SHA256})
   .map(([k,value])=>[k,{value,enumerable:false}])));
  return Object.freeze(receipt);
@@ -285,14 +317,37 @@ export function projectP6ConditionalPolicyCustody(ctx,plans,calendar,indexRows,o
   publicActorsVerified=lane.asymmetricKeyType==="ed25519"&&proof.asymmetricKeyType==="ed25519"&&
    keys.every(k=>SHA.test(k??""))&&new Set(keys).size===5&&keys[0]===env.P6_PHASE7_PRE_LANE_EVIDENCE_AUTHORITY_FINGERPRINT_SHA256&&keys[1]===env.P6_PHASE7_PRE_PROOF_REVIEWER_FINGERPRINT_SHA256;
  }catch{/* explicitly false; never expose invalid key bytes */}
+ const fieldState=unexpectedNativeMarker?"PARTIAL_HOLD":present===0?"ABSENT":present===fields.length?"ALL_FIELDS_PRESENT_NOT_COMMISSIONED_PROOF":"PARTIAL_HOLD";
+ const protocolVar=env.P6_CONDITIONAL_SERVICE_PROTOCOL_SHA256??"";
+ const protocolMatches=Boolean(SHA.test(protocolVar)&&fieldState==="ALL_FIELDS_PRESENT_NOT_COMMISSIONED_PROOF"&&
+  p.conditionalPreFeatureReview?.protocolSha256===protocolVar&&
+  p.conditionalT24PermitReview?.protocolSha256===protocolVar&&
+  p.conditionalLaterPermitReview?.protocolSha256===protocolVar&&
+  q.conditionalServicePolicy?.protocolSha256===protocolVar&&
+  v?.conditionalT24Scope?.protocolSha256===protocolVar&&
+  v?.conditionalLaterDayAppendPolicy?.conditionalLaterPreScope?.protocolSha256===protocolVar);
+ const installedCandidateCommitmentSha256=fieldState==="ALL_FIELDS_PRESENT_NOT_COMMISSIONED_PROOF"
+  ?h(JSON.stringify({schema:"v39.phase5b.custody-candidate-commitment.v1",
+    daily:env.P6_NONPAID_DAILY_POLICY_SHA256,signing:env.P6_NONPAID_SIGNING_POLICY_SHA256,transport:env.P6_NONPAID_TRANSPORT_TRUST_SHA256}))
+  :null;
  return Object.freeze({status:"P6_ACTUAL_PROTECTED_CONDITIONAL_POLICY_CUSTODY_READONLY",
   prospective:{runDayIndex:day.runDayIndex,firstRequestUtc:day.firstRequestUtc,preparationOpensUtc:day.preparationOpensUtc,genesisAbsent:true,preparedQueryCount:0},
   observedDbClockUtc:observedUtc,exactThreePolicyDigestsValidated:true,exact31PlanPinsValidated:true,
+  // Commitment to exact admitted policy digests (not the secret digest
+  // values themselves). Recompute inside the protected context when
+  // reviewing a candidate; never use as a substitute for the individual pins.
+  basePolicyCommitmentSha256:h(JSON.stringify({schema:"v39.phase5b.custody-base-commitment.v1",
+   daily:env.P6_NONPAID_DAILY_POLICY_SHA256,signing:env.P6_NONPAID_SIGNING_POLICY_SHA256,transport:env.P6_NONPAID_TRANSPORT_TRUST_SHA256})),
+  installedCandidateCommitmentSha256,
+  signingPrivateKeysVerified:false,publisherEndpointVerified:false,
+  signingOrPublishingCapabilityPresent:false,
   canonicalNativePredecessorBytes:Buffer.from(JSON.stringify(p)).equals(ctx.policyBytes),
   nativePolicyPresent,baseIntervalCoversRemainingStudy,remainingServiceEndUtc:new Date(last).toISOString(),
-  conditionalPolicyFieldState:unexpectedNativeMarker?"PARTIAL_HOLD":present===0?"ABSENT":present===fields.length?"ALL_FIELDS_PRESENT_NOT_COMMISSIONED_PROOF":"PARTIAL_HOLD",
+  conditionalPolicyFieldState:fieldState,
   publicActorsVerified,conditionalMetadataEnabled:env.P6_CONDITIONAL_LATER_METADATA_READ_ENABLED==="1",
-  actualConditionalPolicyInstalledVerified:false,actualConditionalPreCommitVerified:false,
+  conditionalProtocolVarMatchesPolicy:protocolMatches,
+  actualConditionalPolicyInstalledVerified:Boolean(fieldState==="ALL_FIELDS_PRESENT_NOT_COMMISSIONED_PROOF"&&protocolMatches&&env.P6_CONDITIONAL_LATER_METADATA_READ_ENABLED==="1"&&publicActorsVerified&&nativePolicyPresent&&baseIntervalCoversRemainingStudy),
+  actualConditionalPreCommitVerified:false,
   providerCalls:0,databaseWrites:0,githubWrites:0,signaturesIssued:0,phase6PaidGo:false});
 }
 export async function conditionalPreparedRead(restricted,ctx){
@@ -365,11 +420,12 @@ async function registerOrReadDay1(ctx,plan){
 }
 export async function runP6NonpaidSourceDayGithub(env){
  const ctx=admitP6NonpaidSourceDayGithub(env),plans=loadP6ReviewedDayPlans(ctx);
+ const reviewBytes=ctx.mode==="conditional_custody"?readP6ConditionalCommitmentReview(env,ctx.requestedDay):null;
  const raw=new pg.Pool({connectionString:ctx.prepareUrl,max:1,connectionTimeoutMillis:8000,query_timeout:40000});
  const restricted=makeP5Stage28DedicatedRolePool(raw,{group:"prepare",reviewedDedicatedLogin:PREPARE_LOGIN,
   forbiddenApplicationLogin:"phase5_p30_pre_login_20261107"});
  const reader=new pg.Client({connectionString:ctx.readerUrl,connectionTimeoutMillis:8000,query_timeout:40000});
- const publisher=new pg.Client({connectionString:ctx.publisherUrl,connectionTimeoutMillis:8000,query_timeout:40000});
+ const publisher=ctx.mode==="conditional_custody"?null:new pg.Client({connectionString:ctx.publisherUrl,connectionTimeoutMillis:8000,query_timeout:40000});
  try{
   await reader.connect();
   await reader.query("SET ROLE phase6_private_frozen_reader_v39");
@@ -378,7 +434,15 @@ export async function runP6NonpaidSourceDayGithub(env){
   if(ctx.mode==="conditional_custody"){
    const count=await conditionalPreparedRead(restricted,ctx);
    if(Math.abs(utc(count.clock)-utc(i.now))>120000)hold("CONDITIONAL_CUSTODY_CLOCK_DRIFT");
-   return projectP6ConditionalPolicyCustody(ctx,plans,c.calendar,i.rows,count.clock,count.count,env);
+   const receipt=projectP6ConditionalPolicyCustody(ctx,plans,c.calendar,i.rows,count.clock,count.count,env);
+   const reviewSha256=env.P6_CONDITIONAL_COMMITMENT_REVIEW_SHA256;
+   if(!reviewBytes)return receipt;
+   const candidatePreview=previewP6ConditionalCandidateFromCommitment({dailyBytes:ctx.policyBytes,signingBytes:ctx.signingPolicyBytes,
+    transportBytes:raw64(env.P6_NONPAID_TRANSPORT_TRUST_BASE64,8000,"TRANSPORT_TRUST"),trust:ctx.trust,reviewBytes,reviewSha256,
+    publicPins:{laneFingerprintSha256:env.P6_PHASE7_PRE_LANE_EVIDENCE_AUTHORITY_FINGERPRINT_SHA256,proofFingerprintSha256:env.P6_PHASE7_PRE_PROOF_REVIEWER_FINGERPRINT_SHA256,
+     lanePublicKeyBase64:env.P6_PHASE7_PRE_LANE_EVIDENCE_AUTHORITY_PUBLIC_KEY_BASE64,proofPublicKeyBase64:env.P6_PHASE7_PRE_PROOF_REVIEWER_PUBLIC_KEY_BASE64},
+    custody:receipt,reviewedPlanBytes:plans.map(p=>p.bytes)});
+   return Object.freeze({...receipt,candidatePreview});
   }
   let selection,lateScope;
   if(ctx.mode==="day1_recovery"){
@@ -430,7 +494,7 @@ export async function runP6NonpaidSourceDayGithub(env){
   return Object.freeze({...base,status:"ONE_PROSPECTIVE_DAY_PREPARED_AND_PUBLISHED_NO_PAID_GO",runDayIndex:plan.runDayIndex,
    insertedDailyReviewRow:prep.insertedDailyReviewRow,preparedLedgerInserts:prep.preparedLedgerInserts,
    verifiedPreparedQueryCount:prep.verifiedQueryCount,...published});
- }finally{await publisher.end().catch(()=>{});await reader.end().catch(()=>{});await raw.end().catch(()=>{});}
+ }finally{if(publisher)await publisher.end().catch(()=>{});await reader.end().catch(()=>{});await raw.end().catch(()=>{});}
 }
 if(process.argv[1]&&resolve(process.argv[1])===fileURLToPath(import.meta.url)){
  runP6NonpaidSourceDayGithub(process.env).then(r=>console.log(JSON.stringify(r))).catch(e=>{

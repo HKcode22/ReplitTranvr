@@ -26,10 +26,10 @@ type WireRow={permitSha256:string;wire:P7Wire};
 export type P7ConditionalT24ReviewRequest={anchor:{sourceGithubRunId:string;populationQueryId:string;responseSha256:string};flightInstanceIds:string[]};
 export type P7ConditionalLaterReviewRequest=P7ConditionalT24ReviewRequest&{horizon:"T-6h"|"T-90m"};
 export type P7LocalPreRequest={schema:"v39.phase7.local-pre-handoff-request.v1";scope:P7LocalPreScope;op:P7LocalPreOp;permits:P5Stage14SingleFlightPrePermit[];wires:WireRow[];conditionalSourceProof?:unknown;conditionalT24Review?:P7ConditionalT24ReviewRequest;conditionalLaterReview?:P7ConditionalLaterReviewRequest;requestSha256:string};
-type OK={schema:"v39.phase7.local-pre-handoff-response.v1";requestSha256:string;ok:true;wires:WireRow[];committedCount:number;conditionalReviewWire?:P5ConditionalReviewPageWire;conditionalLaterReviewWire?:P5ConditionalReviewPageWire|null};
+type OK={schema:"v39.phase7.local-pre-handoff-response.v1";requestSha256:string;ok:true;wires:WireRow[];committedCount:number;conditionalReviewWire?:P5ConditionalReviewPageWire|null;conditionalLaterReviewWire?:P5ConditionalReviewPageWire|null};
 type Bad={schema:"v39.phase7.local-pre-handoff-response.v1";requestSha256:string;ok:false};
 type Response=OK|Bad;
-type Payload={wires:WireRow[];committedCount:number;conditionalReviewWire?:P5ConditionalReviewPageWire;conditionalLaterReviewWire?:P5ConditionalReviewPageWire|null};
+type Payload={wires:WireRow[];committedCount:number;conditionalReviewWire?:P5ConditionalReviewPageWire|null;conditionalLaterReviewWire?:P5ConditionalReviewPageWire|null};
 const ops:Record<P7LocalPreRole,readonly P7LocalPreOp[]>={lane:["issue_lane","issue_conditional_t24_review","issue_conditional_later_review"],proof:["issue_proof"],publisher:["publish_lane","publish_proof"]};
 function scopeValid(s:P7LocalPreScope){
  if(!exact(s,["codeSha","runId","runDayIndex","queryDigestSha256","manifestSha256","rightsSha256","releaseSha256","providerContractSha256"])||
@@ -116,14 +116,16 @@ function validateResponse(raw:unknown,q:P7LocalPreRequest):OK{
   !exact(x,["schema","requestSha256","ok","wires","committedCount",...(q.op==="issue_conditional_t24_review"?["conditionalReviewWire"]:q.op==="issue_conditional_later_review"?["conditionalLaterReviewWire"]:[])]))return hold("REMOTE_HOLD_NO_REPLAY");
  if(q.op==="issue_conditional_t24_review"){
   const w=x.conditionalReviewWire,v=q.conditionalT24Review;
-  if(!w||!v||!exact(w,["page","signatureBase64"])||!(/^[A-Za-z0-9+/]{86}==$/).test(w.signatureBase64)||
+  if(!v||x.committedCount!==0||!Array.isArray(x.wires)||x.wires.length||w===undefined)return hold("CONDITIONAL_REVIEW_RESPONSE_SCOPE");
+  if(w!==null&&(!exact(w,["page","signatureBase64"])||!(/^[A-Za-z0-9+/]{86}==$/).test(w.signatureBase64)||
    !w.page||w.page.schema!=="v39.phase5.conditional-pre-external-review-page.v1"||w.page.horizon!=="T-24h"||
    w.page.sourceGithubRunId!==v.anchor.sourceGithubRunId||w.page.populationQueryId!==v.anchor.populationQueryId||
    w.page.responseSha256!==v.anchor.responseSha256||w.page.queryDigestSha256!==q.scope.queryDigestSha256||
    w.page.runDayIndex!==q.scope.runDayIndex||w.page.manifestSha256!==q.scope.manifestSha256||w.page.rightsSha256!==q.scope.rightsSha256||
-   !Array.isArray(w.page.reviews)||w.page.reviews.length!==v.flightInstanceIds.length||
-   w.page.reviews.some((r,i)=>r.flightInstanceId!==v.flightInstanceIds[i])||
-   x.committedCount!==0||!Array.isArray(x.wires)||x.wires.length)hold("CONDITIONAL_REVIEW_RESPONSE_SCOPE");
+   !Array.isArray(w.page.reviews)||w.page.reviews.length<1||w.page.reviews.length>v.flightInstanceIds.length||
+   new Set(w.page.reviews.map(r=>r.flightInstanceId)).size!==w.page.reviews.length||
+   w.page.reviews.some((r,i)=>!v.flightInstanceIds.includes(r.flightInstanceId)||
+    (i>0&&v.flightInstanceIds.indexOf(w.page.reviews[i-1].flightInstanceId)>=v.flightInstanceIds.indexOf(r.flightInstanceId)))))hold("CONDITIONAL_REVIEW_RESPONSE_SCOPE");
  }else if(q.op==="issue_conditional_later_review"){
   const v=q.conditionalLaterReview,w=x.conditionalLaterReviewWire;
   if(!v||x.committedCount!==0||!Array.isArray(x.wires)||x.wires.length||w===undefined)return hold("CONDITIONAL_LATER_RESPONSE_SCOPE");
@@ -247,7 +249,7 @@ export function openP7LocalPrivatePreHandoff(input:{scope:P7LocalPreScope;paths:
   const proof=await input.readConditionalT24ReviewInstructionProof(request.anchor);
   const q=makeP7LocalPreRequest(scope,"issue_conditional_t24_review",[],[],proof,request);
   const got=await call(paths.lane,q);
-  return validateResponse(got,q).conditionalReviewWire!;
+  return validateResponse(got,q).conditionalReviewWire??null;
  },async readConditionalLaterReview(request:P7ConditionalLaterReviewRequest){
   if(!input.readConditionalLaterReviewInstructionProof)return hold("CONDITIONAL_LATER_REVIEW_INSTRUCTION_SCOPE");
   const proof=await input.readConditionalLaterReviewInstructionProof(request);

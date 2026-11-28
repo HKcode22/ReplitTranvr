@@ -122,3 +122,76 @@ export function prepareP6ConditionalPolicyCandidate({dailyBytes,signingBytes,tra
  Object.defineProperty(result,"privatePolicyBytes",{value:Object.freeze({daily:b,signing:s,transport:t}),enumerable:false,writable:false});
  return Object.freeze(result);
 }
+
+/** Protected preview only: external review binds the composite commitment;
+ * exact constituent digests are recomputed internally, never disclosed. */
+export function previewP6ConditionalCandidateFromCommitment({dailyBytes,signingBytes,transportBytes,trust,reviewBytes,reviewSha256,publicPins,custody,reviewedPlanBytes}){
+ if(custody?.status!=="P6_ACTUAL_PROTECTED_CONDITIONAL_POLICY_CUSTODY_READONLY"||
+  !["exactThreePolicyDigestsValidated","exact31PlanPinsValidated","canonicalNativePredecessorBytes","nativePolicyPresent","baseIntervalCoversRemainingStudy","publicActorsVerified"].every(k=>custody[k]===true)||
+  custody.conditionalPolicyFieldState!=="ABSENT"||custody.signingOrPublishingCapabilityPresent!==false||
+  custody.actualConditionalPolicyInstalledVerified!==false||custody.actualConditionalPreCommitVerified!==false||
+  !["providerCalls","databaseWrites","githubWrites","signaturesIssued"].every(k=>custody[k]===0)||custody.phase6PaidGo!==false)
+  hold("PROTECTED_CUSTODY_REQUIRED");
+ if(![dailyBytes,signingBytes,transportBytes].every(Buffer.isBuffer))hold("BASE_BYTES");
+ const baseDigests={daily:hash(dailyBytes),signing:hash(signingBytes),transport:hash(transportBytes)};
+ const commitment=hash(JSON.stringify({schema:"v39.phase5b.custody-base-commitment.v1",...baseDigests}));
+ const d=parse(reviewBytes,reviewSha256,16000);
+ if(!exact(d,["schema","ownerDelegatedTechnicalScopeReviewed","protocolSha256","externalContentUseReviewSha256","manifestSha256","rightsSha256","basePolicyCommitmentSha256","firstEligibleRunDayIndex","effectiveUtc","validUntilUtc","standaloneNoT24ProtocolSha256"])||
+  d.schema!=="v39.phase5b.prospective-conditional-commissioning-commitment-review.v1"||
+  d.basePolicyCommitmentSha256!==commitment||custody.basePolicyCommitmentSha256!==commitment)hold("CUSTODY_COMMITMENT_DRIFT");
+ const {basePolicyCommitmentSha256:unused,...rest}=d;
+ const internal=Buffer.from(JSON.stringify({...rest,schema:"v39.phase5b.prospective-conditional-commissioning-review.v1",baseDigests}));
+ const c=prepareP6ConditionalPolicyCandidate({dailyBytes,signingBytes,transportBytes,baseDigests,trust,reviewBytes:internal,reviewSha256:hash(internal),publicPins,prospective:custody.prospective,observedUtc:custody.observedDbClockUtc,reviewedPlanBytes});
+ return Object.freeze({status:"CONDITIONAL_POLICY_CANDIDATE_PREVIEW_NOT_INSTALLED",reviewSha256,
+  basePolicyCommitmentSha256:commitment,candidateCommitmentSha256:hash(JSON.stringify({schema:"v39.phase5b.custody-candidate-commitment.v1",daily:c.dailySha256,signing:c.signingSha256,transport:c.transportSha256})),
+  firstEligibleRunDayIndex:c.firstEligibleRunDayIndex,reviewedConditionalThroughUtc:c.reviewedConditionalThroughUtc,
+  nativePolicyPreserved:true,standaloneNoT24Approved:false,actualConditionalPolicyInstalledVerified:false,actualConditionalPreCommitVerified:false,
+  providerCalls:0,databaseWrites:0,githubWrites:0,signaturesIssued:0,phase6PaidGo:false});
+}
+
+/** Deterministic commitment-review metadata builder for owner/reviewer handoff.
+ * Contains ONLY non-secret commitment metadata validated against the exact
+ * checked-in 31 day plans. Never fabricates independent approval, policy bytes,
+ * signatures or GitHub/database writes. */
+export function buildP6ConditionalCommitmentReviewArtifact({
+ protocolSha256,externalContentUseReviewSha256,manifestSha256,rightsSha256,
+ basePolicyCommitmentSha256,firstEligibleRunDayIndex,effectiveUtc,validUntilUtc,
+ reviewedPlanBytes,maximumPreparationLookaheadMinutes=720
+}){
+ if(!Number.isSafeInteger(firstEligibleRunDayIndex)||firstEligibleRunDayIndex<5||firstEligibleRunDayIndex>31||
+    ![protocolSha256,externalContentUseReviewSha256,manifestSha256,rightsSha256,basePolicyCommitmentSha256].every(x=>H.test(x??""))||
+    !iso(effectiveUtc)||!iso(validUntilUtc)||!Array.isArray(reviewedPlanBytes)||reviewedPlanBytes.length!==31||
+    !Number.isSafeInteger(maximumPreparationLookaheadMinutes)||maximumPreparationLookaheadMinutes<15||maximumPreparationLookaheadMinutes>2880)
+  hold("COMMITMENT_REVIEW_ARTIFACT_SCOPE");
+ let first=Infinity,last=-Infinity;
+ for(let i=0;i<31;i++){
+  if(!Buffer.isBuffer(reviewedPlanBytes[i])||reviewedPlanBytes[i].length<100||reviewedPlanBytes[i].length>500000)hold("REVIEWED_PLAN_SHAPE");
+  const d=JSON.parse(reviewedPlanBytes[i].toString("utf8"));
+  if(d.schema!=="v39.phase6.reviewed-future-day-source-plan.v1"||d.runDayIndex!==i+1||!Array.isArray(d.templates)||d.templates.length<12||d.templates.length>384)
+   hold("REVIEWED_PLAN_SHAPE");
+  if(i+1===firstEligibleRunDayIndex)first=Math.min(...d.templates.map(t=>Date.parse(t.scheduledRequestUtc)));
+  if(i+1>=firstEligibleRunDayIndex)last=Math.max(last,...d.templates.map(t=>Date.parse(t.serviceWindowEndUtc)));
+ }
+ const preparationOpensUtc=new Date(first-maximumPreparationLookaheadMinutes*60000).toISOString();
+ const firstRequestUtc=new Date(first).toISOString();
+ const remainingServiceEndUtc=new Date(last).toISOString();
+ if(Date.parse(effectiveUtc)>=Date.parse(preparationOpensUtc)||Date.parse(validUntilUtc)<=last)
+  hold("COMMITMENT_REVIEW_ARTIFACT_WINDOW");
+ const review={
+  schema:"v39.phase5b.prospective-conditional-commissioning-commitment-review.v1",
+  ownerDelegatedTechnicalScopeReviewed:true,
+  protocolSha256,externalContentUseReviewSha256,manifestSha256,rightsSha256,
+  basePolicyCommitmentSha256,firstEligibleRunDayIndex,effectiveUtc,validUntilUtc,
+  standaloneNoT24ProtocolSha256:null
+ };
+ const bytes=Buffer.from(JSON.stringify(review),"utf8");
+ const reviewSha256=hash(bytes);
+ const reviewBase64=bytes.toString("base64");
+ return Object.freeze({
+  status:"CONDITIONAL_COMMITMENT_REVIEW_METADATA_READY_FOR_PROTECTED_PREVIEW",
+  firstEligibleRunDayIndex,preparationOpensUtc,firstRequestUtc,remainingServiceEndUtc,
+  reviewSha256,reviewBase64,review,standaloneNoT24Approved:false,
+  independentApprovalGrantedHere:false,actualConditionalPolicyInstalledVerified:false,
+  providerCalls:0,databaseWrites:0,githubWrites:0,signaturesIssued:0,phase6PaidGo:false
+ });
+}

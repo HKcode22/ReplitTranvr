@@ -221,3 +221,25 @@ it("T083 SOURCE local actor cleanup requires successful dependency installation,
  expect(s.slice(cleanup)).toContain("always() && steps.pre_actor_dependencies.outcome == 'success'");
  expect(s.slice(paid,paid+500)).toContain("success() && inputs.confirm == 'ONE_SIGNED_SOURCE_CHILD_MAX_ONE_PAID_GET'");
 });
+
+it("T119 T24 review socket accepts exact ordered subset or explicit no-review, rejects foreign IDs, duplicates, omission and replay",async()=>{
+ const dir=mkdtempSync(join(tmpdir(),"p7-t24-subset-")),paths={lane:join(dir,"l.sock"),proof:join(dir,"p.sock"),publisher:join(dir,"w.sock")};
+ const ids=Array.from({length:9},(_,i)=>"leg:g5a:"+h("t119-"+i));
+ const request={anchor:{sourceGithubRunId:scope.runId,populationQueryId:"a23e4567-e89b-42d3-a456-426614174000",responseSha256:h("response")},flightInstanceIds:ids.slice(0,2)};
+ const proof={schema:"synthetic T24 instruction"};
+ const wire=(members:string[])=>({page:{schema:"v39.phase5.conditional-pre-external-review-page.v1" as const,reviewedCodeSha:scope.codeSha,manifestSha256:scope.manifestSha256,rightsSha256:scope.rightsSha256,protocolSha256:h("protocol"),externalContentUseReviewSha256:h("contents"),queryDigestSha256:scope.queryDigestSha256,populationQueryId:request.anchor.populationQueryId,responseSha256:request.anchor.responseSha256,runDayIndex:scope.runDayIndex,horizon:"T-24h",sourceGithubRunId:scope.runId,reviews:members.map(flightInstanceId=>({flightInstanceId,reviewArtifactBase64:"fixture",reviewArtifactSha256:h("artifact")}))},signatureBase64:Buffer.alloc(64,1).toString("base64")});
+ let called=0;
+ const server=await listenP7LocalPreRole({path:paths.lane,role:"lane",scope,maxLifetimeMs:30000,handler:async()=>{
+  called++;return {wires:[],committedCount:0,conditionalReviewWire:called===1?wire([ids[1]]):called===2?null:called===3?wire([ids[8]]):called===4?wire([ids[4],ids[4]]):called===5?undefined:wire([ids[7],ids[6]])};
+ }});
+ try{
+  const port=openP7LocalPrivatePreHandoff({scope,paths,readStored:async()=>new Map(),readConditionalT24ReviewInstructionProof:async()=>proof});
+  expect(await port.readConditionalT24Review(request)).toEqual(wire([ids[1]]));
+  await expect(port.readConditionalT24Review({...request,flightInstanceIds:[ids[0]]})).rejects.toThrow("REMOTE_HOLD_NO_REPLAY");
+  expect(await port.readConditionalT24Review({...request,flightInstanceIds:[ids[2]]})).toBeNull();
+  for(const members of [[ids[3]],[ids[4],ids[5]],[ids[8]],[ids[6],ids[7]]]){
+   await expect(port.readConditionalT24Review({...request,flightInstanceIds:members})).rejects.toThrow("REMOTE_HOLD_NO_REPLAY");
+  }
+  expect(called).toBe(6);
+ }finally{await server.close();rmSync(dir,{recursive:true,force:true});}
+});
