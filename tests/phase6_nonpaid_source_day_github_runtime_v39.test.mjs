@@ -1,6 +1,7 @@
 import {test} from "node:test";
 import assert from "node:assert/strict";
 import {createHash,generateKeyPairSync} from "node:crypto";
+import {readFileSync} from "node:fs";
 import {admitP6NonpaidSourceDayGithub,loadP6ReviewedDayPlans,selectP6NonpaidSourceDay,projectP6ConditionalPolicyCustody,conditionalPreparedRead,readP6ConditionalCommitmentReview}
  from "../scripts/v39_phase6_nonpaid_source_day_github_runtime_v39.mjs";
 const h=b=>createHash("sha256").update(b).digest("hex"),sha=c=>c.repeat(64),code="f".repeat(40);
@@ -273,8 +274,13 @@ test("T105 custody accounts for the nested day-append conditional scope",()=>{
  p.nativeLaterReview.conditionalLaterDayAppendPolicy={conditionalLaterPreScope:marker};
  const all=run();assert.equal(all.conditionalPolicyFieldState,"ALL_FIELDS_PRESENT_NOT_COMMISSIONED_PROOF");
  assert.equal(all.actualConditionalPolicyInstalledVerified,false);
+ assert.equal(all.conditionalProtocolVarMatchesPolicy,false);
  p.nativeLaterReview.dayAppendPolicy.conditionalLaterPreScope=marker;
  assert.equal(run().conditionalPolicyFieldState,"PARTIAL_HOLD");
+});
+test("custody workflow projects the prospective protocol marker only into read-only custody",()=>{
+ const workflow=readFileSync(".github/workflows/phase6-nonpaid-source-day-prepare-publish.yml","utf8");
+ assert.match(workflow,/P6_CONDITIONAL_SERVICE_PROTOCOL_SHA256: \$\{\{ inputs\.confirm == 'VERIFY_FUTURE_CONDITIONAL_POLICY_CUSTODY_NO_PROVIDER' && vars\.P6_CONDITIONAL_SERVICE_PROTOCOL_SHA256 \|\| '' \}\}/);
 });
 
 test("T109 custody native readiness requires rights-bound actual feature review, not approved flag alone",()=>{

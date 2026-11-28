@@ -317,6 +317,14 @@ export function projectP6ConditionalPolicyCustody(ctx,plans,calendar,indexRows,o
   publicActorsVerified=lane.asymmetricKeyType==="ed25519"&&proof.asymmetricKeyType==="ed25519"&&
    keys.every(k=>SHA.test(k??""))&&new Set(keys).size===5&&keys[0]===env.P6_PHASE7_PRE_LANE_EVIDENCE_AUTHORITY_FINGERPRINT_SHA256&&keys[1]===env.P6_PHASE7_PRE_PROOF_REVIEWER_FINGERPRINT_SHA256;
  }catch{/* explicitly false; never expose invalid key bytes */}
+ const fieldState=unexpectedNativeMarker?"PARTIAL_HOLD":present===0?"ABSENT":present===fields.length?"ALL_FIELDS_PRESENT_NOT_COMMISSIONED_PROOF":"PARTIAL_HOLD";
+ const protocol=env.P6_CONDITIONAL_SERVICE_PROTOCOL_SHA256??"";
+ const conditionalProtocolVarMatchesPolicy=Boolean(SHA.test(protocol)&&fieldState==="ALL_FIELDS_PRESENT_NOT_COMMISSIONED_PROOF"&&
+  Buffer.from(JSON.stringify(p)).equals(ctx.policyBytes)&&
+  p.conditionalPreFeatureReview?.protocolSha256===protocol&&p.conditionalT24PermitReview?.protocolSha256===protocol&&
+  p.conditionalLaterPermitReview?.protocolSha256===protocol&&q.conditionalServicePolicy?.protocolSha256===protocol&&
+  v?.conditionalT24Scope?.protocolSha256===protocol&&
+  v?.conditionalLaterDayAppendPolicy?.conditionalLaterPreScope?.protocolSha256===protocol);
  return Object.freeze({status:"P6_ACTUAL_PROTECTED_CONDITIONAL_POLICY_CUSTODY_READONLY",
   prospective:{runDayIndex:day.runDayIndex,firstRequestUtc:day.firstRequestUtc,preparationOpensUtc:day.preparationOpensUtc,genesisAbsent:true,preparedQueryCount:0},
   observedDbClockUtc:observedUtc,exactThreePolicyDigestsValidated:true,exact31PlanPinsValidated:true,
@@ -329,7 +337,7 @@ export function projectP6ConditionalPolicyCustody(ctx,plans,calendar,indexRows,o
   signingOrPublishingCapabilityPresent:false,
   canonicalNativePredecessorBytes:Buffer.from(JSON.stringify(p)).equals(ctx.policyBytes),
   nativePolicyPresent,baseIntervalCoversRemainingStudy,remainingServiceEndUtc:new Date(last).toISOString(),
-  conditionalPolicyFieldState:unexpectedNativeMarker?"PARTIAL_HOLD":present===0?"ABSENT":present===fields.length?"ALL_FIELDS_PRESENT_NOT_COMMISSIONED_PROOF":"PARTIAL_HOLD",
+  conditionalPolicyFieldState:fieldState,conditionalProtocolVarMatchesPolicy,
   publicActorsVerified,conditionalMetadataEnabled:env.P6_CONDITIONAL_LATER_METADATA_READ_ENABLED==="1",
   actualConditionalPolicyInstalledVerified:false,actualConditionalPreCommitVerified:false,
   providerCalls:0,databaseWrites:0,githubWrites:0,signaturesIssued:0,phase6PaidGo:false});

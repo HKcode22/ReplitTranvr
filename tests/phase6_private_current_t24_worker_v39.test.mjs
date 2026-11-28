@@ -102,6 +102,20 @@ test("complete synthetic protected T24 startup with the actual 31 checked-in cal
  const complete={...env(),P6_T24_CUSTODY_ENABLED:"1",P6_T24_CUSTODY_APPROVED:"1",P5_CD_GH_E_ROUTE_FEATURES_APPROVED:"1",P5_CD_GH_E_SUPPLEMENTAL_FEATURES_APPROVED:"1",P6_PRIVATE_T24_CUSTODY_REVIEWER_KEY_BASE64:custody.privateWire,P6_PRIVATE_PUBLISHER_DATABASE_URL:"postgresql://phase6_private_publisher_login_fixture:ci@ep-test.neon.tech/neondb?sslmode=require",P6_PRIVATE_READER_DATABASE_URL:"postgresql://"+reader+":ci@ep-test.neon.tech/neondb?sslmode=require",P6_PRIVATE_T24_ENROLL_SCHEDULE_ENABLED:"1",P6_PRIVATE_SOURCE_STORED_REVIEW_APPROVED:"1",P6_PRIVATE_SOURCE_STABLE_TRUST_BASE64:Buffer.from(JSON.stringify(trust)).toString("base64"),V39_P5_RELEASE_SHA256:h,P6_NONPAID_DAILY_POLICY_BASE64:policy.toString("base64"),P6_NONPAID_DAILY_POLICY_SHA256:digest(policy)};
  const admitted=admitP6CurrentT24Worker(complete);
  assert.equal(admitted.lanes,4);assert.equal(admitted.calendar.windows.length,31);
+ const scope={protocolSha256:digest("prospective conditional protocol"),externalContentUseReviewSha256:digest("reviewed content use")};
+ const conditionalPolicy=JSON.parse(policy.toString("utf8"));
+ conditionalPolicy.conditionalPreFeatureReview={schema:"v39.phase5.conditional-pre-feature-review-policy.v1",approved:true,rightsSha256:h,...scope};
+ conditionalPolicy.nativeLaterReview.conditionalT24Scope=scope;
+ const conditionalBytes=Buffer.from(JSON.stringify(conditionalPolicy));
+ const conditional={...complete,P6_CONDITIONAL_SERVICE_PROTOCOL_SHA256:scope.protocolSha256,
+  P6_NONPAID_DAILY_POLICY_BASE64:conditionalBytes.toString("base64"),P6_NONPAID_DAILY_POLICY_SHA256:digest(conditionalBytes)};
+ assert.equal(admitP6CurrentT24Worker(conditional).trust.conditionalT24Scope.protocolSha256,scope.protocolSha256);
+ assert.throws(()=>admitP6CurrentT24Worker({...conditional,P6_CONDITIONAL_SERVICE_PROTOCOL_SHA256:""}));
+ assert.throws(()=>admitP6CurrentT24Worker({...conditional,P6_CONDITIONAL_SERVICE_PROTOCOL_SHA256:digest("wrong protocol")}));
  assert.equal(admitP6CurrentT24Worker({...complete,GITHUB_EVENT_NAME:"workflow_dispatch",P6_PRIVATE_CURRENT_T24_DISPATCH_CONFIRM:P6_CURRENT_T24_DISPATCH_CONFIRM}).lanes,4);
  for(const k of ["P6_T24_CUSTODY_APPROVED","P6_PRIVATE_SOURCE_STORED_REVIEW_APPROVED","P6_PRIVATE_T24_ENROLL_SCHEDULE_ENABLED","P6_NONPAID_DAILY_POLICY_SHA256","P6_PRIVATE_READER_DATABASE_URL","P5_CD_GH_PRE_ARMED"])assert.throws(()=>admitP6CurrentT24Worker({...complete,[k]:""}),undefined,k);
+});
+test("current T24 jobs project the protected conditional protocol marker into both execution scopes",()=>{
+ const workflow=readFileSync(".github/workflows/phase5-cd-github-one-queued-t24-witness-main-manual.yml","utf8");
+ assert.equal(workflow.split("P6_CONDITIONAL_SERVICE_PROTOCOL_SHA256: ${{ vars.P6_CONDITIONAL_SERVICE_PROTOCOL_SHA256 }}").length-1,2);
 });

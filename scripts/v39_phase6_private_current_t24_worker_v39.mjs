@@ -39,6 +39,12 @@ export function admitP6CurrentT24Worker(env){
  const trust=readP6T24ProtectedQueueTrust(env);
  if(base.approvedCodeSha!==trust.reviewedCodeSha||base.manifestSha256!==trust.manifestSha256||base.rightsSha256!==trust.rightsSha256)
   hold("STUDY_TRUST_DRIFT");
+ if(trust.conditionalT24Scope&&
+    (!base.conditionalPreScope||
+     base.conditionalPreScope.protocolSha256!==trust.conditionalT24Scope.protocolSha256||
+     base.conditionalPreScope.externalContentUseReviewSha256!==trust.conditionalT24Scope.externalContentUseReviewSha256||
+     env.P6_CONDITIONAL_SERVICE_PROTOCOL_SHA256!==trust.conditionalT24Scope.protocolSha256))
+  hold("CONDITIONAL_T24_PROTOCOL_SCOPE_MISSING_OR_DRIFT");
  // readP6T24ProtectedQueueTrust authenticated exact policy bytes already.
  const p=JSON.parse(Buffer.from(env.P6_NONPAID_DAILY_POLICY_BASE64,"base64").toString("utf8"));
  const lanes=p.nativeLaterReview.maximumT24ExecutionLanes;
