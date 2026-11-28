@@ -168,7 +168,7 @@ test("T086 real PostgreSQL 16 parses and executes the actual owner query with pr
    assert.equal(x.nearExpiry.finalScientificEligibilityCertified,false);
    assert.equal(x.nearExpiry.stage14PermitIssued,false);
    assert.equal(x.databaseWrites,0);
-   assert.equal((await c.query("SELECT count(*)::int n FROM clean.fids_query_response WHERE raw_payload IS NOT NULL AND raw_expired_at_utc IS NULL")).rows[0].n,before+1);
+   assert.equal((await c.query("SELECT count(*)::int n FROM clean.fids_query_response WHERE raw_payload IS NOT NULL AND raw_expired_at_utc IS NULL")).rows[0].n,before);
    assert.equal((await c.query("SHOW transaction_read_only")).rows[0].transaction_read_only,"off");
    assert.ok(!JSON.stringify(x).includes(pqi));
   });
