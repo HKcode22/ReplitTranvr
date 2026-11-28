@@ -9,6 +9,7 @@ import {AsyncLocalStorage} from "node:async_hooks";
 import {readP6StableSourceTrust} from "../server/lib/disruption/phase6StoredSourceRuntimeTrust_v39.mjs";
 import {verifyP6ConditionalSourceInstructionProof,verifyP6ConditionalT24ReviewInstructionProof,verifyP6ConditionalLaterReviewInstructionProof} from "../server/lib/disruption/phase6StoredSourceNativeCandidateAudit_v39.mjs";
 import {p6ReviewedPolicyMatchesRuntime} from "../server/lib/disruption/phase6ReviewedRuntimeCode_v39.mjs";
+import {deriveP6NativeT24PolicyTransition} from "../server/lib/disruption/phase6PrivateT24RegistryTransport_v39.mjs";
 import type {P7ConditionalProofScopePort} from "../server/lib/disruption/phase7IndependentPreSourceReader_v39";
 import {execFileSync} from "node:child_process";
 import {lstatSync,realpathSync,readFileSync,writeFileSync,unlinkSync,rmdirSync} from "node:fs";
@@ -93,6 +94,10 @@ async function start(role:P7LocalPreRole){
   if(role==="proof"&&!sameP6NeonDatabaseEndpoint(source(e.V39_P5_SOURCE_DATABASE_URL,true),source(endpoint,false)))hold("SOURCE_ENDPOINT_DRIFT");
  }
  const env=projectP7LocalRoleEnvironment(e,role,endpoint);
+ // This is the actual paid-child startup, before the separate provider step.
+ // Actor-only diagnostics have no signed day index and must not invent one.
+ if(role!=="publisher"&&e.V39_P5_CHILD_CONFIRM==="ONE_SIGNED_SOURCE_CHILD_MAX_ONE_PAID_GET")
+  preflightP7PaidConditionalInstructionRole(env);
  await launchP7DetachedPreRole({scriptPath:fileURLToPath(import.meta.url),role,path:paths[role],scope,env,cwd:process.cwd()});
  console.log(JSON.stringify({status:"P7_LOCAL_PRE_ROLE_READY_NO_PROVIDER",role,providerCalls:0,databaseWrites:0,productionProofIssued:false,phase6PaidGo:false}));
 }
@@ -121,6 +126,23 @@ export function readP7ConditionalInstructionRolePolicy(e:NodeJS.ProcessEnv,read=
  if(parsed?.schema!=="v39.phase6.reviewed-future-day-source-plan.v1"||parsed.runDayIndex!==local.runDayIndex||!Number.isSafeInteger(max)||max<1||max>86400)hold("CONDITIONAL_INSTRUCTION_DAY_PLAN");
  return {trust,selector:{runDayIndex:local.runDayIndex,indexRevision:revision,indexSha256,queryDigestSha256:local.queryDigestSha256},
   policy:{independentNativeCandidateReadOnlyApproved:true,existingPaidDispatchApproved:false,noProviderCredentialsInAudit:true,maximumPopulationStalenessSeconds:max,providerContractSha256:local.providerContractSha256,conditionalPreFeatureReview:f},expectedSourceRunId:local.runId};
+}
+/** Check the projected independent signer environment before spending, not
+ * only in its post-acquisition IPC handler. Reuse the existing exact policy
+ * verifier and authenticated native-predecessor transition. This is local
+ * configuration readiness, NOT a signed member review or acquisition. */
+export function preflightP7PaidConditionalInstructionRole(e:NodeJS.ProcessEnv,read=readFileSync){
+ const local=readP7LocalPreScope(e);
+ const raw=e.P6_NONPAID_DAILY_POLICY_BASE64??"",bytes=Buffer.from(raw,"base64");
+ if(raw.length<100||raw.length>46668||bytes.toString("base64")!==raw||
+    createHash("sha256").update(bytes).digest("hex")!==e.P6_NONPAID_DAILY_POLICY_SHA256)
+  hold("CONDITIONAL_INSTRUCTION_POLICY");
+ const policy=JSON.parse(bytes.toString("utf8")),transition=deriveP6NativeT24PolicyTransition(policy);
+ if(transition&&local.runDayIndex<transition.firstConditionalRunDayIndex)
+  return "NATIVE_PREDECESSOR_INSTRUCTION_PATH";
+ if(!transition&&!policy.conditionalPreFeatureReview)return "NATIVE_INSTRUCTION_PATH";
+ readP7ConditionalInstructionRolePolicy(e,read);
+ return "CONDITIONAL_INSTRUCTION_POLICY_READY_NO_GO";
 }
 async function serve(role:P7LocalPreRole){
  process.umask(0o077);

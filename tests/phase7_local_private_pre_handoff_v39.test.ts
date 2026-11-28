@@ -55,7 +55,7 @@ describe("private same-runner PRE handoff transport",()=>{
  });
 });
 
-import {projectP7LocalRoleEnvironment,readP7ConditionalInstructionRolePolicy} from "../scripts/v39_phase7_local_pre_evidence_roles_v39";
+import {projectP7LocalRoleEnvironment,readP7ConditionalInstructionRolePolicy,preflightP7PaidConditionalInstructionRole} from "../scripts/v39_phase7_local_pre_evidence_roles_v39";
 describe("actual protected role credential projection",()=>{
  const base:NodeJS.ProcessEnv={GITHUB_ACTIONS:"true",GITHUB_REPOSITORY:"HKcode22/ReplitTranvr",GITHUB_REF:"refs/heads/main",GITHUB_EVENT_NAME:"workflow_dispatch",GITHUB_RUN_ATTEMPT:"1",
   GITHUB_WORKFLOW_REF:"HKcode22/ReplitTranvr/.github/workflows/phase5-one-signed-day-source-child-dispatch.yml@refs/heads/main",GITHUB_SHA:scope.codeSha,V39_P5_APPROVED_CODE_SHA:scope.codeSha,
@@ -95,12 +95,18 @@ describe("actual protected role credential projection",()=>{
   for(const [role,env] of [["lane",lane],["proof",proof]] as const){
    const projected=projectP7LocalRoleEnvironment({...env,...pins},role);
    const got=readP7ConditionalInstructionRolePolicy(projected,read);
+   expect(preflightP7PaidConditionalInstructionRole(projected,read)).toBe("CONDITIONAL_INSTRUCTION_POLICY_READY_NO_GO");
+   const native={...daily};delete (native as Partial<typeof daily>).conditionalPreFeatureReview;
+   const nativeBytes=Buffer.from(JSON.stringify(native));
+   expect(preflightP7PaidConditionalInstructionRole({...projected,P6_NONPAID_DAILY_POLICY_BASE64:nativeBytes.toString("base64"),P6_NONPAID_DAILY_POLICY_SHA256:createHash("sha256").update(nativeBytes).digest("hex"),P6_PRIVATE_DAY_INDEX_REVISION:""},(()=>{throw Error("native must not read conditional plan")}) as typeof read)).toBe("NATIVE_INSTRUCTION_PATH");
    expect(got).toMatchObject({expectedSourceRunId:scope.runId,selector:{runDayIndex:2,indexRevision:3,indexSha256:h("index"),queryDigestSha256:scope.queryDigestSha256},policy:{maximumPopulationStalenessSeconds:3600,conditionalPreFeatureReview:daily.conditionalPreFeatureReview}});
    expect(got.trust.reviewedCodeSha).toBe(stable);
    for(const bad of [{P6_PRIVATE_DAY_INDEX_REVISION:"0"},{P6_CONDITIONAL_SERVICE_PROTOCOL_SHA256:h("different protocol")},{P6_NONPAID_DAILY_POLICY_SHA256:h("wrong daily")}]){
     expect(()=>readP7ConditionalInstructionRolePolicy({...projected,...bad},read)).toThrow("CONDITIONAL_INSTRUCTION_POLICY");
+    expect(()=>preflightP7PaidConditionalInstructionRole({...projected,...bad},read)).toThrow("CONDITIONAL_INSTRUCTION_POLICY");
    }
    expect(()=>readP7ConditionalInstructionRolePolicy(projected,(()=>Buffer.from("{}")) as typeof import("node:fs").readFileSync)).toThrow("CONDITIONAL_INSTRUCTION_DAY_PLAN");
+   expect(()=>preflightP7PaidConditionalInstructionRole(projected,(()=>Buffer.from("{}")) as typeof import("node:fs").readFileSync)).toThrow("CONDITIONAL_INSTRUCTION_DAY_PLAN");
   }
   const pub=projectP7LocalRoleEnvironment({...publisher,...pins},"publisher",endpoint.toString());
   expect(pub.P6_PRIVATE_SOURCE_STABLE_TRUST_BASE64).toBeUndefined();expect(pub.P6_CONDITIONAL_SERVICE_PROTOCOL_SHA256).toBeUndefined();

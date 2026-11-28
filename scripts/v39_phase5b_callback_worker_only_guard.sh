@@ -7,7 +7,7 @@ BASE_982=697501b9443837018414082434cbe798ab835f92
 BASE_POST=9426eda5f749e43b1e798b1c308f5c428f696882
 BASE_P7=a02e3d6eddc378871f030848235746de160b71e5
 BASE_985=f441a5e6cde2a6bf8d3ca4be6b5b3219aa1c04fe
-WORKER_985_INPUTS=(server/lib/disruption/phase7PrePolicyCommission_v39.ts)
+WORKER_985_INPUTS=(server/lib/disruption/phase7PrePolicyCommission_v39.ts server/lib/disruption/phase6AutonomousGithubControllerHeartbeat_v39.mjs)
 WORKER_P7_INPUTS=(
  server/lib/disruption/phase5V0083FuturePostOriginalDb_v39.ts
  server/lib/disruption/phase6LaterT24EvidenceBatchReadOnly_v39.ts
