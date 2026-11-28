@@ -138,7 +138,7 @@ BEGIN
  IF receipt_native IS DISTINCT FROM p_native_t OR receipt_cutoff IS DISTINCT FROM p_native_t-interval '24 hours'
     OR receipt_witness<receipt_cutoff-interval '3 minutes' OR receipt_witness>=receipt_cutoff-interval '2 seconds'
     OR receipt_readback<receipt_witness OR receipt_readback>=receipt_cutoff
-    OR receipt_readback>=p_native_t-CASE p_horizon WHEN 'T-6h' THEN interval '6 hours' ELSE interval '90 minutes' END
+    OR receipt_readback>=p_native_t-(CASE p_horizon WHEN 'T-6h' THEN interval '6 hours' ELSE interval '90 minutes' END)
     OR receipt_readback>clock_timestamp()
  THEN RAISE EXCEPTION 'P5B_V0114_FROZEN_T_OR_READBACK_CLOCK'; END IF;
  -- Only durable witness/PRE provenance is needed here. Historical raw T24
@@ -407,7 +407,7 @@ BEGIN
  IF receipt_native IS DISTINCT FROM p_native_t OR receipt_cutoff IS DISTINCT FROM p_native_t-interval '24 hours'
     OR receipt_witness<receipt_cutoff-interval '3 minutes' OR receipt_witness>=receipt_cutoff-interval '2 seconds'
     OR receipt_readback<receipt_witness OR receipt_readback>=receipt_cutoff
-    OR receipt_readback>=p_native_t-CASE p_horizon WHEN 'T-6h' THEN interval '6 hours' ELSE interval '90 minutes' END
+    OR receipt_readback>=p_native_t-(CASE p_horizon WHEN 'T-6h' THEN interval '6 hours' ELSE interval '90 minutes' END)
     OR receipt_readback>clock_timestamp()
  THEN RAISE EXCEPTION 'P5B_V0114_FROZEN_T_OR_READBACK_CLOCK'; END IF;
  -- Only durable witness/PRE provenance is needed here. Historical raw T24
@@ -500,8 +500,8 @@ BEGIN
  END LOOP;
  IF (SELECT encode(sha256(convert_to(prosrc,'UTF8')),'hex') FROM pg_proc WHERE oid=to_regprocedure('clean.phase5_cd_register_source_flight_v39(text,text,text,text,timestamptz,text,text,text,text,integer)')) IS DISTINCT FROM '70ad33929da9a97d30a4f88fa0283328c15bd03160bc560ffd3c4937f3de5cd7'
  OR (SELECT encode(sha256(convert_to(prosrc,'UTF8')),'hex') FROM pg_proc WHERE oid=to_regprocedure('clean.phase5_cd_ensure_exact_source_flight_v39(text,text,text,text,timestamptz,text,text,text,text,integer)')) IS DISTINCT FROM '6779aba6f887a9137b6e0f1dce048048f98c1454b7f3badf4e1331b94a5e3057'
- OR (SELECT encode(sha256(convert_to(prosrc,'UTF8')),'hex') FROM pg_proc WHERE oid=to_regprocedure('clean.phase5_cd_register_source_flight_v39(text,text,text,text,timestamptz,text,text,text,text,integer,jsonb)')) IS DISTINCT FROM 'b64e4607203dbf3779326499e2a02fde69c753b28b68c3563048dd3bfcacddea'
- OR (SELECT encode(sha256(convert_to(prosrc,'UTF8')),'hex') FROM pg_proc WHERE oid=to_regprocedure('clean.phase5_cd_ensure_exact_source_flight_v39(text,text,text,text,timestamptz,text,text,text,text,integer,jsonb)')) IS DISTINCT FROM '61026e3f28a6840da2d2759b8b4a526fb75861a2443b97282f5b955b732dcae9'
+ OR (SELECT encode(sha256(convert_to(prosrc,'UTF8')),'hex') FROM pg_proc WHERE oid=to_regprocedure('clean.phase5_cd_register_source_flight_v39(text,text,text,text,timestamptz,text,text,text,text,integer,jsonb)')) IS DISTINCT FROM 'c8482af9b8b6203ac164f91bbf3a8ca4204204544415c3d8aa01d126a0be905c'
+ OR (SELECT encode(sha256(convert_to(prosrc,'UTF8')),'hex') FROM pg_proc WHERE oid=to_regprocedure('clean.phase5_cd_ensure_exact_source_flight_v39(text,text,text,text,timestamptz,text,text,text,text,integer,jsonb)')) IS DISTINCT FROM 'feabd721857bed95a51960ebe4ac1ce058d0e1cd999f8f0e55cb8695242d68f4'
  THEN RAISE EXCEPTION 'P5B_V0114_FUNCTION_BODY_READBACK_HOLD'; END IF;
 END $p5_v0114_postflight$;
 COMMIT;

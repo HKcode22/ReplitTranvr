@@ -11,7 +11,7 @@ import {resolve,dirname} from "node:path";
 import {fileURLToPath} from "node:url";
 
 export const PATH="migrations/staged/V0114__phase5b_conditional_witnessed_frozen_t_registration_v39.sql";
-export const BLOB="221828ffe43ddcd626f35188e2ba9bc15e98e8b0";
+export const BLOB="f7c808c26b0546b25c1b4b7256b24d68c11c9976";
 export const READY_STATUS="V0114_ABSENT_PREREQUISITES_VERIFIED";
 export const INSTALLED_STATUS="V0114_INSTALLED_EXACT";
 // Exact source review complete; the CLI still requires successful native CI,
