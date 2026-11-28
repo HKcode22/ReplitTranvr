@@ -8,7 +8,8 @@
  *  - T-24h is the comparator horizon.
  *  - Actual physical gate-out is strictly distinct from schedule revisions,
  *    estimates, wheels-off proxies and arrival ETA.
- *  - Chronological 20/5/6 split and same-flight group isolation are enforced.
+ *  - Split and group consistency are checked against supplied anchors; a
+ *    production authenticated readback must establish their provenance.
  *
  * Pure in-memory reconciliation: zero provider calls, zero DB writes, zero
  * synthetic labels, zero approval fabrication.
@@ -71,7 +72,7 @@ export type P5OutcomeEvidence=P5NativePhysicalOutcomeEvidence|P5ConditionalSched
 
 export type P5MatchedOutcomeClassification=
  |"NATIVE_PHYSICAL_GATE_OUT_CANDIDATE_UNCERTIFIED"
- |"OBSERVED_CONDITIONAL_SCHEDULE_REVISION_ONLY"
+ |"SIGNED_CONDITIONAL_REVISION_CANDIDATE_UNVERIFIED_ANCHOR"
  |"CANCELLED_SEPARATE_OUTCOME"
  |"PENDING_OUTCOME_EVIDENCE"
  |"CENSORED_PHYSICAL_GATE_OUT_MISSING"
@@ -169,7 +170,7 @@ export function matchP5PreservedPreToSeparatedPostOutcomes(
   fullT24T6T90Triple:0,
   observedNativePhysicalGateOut:0,
   nativePhysicalCandidatesUncertified:0,
-  observedConditionalScheduleRevisionOnly:0,
+  signedConditionalRevisionCandidatesUnverifiedAnchor:0,
   cancelledSeparateOutcome:0,
   pendingOutcomeEvidence:0,
   censoredPhysicalGateOutMissing:0,
@@ -235,7 +236,7 @@ export function matchP5PreservedPreToSeparatedPostOutcomes(
     conditionalScheduleRevisionOnly=true;
     conditionalRevisionStatus=measured.status;
     if(measured.status==="OBSERVED_REVISION_GE_15_MIN"||measured.status==="OBSERVED_REVISION_LT_15_MIN")
-     classification="OBSERVED_CONDITIONAL_SCHEDULE_REVISION_ONLY";
+     classification="SIGNED_CONDITIONAL_REVISION_CANDIDATE_UNVERIFIED_ANCHOR";
     else
      classification="CENSORED_CONDITIONAL_REVISION_UNOBSERVED";
    }
@@ -246,7 +247,7 @@ export function matchP5PreservedPreToSeparatedPostOutcomes(
   if(hasT6Primary)coverage.withT6Primary++;
   if(hasPairedT6T90)coverage.pairedT6T90++;
   if(hasFullT24T6T90Triple)coverage.fullT24T6T90Triple++;
-  if(classification==="OBSERVED_CONDITIONAL_SCHEDULE_REVISION_ONLY")coverage.observedConditionalScheduleRevisionOnly++;
+  if(classification==="SIGNED_CONDITIONAL_REVISION_CANDIDATE_UNVERIFIED_ANCHOR")coverage.signedConditionalRevisionCandidatesUnverifiedAnchor++;
   else if(classification==="NATIVE_PHYSICAL_GATE_OUT_CANDIDATE_UNCERTIFIED")coverage.nativePhysicalCandidatesUncertified++;
   else if(classification==="CANCELLED_SEPARATE_OUTCOME")coverage.cancelledSeparateOutcome++;
   else if(classification==="PENDING_OUTCOME_EVIDENCE")coverage.pendingOutcomeEvidence++;
@@ -267,6 +268,7 @@ export function matchP5PreservedPreToSeparatedPostOutcomes(
   matchedLegs:Object.freeze(matched),
   nativeAndConditionalOutcomesStrictlySeparated:true,
   scheduleRevisionNeverSubstitutedForPhysicalGateOut:true,
+  productionAnchorReadbackVerified:false,
   providerCalls:0,databaseWrites:0,phase6PaidGo:false
  });
 }

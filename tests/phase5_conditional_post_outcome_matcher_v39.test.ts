@@ -59,7 +59,8 @@ describe("P0-E (F029/F042) separated native physical gate-out and conditional sc
   expect(res.coverage.totalDistinctLegs).toBe(2);
   expect(res.coverage.observedNativePhysicalGateOut).toBe(0);
   expect(res.coverage.nativePhysicalCandidatesUncertified).toBe(1);
-  expect(res.coverage.observedConditionalScheduleRevisionOnly).toBe(1);
+  expect(res.coverage.signedConditionalRevisionCandidatesUnverifiedAnchor).toBe(1);
+  expect(res.productionAnchorReadbackVerified).toBe(false);
   expect(res.coverage.pairedT6T90).toBe(2);
   expect(res.coverage.fullT24T6T90Triple).toBe(1);
   const nativeLeg=res.matchedLegs.find(x=>x.flightInstanceId===nativeId)!;
@@ -73,6 +74,8 @@ describe("P0-E (F029/F042) separated native physical gate-out and conditional sc
   for(const change of [
    {flightInstanceId:"leg:g5a:"+sha("another-service")},
    {runDayIndex:6}, {preIssueReceiptSha256:sha("wrong-receipt")},
+   {originalSourceResponseSha256:sha("wrong-source")},
+   {selectedScheduledDepartureUtc:"2026-11-30T16:05:00.000Z"},
    {predictionCutoffUtc:"2026-11-30T10:01:00.000Z"},
    {phase7GroupId:"aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa1"}
   ]){
@@ -105,5 +108,8 @@ describe("P0-E (F029/F042) separated native physical gate-out and conditional sc
   expect(()=>matchP5PreservedPreToSeparatedPostOutcomes([
    nativeAnchor,{...nativeAnchor,flightInstanceId:"leg:p5v1:"+sha("another-leg"),horizon:"T-90m",preSnapshotId:"1004",phase7FragmentRowId:"11111111-1111-4111-8111-111111111104"}
   ],[])).toThrow(/GROUP_REUSED_ACROSS_FLIGHTS/);
+  expect(()=>matchP5PreservedPreToSeparatedPostOutcomes([
+   nativeAnchor,{...nativeAnchor,horizon:"T-90m"}
+  ],[])).toThrow(/REUSED_PRE_OR_FRAGMENT_IDENTIFIER/);
  });
 });
