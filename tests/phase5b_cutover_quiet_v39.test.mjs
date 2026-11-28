@@ -237,7 +237,7 @@ test("T135 #982 reuses the exact guarded release and explicitly limits additiona
  assert.match(sourceCutover,/DEPLOY_EXACT_REVIEWED_SOURCE_ONLY_TARGET_982/);
  assert.match(sourceCutover,/RECOVER_EXACT_MERGED_SOURCE_ONLY_TARGET_982/);
  assert.match(sourceCutover,/TARGET_PR=982\s+OLD=697501b9443837018414082434cbe798ab835f92/);
- assert.match(sourceCutover,/if \[\[ "\$TARGET_PR" == 981 \|\| "\$TARGET_PR" == 982 \]\];then\s+target_981_ci_ok/);
+ assert.match(sourceCutover,/if \[\[ "\$TARGET_PR" == 981 \|\| "\$TARGET_PR" == 982 \|\| "\$TARGET_PR" == 983 \]\];then\s+target_981_ci_ok/);
  assert.match(sourceCutover,/"\$num" == 980 \|\| "\$num" == 981 \|\| "\$num" == 982/);
  const guard=readFileSync(new URL("../scripts/v39_phase5b_callback_worker_only_guard.sh",import.meta.url),"utf8");
  assert.match(guard,/BASE_982=697501b9443837018414082434cbe798ab835f92/);
@@ -325,4 +325,19 @@ test("T138 complete variable enumeration refuses literal absence sentinels and m
  for(const pages of [[],{},[{total_count:1,variables:[]}],[{total_count:1,variables:[{name:"PIN",value:"__ABSENT__"}]}],[{total_count:1,variables:[{name:"PIN",value:null}]}],[{total_count:2,variables:[{name:"PIN",value:"a"},{name:"PIN",value:"b"}]}]])
   assert.notEqual(invoke(pages).status,0);
  assert.notEqual(invoke([{total_count:0,variables:[]}],true).status,0);
+});
+
+test("paused #983 reuses exact mandatory checks, recovery, and callback isolation",()=>{
+ assert.match(sourceCutover,/TARGET_PR=983\s+OLD=9426eda5f749e43b1e798b1c308f5c428f696882\s+ROLD=[a-f0-9]{40}\s+ROUTE_MODE=PAUSED/);
+ assert.match(sourceCutover,/DEPLOY_EXACT_REVIEWED_PAUSED_TARGET_983/);
+ assert.equal([...sourceCutover.matchAll(/RECOVER_EXACT_MERGED_PAUSED_TARGET_983/g)].length,4);
+ assert.match(sourceCutover,/"\$num" == 982 \|\| "\$num" == 983/);
+ assert.match(sourceCutover,/"\$TARGET_PR" == 982 \|\| "\$TARGET_PR" == 983 \]\];then ci "\$R" "\$H" 29/);
+ assert.match(sourceCutover,/"\$TARGET_PR" == 982 \|\| "\$TARGET_PR" == 983 \]\];then target_980_pins_ok/);
+ for(const name of ["phase6-nonpaid-source-day-prepare-publish.yml","phase6-admission-diagnostics-offline.yml","phase5-reviewed-replit-callback-only-build-no-provider.yml"]){
+  const y=readFileSync(new URL("../.github/workflows/"+name,import.meta.url),"utf8");
+  const pr=y.split("  pull_request:\n")[1]?.split(/\n  [a-z_]+:/)[0];
+  assert.ok(pr,name);assert.match(pr,/^      - 'scripts\/v39_phase5b_source_only_successor_owner\.sh'$/m,name);
+ }
+ assert.doesNotMatch(sourceCutover,/gh variable set (?:P6_PRIVATE_SOURCE_STORED_DISPATCH_ENABLED|P6_PRIVATE_POST_PARENT_ENABLED|P6_NONPAID_SOURCE_SCHEDULE_ENABLED)/);
 });

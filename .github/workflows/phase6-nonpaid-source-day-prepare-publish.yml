@@ -41,6 +41,7 @@ on:
   pull_request:
     branches: [main]
     paths:
+      - 'scripts/v39_phase5b_source_only_successor_owner.sh'
       - 'scripts/v39_phase5b_conditional_policy_candidate_v39.mjs'
       - 'scripts/v39_phase5b_conditional_policy_install_v39.mjs'
       - 'scripts/v39_phase5b_conditional_review_metadata_v39.mjs'

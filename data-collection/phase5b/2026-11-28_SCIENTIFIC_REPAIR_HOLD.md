@@ -29,3 +29,9 @@ A genuine paid canary must use exact already-authorized future query slots and e
 This proposal is not an implemented admission whitelist or a claim of execution. Count uncertain attempts against the ceiling; do not add retries or replacement queries to obtain a successful result. Do not broadly restart unattended collection to run the canary.
 
 Require authentic source, cutoff-safe PRE, atomic derived preservation, independent readback, truthful POST settlement, accounting and expiry evidence. Operational success is separate from a scientifically valid physical outcome. If the physical target or lawful corpus remains unavailable, keep the primary experiment held and make an explicit prospective feasibility decision.
+
+## Owner-directed weekend hold and acceptance boundary
+
+Keep ordinary paid SOURCE and POST admissions and automatic SOURCE preparation paused throughout November 28–29, 2026 Pacific time. No automatic restart on Monday; restart requires an explicit prospective decision and passing scientific and operational preflight. Keep lawful retention and reconciliation running. Nonpaid commissioning and exact reviewed paused deployment may proceed. Missed signed windows remain historical losses, not backfill candidates. A deployed, regression-tested narrow correction is distinct from live paid-path acceptance; a real prospective bounded test must verify the actual chain after the hold, not manufacture a paid fault or substitute synthetic data for production evidence.
+
+PR #983 paused deployment extends the existing exact reviewed helper and required PR-only triggers; it retains all 29 mandatory paths, first-attempt success, worker-only callback refusal, quiet/task/STOP checks, pin convergence and retention baselines. No provider or route change.

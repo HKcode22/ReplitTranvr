@@ -3,6 +3,7 @@ on:
   pull_request:
     branches: [main]
     paths:
+      - 'scripts/v39_phase5b_source_only_successor_owner.sh'
       - '.github/workflows/phase6-admission-diagnostics-offline.yml'
       - '.github/workflows/phase5-cd-github-one-queued-t24-witness-main-manual.yml'
       - 'tests/phase6_runtime_admission_shell_exact_v39.test.mjs'
