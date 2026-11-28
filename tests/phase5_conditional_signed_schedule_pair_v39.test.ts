@@ -1,5 +1,7 @@
 import {createHash,generateKeyPairSync,sign,type KeyObject} from "node:crypto";
 import {describe,it,expect} from "vitest";
+import {digestP5Stage24ReviewedReceipt,type P5Stage24ReviewedT24Receipt} from "../server/lib/disruption/phase5T24WitnessedLaterHorizonGuard_v39";
+import {matchP5PreservedPreToSeparatedPostOutcomes,type P5PreservedPreOutcomeAnchor,type P5OutcomeEvidence} from "../server/lib/disruption/phase5ConditionalPostOutcomeMatcher_v39";
 import {measureP5ConditionalSignedSchedulePair as pair} from "../server/lib/disruption/phase5ConditionalSignedSchedulePair_v39";
 const h=(x:string)=>x.repeat(64),t=(s:string)=>"2035-11-25T"+s+":00.000Z";
 const sha=(x:Buffer)=>createHash("sha256").update(x).digest("hex");
@@ -69,5 +71,61 @@ describe("T075 runtime signed receipt digest identity",()=>{
   expect(out.privateCandidate).toMatchObject({scheduledRevisionMinutes:0,primaryBinaryOutcome:0,physicalDepartureDelayLabel:false});
   expect(out.physicalGateOutCertified).toBe(false);
   expect(out.trainingPublicationAuthorized).toBe(false);
+ });
+});
+
+describe("T142 independently witnessed frozen T survives a retimed T6 schedule at POST",()=>{
+ function witnessed(){
+  const f=fixture(),T=f.pre.firstScheduledDepartureUtc;
+  const base:Omit<P5Stage24ReviewedT24Receipt,"receiptSha256">={
+   schema:"v39.phase5.stage24.externally-reviewed-stage17-receipt.v1",
+   snapshotId:"9001",flightInstanceId:f.pre.serviceKey,selectedTNativeUtc:T,
+   frozenT24CutoffUtc:"2035-11-24T12:00:00.000Z",expectedSelectedTVersion:"reviewed-frozen-t24-v39",
+   t24OriginalFidsSha256:h("8"),t24SourceQueryDigestSha256:h("9"),
+   t24FrameSha256:h("a"),t24ConfigSha256:h("b"),
+   witnessDbObservedAtUtc:"2035-11-24T11:58:00.000Z",stage17PostCommitReadbackAtUtc:"2035-11-24T11:58:30.000Z"
+  };
+  const receipt={...base,receiptSha256:digestP5Stage24ReviewedReceipt(base)};
+  const witnessRow={snapshot_id:"9001",joined_snapshot_id:"9001",flight_instance_id:base.flightInstanceId,
+   selected_t_version:base.expectedSelectedTVersion,fids_response_hash:base.t24OriginalFidsSha256,
+   source_query_digest:base.t24SourceQueryDigestSha256,frame_hash:base.t24FrameSha256,config_hash:base.t24ConfigSha256,
+   source_t24_population_query_id:"c23e4567-e89b-42d3-a456-426614174012",snapshot_prediction_state:"PRE_DEPARTURE",
+   snapshot_horizon:"T-24h",selected_t_native_utc:T,t24_cutoff_utc:base.frozenT24CutoffUtc,
+   post_pre_commit_db_observed_at_utc:base.witnessDbObservedAtUtc};
+  const expected={flightInstanceId:base.flightInstanceId,selectedTNativeUtc:T,expectedSelectedTVersion:base.expectedSelectedTVersion,
+   expectedFrameSha256:base.t24FrameSha256,expectedConfigSha256:base.t24ConfigSha256,cutoffUtc:t("06:00"),horizon:"T-6h" as const};
+  const policyBytes=Buffer.from(JSON.stringify({...JSON.parse(f.trust.policyBytes.toString()),witnessedFrozenT24RetimeApproved:true}));
+  const trust={...f.trust,policyBytes,expectedPolicySha256:sha(policyBytes)};
+  const pre={...f.pre,scheduledDepartureUtc:t("12:15"),t24WitnessReceiptSha256:receipt.receiptSha256};
+  const post={...f.post,t24WitnessReceiptSha256:receipt.receiptSha256};
+  return {...f,trust,legacyTrust:f.trust,pre,post,witness:{receipt,witnessRow,expected}};
+ }
+ it.each([["12:25",10,0],["12:30",15,1],["12:00",-15,1],["12:15",0,0]] as const)("compares retimed T6 against %s while keeping original T and W",(reported,minutes,binary)=>{
+  const f=witnessed(),post={...f.post,scheduledDepartureUtc:t(reported)};
+  const out=pair(f.trust,f.wire(f.pre,f.a.privateKey),f.wire(post,f.b.privateKey),t("14:01"),f.witness);
+  expect(out.privateCandidate).toMatchObject({scheduledRevisionMinutes:minutes,primaryBinaryOutcome:binary,
+   predictionCutoffUtc:t("06:00"),fixedAssessmentWatermarkUtc:t("14:00"),physicalDepartureDelayLabel:false});
+  expect(out.physicalGateOutCertified).toBe(false);
+  expect(out.trainingPublicationAuthorized).toBe(false);
+  expect(JSON.stringify(out)).not.toMatch(/scheduledRevisionMinutes|receiptSha256|privateCandidate/);
+ });
+ it("refuses retiming without the reviewed policy, both signed bindings, exact witness, and distinct original",()=>{
+  const f=witnessed(),pre=f.wire(f.pre,f.a.privateKey),post=f.wire(f.post,f.b.privateKey);
+  expect(()=>pair(f.trust,pre,post,t("14:01"))).toThrow(/WITNESSED_REFERENCE_REQUIRED/);
+  expect(()=>pair(f.legacyTrust,pre,post,t("14:01"),f.witness)).toThrow(/WITNESSED_REFERENCE_BINDING/);
+  expect(()=>pair(f.trust,pre,f.wire({...f.post,t24WitnessReceiptSha256:h("0")},f.b.privateKey),t("14:01"),f.witness)).toThrow(/WITNESSED_REFERENCE_BINDING/);
+  expect(()=>pair(f.trust,pre,post,t("14:01"),{...f.witness,witnessRow:{...f.witness.witnessRow,selected_t_native_utc:t("12:15")}})).toThrow(/PERSISTED_T24_WITNESS_ORIGINAL_T_CHANGED/);
+  expect(()=>pair(f.trust,pre,post,t("14:01"),{...f.witness,expected:{...f.witness.expected,cutoffUtc:t("06:15")}})).toThrow(/WITNESSED_REFERENCE_SCOPE/);
+  expect(()=>pair(f.trust,pre,post,t("14:01"),{...f.witness,witnessRow:{...f.witness.witnessRow,source_t24_population_query_id:f.pre.sourceQueryId}})).toThrow(/WITNESSED_REFERENCE_NOT_DISTINCT_FROM_LATER_SOURCE/);
+ });
+ it("requires the witnessed T24 and current T6 anchors in the same preserved group",()=>{
+  const f=witnessed(),w=f.witness,r=w.receipt;
+  const t6:P5PreservedPreOutcomeAnchor={flightInstanceId:f.pre.serviceKey,identityTier:"CONDITIONAL_QUERY_FILTERED_SERVICE",runDayIndex:f.pre.runDayIndex,slot:"HUB",horizon:"T-6h",preSnapshotId:"9002",
+   phase7FragmentRowId:"11111111-1111-4111-8111-111111111102",phase7GroupId:"aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa1",preIssuedAtUtc:f.pre.preIssuedUtc,predictionCutoffUtc:t("06:00"),manifestSha256:f.pre.manifestSha256,preIssueReceiptSha256:f.pre.preIssueReceiptSha256,originalSourceQueryId:f.pre.sourceQueryId,originalSourceResponseSha256:f.pre.sourceResponseSha256,originalSourceAvailableAtUtc:f.pre.sourceAvailableUtc,selectedScheduledDepartureUtc:f.pre.firstScheduledDepartureUtc,t24WitnessReceiptSha256:r.receiptSha256};
+  const t24:P5PreservedPreOutcomeAnchor={...t6,horizon:"T-24h",preSnapshotId:r.snapshotId,phase7FragmentRowId:"11111111-1111-4111-8111-111111111101",preIssuedAtUtc:"2035-11-24T11:57:00.000Z",predictionCutoffUtc:r.frozenT24CutoffUtc,originalSourceQueryId:w.witnessRow.source_t24_population_query_id,originalSourceResponseSha256:r.t24OriginalFidsSha256,originalSourceAvailableAtUtc:"2035-11-24T11:55:00.000Z",preIssueReceiptSha256:undefined,t24WitnessReceiptSha256:undefined};
+  const o:P5OutcomeEvidence={tier:"CONDITIONAL_QUERY_FILTERED_SERVICE",flightInstanceId:t6.flightInstanceId,runDayIndex:t6.runDayIndex,trust:f.trust,preWire:f.wire(f.pre,f.a.privateKey),postWire:f.wire(f.post,f.b.privateKey),dbObservedUtc:t("14:01"),witnessedT24:w};
+  expect(matchP5PreservedPreToSeparatedPostOutcomes([t24,t6],[o]).coverage.signedConditionalRevisionCandidatesUnverifiedAnchor).toBe(1);
+  for(const a of [[t6],[{...t24,originalSourceResponseSha256:h("0")},t6],[t24,{...t6,t24WitnessReceiptSha256:h("0")}]])
+   expect(()=>matchP5PreservedPreToSeparatedPostOutcomes(a,[o])).toThrow(/CONDITIONAL_WITNESS_NOT_BOUND/);
  });
 });

@@ -7,6 +7,7 @@
  * reviewer; a 64-hex digest and boolean alone cannot authenticate that source.
  * No provider HTTP, database, clocks, retained payloads or random values.
  */
+import {verifyP5Stage24WitnessedFrozenT,type P5Stage24ReviewedT24Receipt,type P5Stage24WitnessExpectation} from "./phase5T24WitnessedLaterHorizonGuard_v39";
 const SHA=/^[a-f0-9]{64}$/;
 const UTC=/^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d\.\d{3}Z$/;
 const MS_H=3600000;
@@ -90,7 +91,40 @@ function response(status:P5ScheduleRevisionState, input:P5FirstCycleScheduleInpu
  * A COND_SERVICE row is a prediction of a provider *service record*, not
  * a confirmed physical leg. Its cohort and denominators remain separate.
  */
+export interface P5WitnessedFrozenReference {
+ witnessRow:Record<string,unknown>;
+ receipt:P5Stage24ReviewedT24Receipt;
+ expected:P5Stage24WitnessExpectation;
+}
+/** Reuse existing reviewed, immutable witness metadata; the original T24
+ * raw payload may already have expired. The caller must authenticate the
+ * actual database row and independent receipt. Never invent a T24
+ * observation from a frozen timestamp. Candidate evaluation only. */
+export function measureP5FirstCycleScheduleRevisionWithWitnessedReference(
+ input:P5FirstCycleScheduleInput,witness:P5WitnessedFrozenReference){
+ if(!input||input.evidenceTier!=="CONDITIONAL_QUERY_FILTERED_SERVICE"||
+    input.horizon!=="T-6h"||typeof input.reviewedStableServiceKeySha256!=="string"||
+    !SHA.test(input.reviewedStableServiceKeySha256)||!witness||!witness.expected||
+    !witness.receipt||!witness.witnessRow||!Array.isArray(input.observations))
+  deny("WITNESSED_REFERENCE_SCOPE");
+ const T=time(input.firstObservedNativeScheduledDepartureUtc),e=witness.expected;
+ if(e.horizon!=="T-6h"||e.flightInstanceId!=="leg:g5a:"+input.reviewedStableServiceKeySha256||
+    e.selectedTNativeUtc!==input.firstObservedNativeScheduledDepartureUtc||
+    e.cutoffUtc!==new Date(T-LAG["T-6h"]).toISOString())
+  deny("WITNESSED_REFERENCE_SCOPE");
+ const proof=verifyP5Stage24WitnessedFrozenT(witness.witnessRow,witness.receipt,e);
+ const q=witness.witnessRow.source_t24_population_query_id,readback=time(proof.stage17ReadbackUtc);
+ if(typeof q!=="string"||!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(q)||
+    input.observations.some(o=>!o||typeof o.sourceQueryId!=="string"||
+      o.sourceQueryId.toLowerCase()===q.toLowerCase()||
+      o.originalSha256===witness.receipt.t24OriginalFidsSha256||time(o.availableAtUtc)<=readback))
+  deny("WITNESSED_REFERENCE_NOT_DISTINCT_FROM_LATER_SOURCE");
+ return measureP5FirstCycleScheduleRevisionCore(input,true);
+}
 export function measureP5FirstCycleScheduleRevision(input:P5FirstCycleScheduleInput){
+ return measureP5FirstCycleScheduleRevisionCore(input,false);
+}
+function measureP5FirstCycleScheduleRevisionCore(input:P5FirstCycleScheduleInput,witnessedFrozenReference:boolean){
  if(!input||!SHA.test(input.reviewedManifestSha256)||
     !SHA.test(input.reviewedStableServiceKeySha256)||
     !Object.hasOwn(LAG,input.horizon)||
@@ -158,7 +192,7 @@ export function measureP5FirstCycleScheduleRevision(input:P5FirstCycleScheduleIn
  for(let i=1;i<rows.length;i++)
   if(rows[i].at===rows[i-1].at&&rows[i].sched!==rows[i-1].sched)
    return response("UNKNOWN_SCHEDULE_VALUE",input);
- if(rows[0].sched!==T||rows[0].at>C)
+ if((!witnessedFrozenReference&&rows[0].sched!==T)||rows[0].at>C)
   return response("UNKNOWN_ASOF_SOURCE",input);
  const before=rows.filter(x=>x.at<=C);
  if(!before.length)return response("UNKNOWN_ASOF_SOURCE",input);

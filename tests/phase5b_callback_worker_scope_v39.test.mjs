@@ -11,6 +11,7 @@ import {spawnSync} from "node:child_process";
 // touched, and npm is trapped so an accidental callback build cannot run.
 const BASE="24df876fc612c0e4fdfb6f69585ed90bcc56f9b8";
 const BASE_982="697501b9443837018414082434cbe798ab835f92";
+const BASE_POST="9426eda5f749e43b1e798b1c308f5c428f696882";
 const PIN="c3c3050e12c4e327f9c82c35c95f856f3c1cbd20";
 const HEAD="a".repeat(40);
 const MATCHER="server/lib/disruption/phase5ConditionalPostOutcomeMatcher_v39.ts";
@@ -206,4 +207,16 @@ test("T136 refuses unknown metadata, wrong head/ancestry, clean runtime PIN and 
  for(const base of [BASE,BASE_982])assertHold(runGuard({fixture:{failNameRead:base}}));
  assertHold(runGuard({fixture:{changes:{[BASE]:fullInputs,[BASE_982]:worker982Inputs,[PIN]:[]}}}));
  assertHold(runGuard({override:PIN}));
+});
+
+test("T142 exact POST-worker successor refuses callback publication and unreviewed drift",()=>{
+ const post=[MATCHER,"server/lib/disruption/phase5ConditionalSignedSchedulePair_v39.ts","server/lib/disruption/phase5ProspectiveProviderScheduleRevisionPrimary_v39.ts"];
+ const full=[...new Set([...fullInputs,...post])];
+ const changes={[BASE]:full,[BASE_982]:worker982Inputs,[BASE_POST]:post,[PIN]:full};
+ const result=runGuard({base:BASE_POST,fixture:{changes}});
+ assert.equal(result.status,0,result.stdout+result.stderr);
+ assert.equal(result.stdout.trim(),passMarker);
+ assert.equal(wrapperReadCount(result),1);
+ for(const changed of [post.slice(1),[...post,"server/unreviewed.ts"],[...post,WRAPPER]])
+  assertHold(runGuard({base:BASE_POST,fixture:{changes:{...changes,[BASE_POST]:changed}}}));
 });

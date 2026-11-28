@@ -39,7 +39,7 @@ describe("P0-E (F029/F042) separated native physical gate-out and conditional sc
    {flightInstanceId:nativeId,identityTier:"PROVIDER_NATIVE_OPERATING_LEG",runDayIndex:5,slot:"HUB",horizon:"T-24h",preSnapshotId:"1001",phase7FragmentRowId:"11111111-1111-4111-8111-111111111101",phase7GroupId:"aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa1",preIssuedAtUtc:"2026-11-29T15:58:00.000Z",predictionCutoffUtc:"2026-11-29T16:00:00.000Z"},
    {flightInstanceId:nativeId,identityTier:"PROVIDER_NATIVE_OPERATING_LEG",runDayIndex:5,slot:"HUB",horizon:"T-6h",preSnapshotId:"1002",phase7FragmentRowId:"11111111-1111-4111-8111-111111111102",phase7GroupId:"aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa1",preIssuedAtUtc:"2026-11-30T09:58:00.000Z",predictionCutoffUtc:"2026-11-30T10:00:00.000Z",originalSourceResponseSha256:sha("native-src"),originalSourceAvailableAtUtc:"2026-11-30T09:55:00.000Z",selectedScheduledDepartureUtc:"2026-11-30T16:00:00.000Z"},
    {flightInstanceId:nativeId,identityTier:"PROVIDER_NATIVE_OPERATING_LEG",runDayIndex:5,slot:"HUB",horizon:"T-90m",preSnapshotId:"1003",phase7FragmentRowId:"11111111-1111-4111-8111-111111111103",phase7GroupId:"aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa1",preIssuedAtUtc:"2026-11-30T14:28:00.000Z",predictionCutoffUtc:"2026-11-30T14:30:00.000Z"},
-   {flightInstanceId:condId,identityTier:"CONDITIONAL_QUERY_FILTERED_SERVICE",runDayIndex:5,slot:"MID_A",horizon:"T-6h",preSnapshotId:"2001",phase7FragmentRowId:"22222222-2222-4222-8222-222222222201",phase7GroupId:"bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbb1",preIssuedAtUtc:"2026-11-30T09:58:00.000Z",predictionCutoffUtc:"2026-11-30T10:00:00.000Z",manifestSha256:manifest,preIssueReceiptSha256:sha("pre-issue-receipt"),originalSourceQueryId:"33333333-3333-4333-8333-333333333301",originalSourceResponseSha256:sha("pre-resp"),selectedScheduledDepartureUtc:"2026-11-30T16:00:00.000Z"},
+   {flightInstanceId:condId,identityTier:"CONDITIONAL_QUERY_FILTERED_SERVICE",runDayIndex:5,slot:"MID_A",horizon:"T-6h",preSnapshotId:"2001",phase7FragmentRowId:"22222222-2222-4222-8222-222222222201",phase7GroupId:"bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbb1",preIssuedAtUtc:"2026-11-30T09:58:00.000Z",predictionCutoffUtc:"2026-11-30T10:00:00.000Z",manifestSha256:manifest,preIssueReceiptSha256:sha("pre-issue-receipt"),originalSourceQueryId:"33333333-3333-4333-8333-333333333301",originalSourceResponseSha256:sha("pre-resp"),originalSourceAvailableAtUtc:"2026-11-30T09:55:00.000Z",selectedScheduledDepartureUtc:"2026-11-30T16:00:00.000Z"},
    {flightInstanceId:condId,identityTier:"CONDITIONAL_QUERY_FILTERED_SERVICE",runDayIndex:5,slot:"MID_A",horizon:"T-90m",preSnapshotId:"2002",phase7FragmentRowId:"22222222-2222-4222-8222-222222222202",phase7GroupId:"bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbb1",preIssuedAtUtc:"2026-11-30T14:28:00.000Z",predictionCutoffUtc:"2026-11-30T14:30:00.000Z"}
   ];
   const preIssueSha=sha("pre-issue-receipt");
@@ -71,6 +71,21 @@ describe("P0-E (F029/F042) separated native physical gate-out and conditional sc
   expect(condLeg.physicalGateOutCertified).toBe(false);
   expect(condLeg.conditionalScheduleRevisionOnly).toBe(true);
   expect(condLeg.candidatePhysicalDelayMinutes).toBeNull();
+  // T141: an authentic signature over a different availability clock is
+  // not evidence of the stored PRE original's actual chronology.
+  for(const available of [undefined,"2026-11-30T09:54:00.000Z"]){
+   const changed=anchors.map(a=>a.preSnapshotId==="2001"?{...a,originalSourceAvailableAtUtc:available}:a);
+   expect(()=>matchP5PreservedPreToSeparatedPostOutcomes(changed,outcomes))
+    .toThrow("CONDITIONAL_OUTCOME_PRE_SOURCE_AVAILABLE_CLOCK_DRIFT");
+  }
+  const alteredOutcome:P5OutcomeEvidence={tier:"CONDITIONAL_QUERY_FILTERED_SERVICE",flightInstanceId:condId,runDayIndex:5,trust,
+   preWire:signWire({...condPre,sourceAvailableUtc:"2026-11-30T09:54:00.000Z"},preKey),
+   postWire:signWire(condPost,postKey),dbObservedUtc:"2026-11-30T18:10:00.000Z"};
+  expect(()=>matchP5PreservedPreToSeparatedPostOutcomes(anchors,[outcomes[0],alteredOutcome]))
+   .toThrow("CONDITIONAL_OUTCOME_PRE_SOURCE_AVAILABLE_CLOCK_DRIFT");
+  const nullOutcome:P5OutcomeEvidence={...alteredOutcome,preWire:signWire(null,preKey)};
+  expect(()=>matchP5PreservedPreToSeparatedPostOutcomes(anchors,[outcomes[0],nullOutcome]))
+   .toThrow("CONDITIONAL_PRE_WIRE_INVALID");
   for(const change of [
    {flightInstanceId:"leg:g5a:"+sha("another-service")},
    {runDayIndex:6}, {preIssueReceiptSha256:sha("wrong-receipt")},
