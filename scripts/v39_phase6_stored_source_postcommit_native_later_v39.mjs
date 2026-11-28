@@ -155,6 +155,11 @@ export function admitP6NativeLaterRuntime(env,read,mode="committed"){
  const dayReviewerKey=key(env.P6_PRIVATE_DAY_REVIEWER_KEY_BASE64,t.dayReviewerFingerprintSha256);
  const dayPolicyBytes=Buffer.from(JSON.stringify(day)),conditionalT24Reviewer=admitP6ConditionalT24Reviewer(env,p,t),conditionalLaterReviewer=admitP6ConditionalLaterReviewer(env,p,t);
  const nativeT24PolicyTransition=deriveP6NativeT24PolicyTransition(p);
+ // Do not spend for a conditional-marked future day with only the native
+ // actor chain ready. Missing conditional metadata transport is not an
+ // optional feature: it would silently strand every conditional later PRE.
+ if(nativeT24PolicyTransition&&c.selector.runDayIndex>=nativeT24PolicyTransition.firstConditionalRunDayIndex&&
+    (!conditionalT24Reviewer||!conditionalLaterReviewer))hold("CONDITIONAL_PRESERVATION_CHAIN_NOT_READY");
  const conditionalDayBytes=conditionalLaterReviewer?Buffer.from(JSON.stringify(conditionalLaterReviewer.day)):null;
  return {auditEnv,c,v,custody,policyBytes,publisherUrl,preUrl,conditionalT24Reviewer,conditionalLaterReviewer,nativeT24PolicyTransition,
   conditionalAppendApproval:conditionalDayBytes?{policyBytes:conditionalDayBytes,expectedPolicySha256:hash(conditionalDayBytes),dayReviewerKey,independentlyApprovedDelegatedDayAppend:true,noProviderCredentialsInSigner:true}:null,
@@ -223,8 +228,19 @@ export function requireP6ConditionalPreflightClock(x,clock,actorOnly){
  const tr=x.nativeT24PolicyTransition,day=x.c?.selector?.runDayIndex;
  if(tr&&(!Number.isSafeInteger(day)||day<1||day>31))hold("CONDITIONAL_PREFLIGHT_DAY");
  if(tr&&day<tr.firstConditionalRunDayIndex)return;
+ if(tr){
+  const f=x.c?.policy?.conditionalPreFeatureReview,t=x.conditionalT24Reviewer,l=x.conditionalLaterReviewer;
+  if(!f||f.approved!==true||!t||!l||!x.conditionalAppendApproval||
+     !H.test(f.protocolSha256??"")||!H.test(f.externalContentUseReviewSha256??"")||
+     t.scope?.protocolSha256!==f.protocolSha256||l.scope?.protocolSha256!==f.protocolSha256||
+     t.scope?.externalContentUseReviewSha256!==f.externalContentUseReviewSha256||l.scope?.externalContentUseReviewSha256!==f.externalContentUseReviewSha256||
+     t.validFromUtc!==tr.conditionalEffectiveUtc||l.validFromUtc!==tr.conditionalEffectiveUtc||
+     !iso(t.validUntilUtc)||!iso(l.validUntilUtc)||!iso(l.day?.validFromUtc)||!iso(l.day?.validUntilUtc)||
+     l.day.validFromUtc!==tr.conditionalEffectiveUtc)hold("CONDITIONAL_PRESERVATION_CHAIN_NOT_READY");
+ }
  if(x.conditionalT24Reviewer&&(clock>=x.conditionalT24Reviewer.validUntilUtc||(!actorOnly&&clock<x.conditionalT24Reviewer.validFromUtc)))hold("CONDITIONAL_T24_REVIEWER_CLOCK");
  if(x.conditionalLaterReviewer&&(clock>=x.conditionalLaterReviewer.validUntilUtc||(!actorOnly&&clock<x.conditionalLaterReviewer.validFromUtc)))hold("CONDITIONAL_LATER_REVIEWER_CLOCK");
+ if(tr&&clock>=x.conditionalLaterReviewer.day.validUntilUtc)hold("CONDITIONAL_PRESERVATION_CHAIN_NOT_READY");
 }
 export async function preflightP6NativeLaterRuntime(env){
  const actorOnly=env.V39_P5_CHILD_CONFIRM==="ONLY_PRE_INDEPENDENT_ACTOR_PREFLIGHT_NO_PROVIDER";

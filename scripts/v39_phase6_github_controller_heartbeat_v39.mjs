@@ -63,7 +63,7 @@ export function formatP6ControllerHeartbeatHuman(heartbeat){
   for(const r of paid.routes)lines.push("- "+r.job+": "+r.configuration);
  }
  if(heartbeat.activeNotifications?.intentionalPauses?.length){
-  lines.push("","**Explicitly paused paid routes — collection not running:**");
+  lines.push("","**Explicitly paused routes/preparation — not execution or collection evidence:**");
   for(const i of heartbeat.activeNotifications.intentionalPauses)lines.push("- "+i.job+": "+i.reason);
  }
  if(heartbeat.activeNotifications?.incidentCount){

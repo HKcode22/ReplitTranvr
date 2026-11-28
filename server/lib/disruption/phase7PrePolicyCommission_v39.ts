@@ -18,6 +18,17 @@ const sha=(b:Buffer)=>createHash("sha256").update(b).digest("hex");
 const clock=(s:string)=>{const n=Date.parse(s);need(Number.isFinite(n)&&new Date(n).toISOString()===s,"CLOCK");return n};
 const SCHEMA="phase7_private",TABLE=SCHEMA+".pre_preservation_policy_v39",ROLE=P5_STAGE28_GROUPS.pre;
 const FN=SCHEMA+".persist_bound_pre_fragment_v39(text,text,bigint,uuid,uuid,text,text,text,text,bytea,text,timestamptz,timestamptz,integer,timestamptz)";
+// The existing PRE writer may execute only FN. V0115 is an additive POST
+// reader, not a new PRE grant. Keep the exact seven-function baseline and
+// permit only this eighth signature after commissioning; no arbitrary
+// function, overload, replacement or PUBLIC/role execution is accepted.
+const REQUIRED_FUNCTIONS=[FN,...[
+ "canonical_pre_jsonb_v39(jsonb)",
+ "read_bound_pre_group_v39(text,bigint,text,text,integer,text,text)",
+ "pre_link_expiry_status_v39()","sweep_due_pre_links_v39(integer)",
+ "research_expiry_status_v39()","sweep_due_research_outputs_v39(integer)"
+].map(s=>SCHEMA+"."+s)];
+const CONDITIONAL_POST_FN=SCHEMA+".read_bound_conditional_t6_group_v39(text,bigint,text,text,integer,text,text,text)";
 export interface Phase7PrePolicyCommissionScope{
  manifestSha256:string;rightsSha256:string;policyBytesSha256:string;policyReviewSha256:string;
  validFromUtc:string;validUntilUtc:string;firstSourceUtc:string;outcomeTailUtc:string;
@@ -77,8 +88,12 @@ async function roleBoundary(c:PoolClient,installed:boolean){
  const q=(await c.query("SELECT rolcanlogin,rolsuper,rolcreatedb,rolcreaterole,rolreplication,rolbypassrls,rolinherit,has_schema_privilege(r.oid,$2,'USAGE') u,has_schema_privilege(r.oid,$2,'CREATE') cr FROM pg_roles r WHERE rolname=$1",[ROLE,SCHEMA])).rows;
  need(q.length===1&&q[0].u===installed&&Object.entries(q[0]).every(([k,v])=>k==="u"||v===false),"PRE_ROLE_SCOPE");
  const direct=(await c.query("SELECT count(*)::int n FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace WHERE n.nspname=$2 AND c.relkind IN ('r','p','v','m','f') AND (has_any_column_privilege($1,c.oid,'SELECT,INSERT,UPDATE,REFERENCES') OR has_table_privilege($1,c.oid,'DELETE,TRUNCATE,TRIGGER'))",[ROLE,SCHEMA])).rows[0];
- const funcs=(await c.query("SELECT p.oid=to_regprocedure($3)::oid target,has_function_privilege($1,p.oid,'EXECUTE') ok,has_function_privilege($1,p.oid,'EXECUTE WITH GRANT OPTION') can_grant FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace WHERE n.nspname=$2",[ROLE,SCHEMA,FN])).rows;
- need(direct.n===0&&funcs.length===7&&funcs.filter(x=>x.target).length===1&&funcs.every(x=>x.ok===(installed&&x.target)&&x.can_grant===false),"NO_DIRECT_TABLE_OR_OTHER_FUNCTION_GRANTS");
+ const allowed=installed?[...REQUIRED_FUNCTIONS,CONDITIONAL_POST_FN]:REQUIRED_FUNCTIONS;
+ const funcs=(await c.query("SELECT reviewed.sig,p.oid=to_regprocedure($3)::oid target,has_function_privilege($1,p.oid,'EXECUTE') ok,has_function_privilege($1,p.oid,'EXECUTE WITH GRANT OPTION') can_grant FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace LEFT JOIN unnest($4::text[]) reviewed(sig) ON p.oid=to_regprocedure(reviewed.sig)::oid WHERE n.nspname=$2",[ROLE,SCHEMA,FN,allowed])).rows;
+ need(direct.n===0&&funcs.length>=REQUIRED_FUNCTIONS.length&&funcs.length<=allowed.length&&
+  REQUIRED_FUNCTIONS.every(sig=>funcs.filter(x=>x.sig===sig).length===1)&&
+  funcs.every(x=>allowed.includes(x.sig)&&x.target===(x.sig===FN)&&x.ok===(installed&&x.target)&&x.can_grant===false),
+  "NO_DIRECT_TABLE_OR_OTHER_FUNCTION_GRANTS");
 }
 /** Real PRE writer-role check, without executing the writer on fake data
  * or granting direct policy table access. Caller uses existing Stage28. */

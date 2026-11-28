@@ -237,3 +237,16 @@ test("T146 conditional Packet B worker successor preserves callback publication 
  assertHold(runGuard({base,fixture:{changes:{...changes,[base]:[]}}}));
  assertHold(runGuard({base,fixture:{changes:{...changes,[base]:[...p7,"server/index.ts"]}}}));
 });
+
+test("F026 #985 exact PRE writer compatibility worker change refuses callback publication",()=>{
+ const base="f441a5e6cde2a6bf8d3ca4be6b5b3219aa1c04fe",changed="server/lib/disruption/phase7PrePolicyCommission_v39.ts";
+ const heartbeat="server/lib/disruption/phase6AutonomousGithubControllerHeartbeat_v39.mjs";
+ const full=[...postUnion,"server/lib/disruption/phase7PostScopedGroup_v39.ts",changed,heartbeat];
+ assert.equal(full.length,16);
+ const exact=[changed,heartbeat,"server/lib/disruption/phase6LaterT24EvidenceBatchReadOnly_v39.ts","server/lib/disruption/phase7PostScopedGroup_v39.ts"];
+ const changes={[BASE]:full,[base]:exact,[PIN]:full};
+ const result=runGuard({base,fixture:{changes}});
+ assert.equal(result.status,0,result.stdout+result.stderr);assert.equal(result.stdout.trim(),passMarker);
+ for(const incomplete of full.map(path=>full.filter(x=>x!==path)))assertHold(runGuard({base,fixture:{changes:{...changes,[BASE]:incomplete}}}));
+ for(const invalid of [[],...exact.map(path=>exact.filter(x=>x!==path)),[...exact,"server/unreviewed.ts"],[...exact,WRAPPER]])assertHold(runGuard({base,fixture:{changes:{...changes,[base]:invalid}}}));
+});

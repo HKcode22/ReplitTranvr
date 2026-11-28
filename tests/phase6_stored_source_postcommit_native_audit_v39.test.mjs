@@ -69,7 +69,7 @@ test("feature readback is not called without approved purpose; mismatched privat
 });
 
 
-import {admitP6NativeLaterRuntime,planP6NativeLaterAppendScope,p6NativeLaterReadbackDiagnostics,selectP6ConditionalT24ReviewPage,admitP6ConditionalT24Reviewer,selectP6ConditionalLaterPage,planP6ConditionalLaterAppendScope,admitP6ConditionalLaterReviewer,p6PreflightConditionalReadiness} from "../scripts/v39_phase6_stored_source_postcommit_native_later_v39.mjs";
+import {admitP6NativeLaterRuntime,planP6NativeLaterAppendScope,p6NativeLaterReadbackDiagnostics,selectP6ConditionalT24ReviewPage,admitP6ConditionalT24Reviewer,selectP6ConditionalLaterPage,planP6ConditionalLaterAppendScope,admitP6ConditionalLaterReviewer,p6PreflightConditionalReadiness,requireP6ConditionalPreflightClock} from "../scripts/v39_phase6_stored_source_postcommit_native_later_v39.mjs";
 function runtimeFixture(){
  const dayKey=generateKeyPairSync("ed25519"),queryKey=generateKeyPairSync("ed25519"),laterKey=generateKeyPairSync("ed25519"),custodyKey=generateKeyPairSync("ed25519");
  const fp=k=>sha(k.publicKey.export({type:"spki",format:"der"})),pem=k=>k.publicKey.export({type:"spki",format:"pem"}).toString(),
@@ -268,4 +268,19 @@ test("T079 preflight distinguishes native-only, future, current witnessed-only a
  assert.equal(p6PreflightConditionalReadiness({...x,conditionalLaterReviewer:{...v,scope:{independentlyApprovedStandaloneProtocolSha256:"PRIVATE_NOT_PRINTED"}}},now).standaloneNoT24,"SEPARATE_POLICY_ADMITTED");
  assert.equal(p6PreflightConditionalReadiness(x,v.validUntilUtc).conditionalLater,"EXPIRED");
  assert.throws(()=>p6PreflightConditionalReadiness(x,"bad"),/PREFLIGHT_CLOCK/);
+});
+
+test("F026 conditional day must have all admitted PRE preservation actors before source spend, never confuse future-only actor readiness",()=>{
+ const effective="2026-11-29T02:45:00.000Z",expires="2026-12-30T00:00:00.000Z",before="2026-11-28T13:00:00.000Z",now="2026-11-30T00:00:00.000Z";
+ const f={approved:true,protocolSha256:"a".repeat(64),externalContentUseReviewSha256:"b".repeat(64)};
+ const scope={protocolSha256:f.protocolSha256,externalContentUseReviewSha256:f.externalContentUseReviewSha256};
+ const t={scope,validFromUtc:effective,validUntilUtc:expires},l={...t,day:{validFromUtc:effective,validUntilUtc:expires}};
+ const x={nativeT24PolicyTransition:{firstConditionalRunDayIndex:5,conditionalEffectiveUtc:effective},c:{selector:{runDayIndex:5},policy:{conditionalPreFeatureReview:f}},conditionalT24Reviewer:t,conditionalLaterReviewer:l,conditionalAppendApproval:{}};
+ requireP6ConditionalPreflightClock(x,before,true);
+ requireP6ConditionalPreflightClock(x,now,false);
+ assert.throws(()=>requireP6ConditionalPreflightClock(x,before,false),/CONDITIONAL_T24_REVIEWER_CLOCK/);
+ for(const patch of [{conditionalT24Reviewer:null},{conditionalLaterReviewer:null},{conditionalAppendApproval:null},{conditionalLaterReviewer:{...l,scope:{...scope,protocolSha256:"c".repeat(64)}}},{conditionalLaterReviewer:{...l,day:{...l.day,validUntilUtc:now}}},{c:{...x.c,policy:{}}}])
+  assert.throws(()=>requireP6ConditionalPreflightClock({...x,...patch},now,true),/CHAIN_NOT_READY/);
+ assert.throws(()=>requireP6ConditionalPreflightClock(x,expires,true),/CHAIN_NOT_READY|REVIEWER_CLOCK/);
+ requireP6ConditionalPreflightClock({...x,c:{selector:{runDayIndex:4}},conditionalT24Reviewer:null,conditionalLaterReviewer:null,conditionalAppendApproval:null},before,false);
 });

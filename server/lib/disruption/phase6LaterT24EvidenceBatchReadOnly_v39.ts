@@ -146,7 +146,9 @@ async function readP6ExactSelectedLaterT24Evidence(pool:Pick<Pool,"connect">,sel
  if(postCommittedT6&&(!conditionalFrozenT24SourceWindow||!conditionalMetadataReaderLogin||selected.some(e=>e.source.horizon!=="T-6h")))hold("POST_WITNESS_PRIVATE_MODE");
  const c=await pool.connect();let begun=false,rollbackAttempted=false,discard=false;
  try{
-  await c.query("BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY");begun=true;
+  // The server can start a transaction before the BEGIN acknowledgement
+  // is lost. Reconcile on this exact session before returning it to a pool.
+  begun=true;await c.query("BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY");
   await c.query("SET LOCAL statement_timeout='10000ms'");
   await c.query("SET LOCAL lock_timeout='2000ms'");
   let now:number;
@@ -236,8 +238,12 @@ async function readP6ExactSelectedLaterT24Evidence(pool:Pick<Pool,"connect">,sel
    candidateCount:decisions.length,counts,sourceRightsCertified:false,reviewedPacketsIssued:0,providerCalls:0,databaseWrites:0,phase6PaidGo:false};
   return Object.freeze(Object.defineProperty(report,"privateDecisions",{value:Object.freeze(decisions),enumerable:false})) as typeof report&{readonly privateDecisions:readonly Decision[]};
  }finally{
-  if(begun&&!rollbackAttempted){try{await c.query("ROLLBACK");}catch{discard=true;}}
-  if(discard)c.release(true);else c.release();
+  try{
+   if(begun&&!rollbackAttempted){
+    rollbackAttempted=true;
+    try{await c.query("ROLLBACK");}catch{discard=true;hold("ROLLBACK_UNACKNOWLEDGED");}
+   }
+  }finally{if(discard)c.release(true);else c.release();}
  }
 }
 

@@ -327,6 +327,12 @@ export function summarizeP6ControllerHeartbeat(assessments,observedAtUtc){
 }
 // Existing standalone release lanes. This is notification-only metadata,
 // not an additional authorization switch, scheduler or provider/DB read.
+const DAILY_PREPARE_PAUSE_KEY="P6_NONPAID_SOURCE_SCHEDULE_ENABLED";
+const DAILY_PREPARE_JOB="protected-main-one-day-nonpaid";
+const dailyPreparePaused=(env,job,runId)=>env[DAILY_PREPARE_PAUSE_KEY]==="false"&&
+ job?.name===DAILY_PREPARE_JOB&&job.run_id===runId&&job.head_sha===env.GITHUB_SHA&&
+ job.run_attempt===1&&job.status==="completed"&&job.conclusion==="skipped"&&
+ (job.steps==null||Array.isArray(job.steps)&&job.steps.length===0);
 const P6_EXPECTED_ACTIVE_JOBS=Object.freeze({
  EARLY_DRAW:[["gated-exact-early-parent","Select max ONE genuinely due future parent under actual DB clock and existing serializable owner"]],
  SOURCE:[["separately-authorized-stored-source-children","Dispatch stored SOURCE exact children"],["separately-authorized-current-private-post-children","Dispatch current private POST exact children"],["separately-authorized-native-post-producer","Review and publish bounded current POST windows with independent readback"]],
@@ -402,7 +408,14 @@ export async function observeP6IndependentDispatches(report,env,readGithub){
     const required=requirements.map(([name])=>j.jobs.filter(x=>x.name===name&&x.run_id===row.id&&x.head_sha===env.GITHUB_SHA&&x.run_attempt===1&&Number.isSafeInteger(x.id)&&x.id>0));
     // Ignore verification-only or unrelated manual dispatches. Mixed job
     // results are retained, never treat parent red as failure of every job.
-    if(required.some(x=>x.length!==1)||required.every(x=>x[0].conclusion==="skipped"))continue;
+    if(required.some(x=>x.length!==1))continue;
+    // The exact deliberately paused preparation job is a real skip, not an
+    // executed preparation. Do not substitute an older skipped dispatch for
+    // a newer missing, pending, failed or unverified worker.
+    if(required.every(x=>x[0].conclusion==="skipped")){
+     if(lane!=="DAILY_PREPARE"||row!==rows[0]||row.conclusion!=="skipped"||
+        j.total_count!==j.jobs.length||!dailyPreparePaused(env,required[0][0],row.id))continue;
+    }
     out[lane]={state:"INDEPENDENT_WORKER_JOBS_OBSERVED_NOT_COLLECTION_PROOF",runId:row.id,createdAtUtc:row.created_at,
       parentConclusion:row.conclusion,jobs:required.map(x=>x[0])};
     break;
@@ -453,6 +466,10 @@ export async function reviewP6ActiveStandaloneNotifications(report,env,readGithu
  if(![undefined,"","false","true"].includes(expected))fail("INVALID_NOTIFICATION_EXPECTATION");
  const incidents=[],intentionalPauses=[],handoverPending=[];
  const paused=(lane,job,runId)=>{
+  if(lane==="DAILY_PREPARE"&&dailyPreparePaused(env,job,runId)){
+   intentionalPauses.push({lane,job:job.name,runId,reason:"EXPLICIT_DAILY_PREPARATION_PAUSE_NOT_EXECUTION"});
+   return true;
+  }
   const key=P6_PAUSABLE_SOURCE_JOBS[job?.name];
   if(lane!=="SOURCE"||!key||env[key]!=="false"||job.status!=="completed"||job.conclusion!=="skipped")return false;
   intentionalPauses.push({lane,job:job.name,runId,reason:"EXPLICIT_PAID_ROUTE_PAUSE_NOT_COLLECTION"});
@@ -494,7 +511,10 @@ export async function reviewP6ActiveStandaloneNotifications(report,env,readGithu
    if(!run||c.historicalCadence.latestAgeExceedsExpected){add("SCHEDULE_MISSING_OR_STALE");continue;}
    if(run.headSha!==env.GITHUB_SHA){add("CURRENT_MAIN_EXECUTION_NOT_OBSERVED");continue;}
    if(run.status!=="completed")continue;
-   if(run.conclusion!=="success"){add("EXPECTED_SCHEDULE_NOT_SUCCESSFUL");continue;}
+   if(run.conclusion!=="success"&&!(lane==="DAILY_PREPARE"&&
+      env[DAILY_PREPARE_PAUSE_KEY]==="false"&&run.conclusion==="skipped")){
+    add("EXPECTED_SCHEDULE_NOT_SUCCESSFUL");continue;
+   }
    let body;
    try{body=await readGithub(ROOT+"/actions/runs/"+run.id+"/jobs?filter=latest&per_page=50");}
    catch{add("JOB_EVIDENCE_UNAVAILABLE");continue;}

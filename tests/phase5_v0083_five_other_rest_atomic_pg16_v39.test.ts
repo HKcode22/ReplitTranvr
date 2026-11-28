@@ -8,6 +8,7 @@ import {Pool,type PoolClient} from "pg";
 import {createHash,randomUUID} from "node:crypto";
 import {readFileSync} from "node:fs";
 import {afterAll,beforeAll,describe,it,expect} from "vitest";
+import {readP5BRestBudget} from "../scripts/v39_phase5b_budget_reconcile_owner.mjs";
 import {readP6RestLedgerAccounting} from "../server/lib/disruption/phase6RollingRestSettlementReadback_v39.mjs";
 
 const URL="postgresql://postgres:postgres@localhost:5432/neondb?sslmode=disable";
@@ -373,6 +374,11 @@ suite("V0083 5 actual REST budget categories (real disposable PG16)",()=>{
    expect(out.children[1].disposition).toBe("NO_RESERVATION_ROW_FOUND_NOT_BILL_PROOF");
    expect(out.manifestCategoryAccounting.completeAndConsistent).toBe(true);
    expect(out.manifestCategoryAccounting.ledgerUnits).toBe(13);
+   const expected={manifest,calendar:cal,caps:[2,0,2,4,3,5,1],chargeDays:1,totalUnits:17,peakDailyUnits:17};
+   const whole=await readP5BRestBudget(c,expected,"postgres");
+   expect(whole).toMatchObject({status:"REST_LEDGER_RECONCILED_NOT_BILLING_OR_PAID_GO",plannedUnits:17,
+    irreversibleReservedUnits:13,fidsReservedUnits:0,otherReservedUnits:13,mismatchCount:0,phase6PaidGo:false});
+   await expect(readP5BRestBudget(c,{...expected,caps:[2,0,2,4,4,5,1]},"postgres")).rejects.toThrow("FROZEN_CAP_DRIFT");
    expect(out.actualProviderBilledUnitsVerified).toBe(false);
    expect(out.permitClose).toBe(false);
    const separate=await readP6RestLedgerAccounting({manifestSha256:manifest,epochUtc:dispatch,chainDeadlineUtc:latest,paidCapableChildRuns:[]},c,{expectedActor:"postgres"});

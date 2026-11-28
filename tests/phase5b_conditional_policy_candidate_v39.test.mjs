@@ -54,7 +54,7 @@ test("T089 exact checked-in 31-plan bytes bind preparation clock and cover all p
 });
 
 import {deriveP6NativeT24PolicyTransition,matchesP6T24RegistryPolicyDigest,verifyP6T24PrivateRegistry,p6T24RegistryReviewPreimage} from "../server/lib/disruption/phase6PrivateT24RegistryTransport_v39.mjs";
-import {requireP6ConditionalPreflightClock} from "../scripts/v39_phase6_stored_source_postcommit_native_later_v39.mjs";
+import {requireP6ConditionalPreflightClock,admitP6ConditionalT24Reviewer,admitP6ConditionalLaterReviewer} from "../scripts/v39_phase6_stored_source_postcommit_native_later_v39.mjs";
 test("T095 exact additive successor retains only earlier native registry digest",()=>{
  const x=prepare(inputs),d=JSON.parse(x.privatePolicyBytes.daily),transition=deriveP6NativeT24PolicyTransition(d);
  assert.equal(transition.previousDailyPolicySha256,baseDigests.daily);
@@ -71,9 +71,20 @@ test("T095 exact additive successor retains only earlier native registry digest"
 });
 test("T096 earlier native day does not inherit future conditional clock",()=>{
  const d=JSON.parse(prepare(inputs).privatePolicyBytes.daily);
- const scope={nativeT24PolicyTransition:deriveP6NativeT24PolicyTransition(d),c:{selector:{runDayIndex:4}},conditionalT24Reviewer:d.conditionalT24PermitReview,conditionalLaterReviewer:d.conditionalLaterPermitReview};
+ // Exercise the actual Ed25519 reviewer admissions from the derived policy,
+ // not raw JSON lookalikes. Retain the earlier-native compatibility test.
+ const env={P6_PHASE7_PRE_LANE_EVIDENCE_AUTHORITY_FINGERPRINT_SHA256:publicPins.laneFingerprintSha256,
+  P6_PHASE7_PRE_PROOF_REVIEWER_FINGERPRINT_SHA256:publicPins.proofFingerprintSha256,
+  P6_PHASE7_PRE_LANE_EVIDENCE_AUTHORITY_PUBLIC_KEY_BASE64:publicPins.lanePublicKeyBase64,
+  P6_CONDITIONAL_LATER_METADATA_READ_ENABLED:"1"};
+ const t=admitP6ConditionalT24Reviewer(env,d,trust),l=admitP6ConditionalLaterReviewer(env,d,trust);
+ const scope={nativeT24PolicyTransition:deriveP6NativeT24PolicyTransition(d),c:{selector:{runDayIndex:4},policy:d},
+  conditionalT24Reviewer:t,conditionalLaterReviewer:l,conditionalAppendApproval:{policyBytes:buf(l.day)}};
  assert.doesNotThrow(()=>requireP6ConditionalPreflightClock(scope,now,false));
- const marked={...scope,c:{selector:{runDayIndex:5}}};
+ const marked={...scope,c:{...scope.c,selector:{runDayIndex:5}}};
+ assert.doesNotThrow(()=>requireP6ConditionalPreflightClock(marked,now,true));
+ assert.throws(()=>requireP6ConditionalPreflightClock({...marked,conditionalLaterReviewer:null},effective,true),/CONDITIONAL_PRESERVATION_CHAIN_NOT_READY/);
+ assert.throws(()=>requireP6ConditionalPreflightClock({...marked,conditionalAppendApproval:null},effective,true),/CONDITIONAL_PRESERVATION_CHAIN_NOT_READY/);
  assert.throws(()=>requireP6ConditionalPreflightClock(marked,now,false),/CONDITIONAL_T24_REVIEWER_CLOCK/);
  assert.doesNotThrow(()=>requireP6ConditionalPreflightClock(marked,effective,false));
  assert.throws(()=>requireP6ConditionalPreflightClock(marked,end,false),/CONDITIONAL_T24_REVIEWER_CLOCK/);

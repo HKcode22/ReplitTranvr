@@ -91,7 +91,7 @@ test("T060 each named failure in a multi-failure T must match its own implementa
 });
 
 const matrixPath=new URL("../data-collection/phase5b/closure-matrix.json",import.meta.url);
-const reviewedClosedIds=Object.freeze(["F001","F002","F004","F006","F009","F013","F022","F025","F028","F032","F035","F040","F043","F047","F048","F049","F050","F052","F055","F056","F057","F058","F059"]);
+const reviewedClosedIds=Object.freeze(["F001","F002","F004","F006","F009","F013","F022","F025","F028","F032","F035","F040","F043","F047","F049","F050","F052","F055","F056","F057","F058","F059"]);
 function validateClosure(m,rows){
  const fs=rows.filter(r=>r[0].startsWith("F"));
  assert.equal(m.failures.length,fs.length,"lost failure");
@@ -128,6 +128,7 @@ test("T116 refuses premature closure, duplicates, omissions, count and risk drif
  const bad=change=>{const m=structuredClone(original);change(m);assert.throws(()=>validateClosure(m,rows));};
  bad(m=>{m.failures.find(f=>f.id==="F027").closureStatus="CLOSED";});
  bad(m=>{const f=m.failures.find(f=>f.id==="F027");f.classification="NARROW_CORRECTION_RECORDED";f.closureStatus="CLOSED";f.closureEvidence=rows.find(r=>r[0]==="F027")[2];m.counts.narrowCorrected++;m.counts.partialOrOpen--;m.binaryClosure.closed++;m.binaryClosure.notClosed--;});
+ bad(m=>{const f=m.failures.find(f=>f.id==="F048");f.classification="NARROW_CORRECTION_RECORDED";f.closureStatus="CLOSED";f.closureEvidence=rows.find(r=>r[0]==="F048")[2];m.counts.narrowCorrected++;m.counts.partialOrOpen--;m.binaryClosure.closed++;m.binaryClosure.notClosed--;});
  bad(m=>{m.failures[1]=structuredClone(m.failures[0]);});
  bad(m=>{m.failures.pop();});
  bad(m=>{m.binaryClosure.closed++;});

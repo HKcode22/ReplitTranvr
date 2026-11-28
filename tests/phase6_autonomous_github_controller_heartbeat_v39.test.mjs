@@ -544,3 +544,39 @@ test("T052 paid route configuration remains explicit when arm is off or unknown,
  assert.equal(report.paidRouteConfiguration.status,"BOTH_PAID_PARENTS_EXPLICITLY_PAUSED");
  assert.equal(report.flightCollectionVerified,false);
 });
+
+test("F041/T052: exact current-main daily preparation skip under explicit pause, never missing or executed work",async()=>{
+ const a=P6_EXISTING_CONTROLLER_LANES.map((l,i)=>reviewP6OneScheduledController(l,[run(i+100,{conclusion:"success",created:"2026-11-13T18:00:00Z"})],T));
+ const report=summarizeP6ControllerHeartbeat(a,T),daily=a.find(x=>x.lane==="DAILY_PREPARE");
+ const arm={...env(),P6_HEARTBEAT_COLLECTION_EXPECTED:"true",P6_ROLLING_CONTROLLER_ENABLED:"1",P6_ROLLING_DIRECT_RECOVERY_ENABLED:"0",P6_NONPAID_SOURCE_SCHEDULE_ENABLED:"false"};
+ const row={...run(950,{event:"workflow_dispatch",conclusion:"skipped",created:"2026-11-14T01:59:00Z"}),path:".github/workflows/"+daily.workflow,run_attempt:1};
+ const job={id:951,run_id:950,head_sha:ID,run_attempt:1,name:"protected-main-one-day-nonpaid",status:"completed",conclusion:"skipped",steps:[]};
+ const read=(rows=[row],jobs=[job],total=jobs.length)=>async url=>{
+  if(url.includes("/runs/950/jobs"))return {total_count:total,jobs};
+  if(url.includes(daily.workflow))return {workflow_runs:rows};
+  return {workflow_runs:[]};
+ };
+ const obs=await observeP6IndependentDispatches(report,arm,read());
+ assert.equal(obs.DAILY_PREPARE.runId,950);
+ const verify=async(e,o)=>reviewP6ActiveStandaloneNotifications({...report,independentDispatchObservations:o},e,async()=>{throw Error("no schedule evidence")});
+ const paused=await verify(arm,obs);
+ assert.equal(paused.incidents.filter(i=>i.lane==="DAILY_PREPARE").length,0);
+ assert.deepEqual(paused.intentionalPauses.filter(i=>i.lane==="DAILY_PREPARE"),[{lane:"DAILY_PREPARE",job:job.name,runId:950,reason:"EXPLICIT_DAILY_PREPARATION_PAUSE_NOT_EXECUTION"}]);
+ assert.equal(paused.realDueDrawOrPreparationVerified,false);
+ assert.equal(paused.flightCollectionVerified,false);
+ assert.equal(paused.providerCalls,0);
+ for(const e of [{...arm,P6_NONPAID_SOURCE_SCHEDULE_ENABLED:"true"},{...arm,P6_NONPAID_SOURCE_SCHEDULE_ENABLED:undefined}]){
+  const o=await observeP6IndependentDispatches(report,e,read());
+  assert((await verify(e,o)).incidents.some(i=>i.lane==="DAILY_PREPARE"));
+ }
+ for(const reader of [read([],[]),read([row],[{...job,head_sha:"c".repeat(40)}]),read([row],[{...job,conclusion:"failure"}]),read([row],[job],2),read([row],[{...job,steps:[{name:"unexpected"}]}]),read([{...row,id:952,created_at:"2026-11-14T02:00:00Z",status:"in_progress",conclusion:null},row])]){
+  const o=await observeP6IndependentDispatches(report,arm,reader);
+  assert((await verify(arm,o)).incidents.some(i=>i.lane==="DAILY_PREPARE"));
+ }
+ const scheduled=structuredClone(report),d=scheduled.controllerStates.find(x=>x.lane==="DAILY_PREPARE");
+ d.historicalCadence.latestAgeExceedsExpected=false;
+ d.mostRecentRun={...d.mostRecentRun,id:950,headSha:ID,status:"completed",conclusion:"skipped"};
+ const sr=await reviewP6ActiveStandaloneNotifications(scheduled,arm,read());
+ assert.equal(sr.incidents.filter(i=>i.lane==="DAILY_PREPARE").length,0);
+ assert.equal(sr.intentionalPauses.find(i=>i.lane==="DAILY_PREPARE").reason,"EXPLICIT_DAILY_PREPARATION_PAUSE_NOT_EXECUTION");
+});

@@ -127,7 +127,28 @@ describe.skipIf(url!=="postgresql://postgres:postgres@127.0.0.1:5432/neondb?sslm
    const preLogin=new Pool({connectionString:url!.replace("postgres:postgres@","phase5_p30_pre_login_20261107:ci-pre-only@"),max:1});
    const scopedPre={connect:async()=>{const c=await preLogin.connect();try{await c.query("SET ROLE "+P5_STAGE28_GROUPS.pre);return c;}catch(e){c.release(true);throw e}}};
    try{expect(await inspectPhase7PreWriterRole(scopedPre)).toMatchObject({providerCalls:0,databaseWrites:0});
-    await expect(inspectPhase7PreWriterRole(pool)).rejects.toThrow("RESTRICTED_ACTUAL_WRITER");}
+    await expect(inspectPhase7PreWriterRole(pool)).rejects.toThrow("RESTRICTED_ACTUAL_WRITER");
+    // F026/F042: the exact staged conditional reader must not disable the
+    // already commissioned PRE writer. Test actual schema and actor ACLs.
+    const sig="phase7_private.read_bound_conditional_t6_group_v39(text,bigint,text,text,integer,text,text,text)";
+    const sql=(await import("node:fs")).readFileSync("migrations/staged/V0115__phase5b_conditional_t6_scoped_packet_b_read_v39.sql","utf8");
+    await pool.query(sql);
+    await pool.query("GRANT EXECUTE ON FUNCTION "+sig+" TO "+P7_INERT_ROLES.postScopedReader);
+    expect(await inspectPhase7PreWriterRole(scopedPre)).toMatchObject({providerCalls:0,databaseWrites:0});
+    expect(await inspectPhase7PrePolicyCommission(pool,compiled)).toMatchObject({policyRows:1});
+    await pool.query("GRANT EXECUTE ON FUNCTION "+sig+" TO "+P5_STAGE28_GROUPS.pre);
+    await expect(inspectPhase7PreWriterRole(scopedPre)).rejects.toThrow("NO_DIRECT_TABLE_OR_OTHER_FUNCTION_GRANTS");
+    await pool.query("REVOKE EXECUTE ON FUNCTION "+sig+" FROM "+P5_STAGE28_GROUPS.pre);
+    await pool.query("GRANT EXECUTE ON FUNCTION "+sig+" TO PUBLIC");
+    await expect(inspectPhase7PreWriterRole(scopedPre)).rejects.toThrow("NO_DIRECT_TABLE_OR_OTHER_FUNCTION_GRANTS");
+    await pool.query("REVOKE EXECUTE ON FUNCTION "+sig+" FROM PUBLIC");
+    await pool.query("CREATE FUNCTION phase7_private.read_bound_conditional_t6_group_v39(integer) RETURNS int LANGUAGE sql AS 'SELECT 1'; REVOKE ALL ON FUNCTION phase7_private.read_bound_conditional_t6_group_v39(integer) FROM PUBLIC");
+    await expect(inspectPhase7PreWriterRole(scopedPre)).rejects.toThrow("NO_DIRECT_TABLE_OR_OTHER_FUNCTION_GRANTS");
+    await pool.query("DROP FUNCTION phase7_private.read_bound_conditional_t6_group_v39(integer)");
+    expect(await inspectPhase7PreWriterRole(scopedPre)).toMatchObject({providerCalls:0,databaseWrites:0});
+    await pool.query("DROP FUNCTION "+sig);
+    console.log("F026_V0115_PRE_WRITER_ACTUAL_ROLE_PARITY_AND_REFUSALS_PASS");
+   }
    finally{await preLogin.end();}
    checkPhase7PrePolicyStructure(JSON.parse(fx.raw.toString("utf8")),fx.scope.firstSourceUtc);
    await pool.query("GRANT SELECT ON phase7_private.pre_fragment_v39 TO "+P5_STAGE28_GROUPS.pre);

@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import {project,projectNearExpiryRows,readInventory} from "../scripts/v39_phase5b_retention_p7_inventory_owner.mjs";
+import {project,projectNearExpiryRows,readInventory,projectStudyPreservationRows} from "../scripts/v39_phase5b_retention_p7_inventory_owner.mjs";
 const row={"run_day_index":2,"horizon":"T-6h","bindings":44,"timely_bindings":44,"live_payloads":0,"expired_metadata_only":44,"other_custody":0,"historical_members":500,"linked_pre_rows":0,"cutoff_safe_pre_rows":0},b={"rows":0,"unexpired":0,"links":0,"policies":1},at="2026-11-27T08:41:46.236Z";
 test("T114 expired original metadata remains an acquisition, not a retained PRE",()=>{
  const x=project([row],[],b,at);
@@ -82,4 +82,16 @@ test("T127 rejects a denominator mismatch, expired candidate, malformed scope, a
  assert.throws(()=>projectNearExpiryRows([{...near,slot_id:"UNKNOWN"}],"2026-11-28T00:30:00.000Z",1),/SIGNED_SCOPE/);
  const redacted=projectNearExpiryRows([{...near,population_query_id:"must-not-leak"}],"2026-11-28T00:30:00.000Z",1);
  assert.equal(JSON.stringify(redacted).includes("must-not-leak"),false);
+});
+
+test("S011 live exact source/PRE/Packet B metadata separate from training eligibility and historical loss",()=>{
+ const x={run_day_index:4,horizon:"T-6h",near_expiry_ordinal:1,exact_source_binding:true,linked_pre_rows:3,cutoff_safe_pre_rows:2,exact_live_pre_rows:2,live_packet_b_link_rows:1};
+ const expected={candidates:[{studyScope:"ACTIVE_STUDY_SCOPE",candidateOrdinal:1,runDayIndex:4,horizon:"T-6h",sourceLinkedPreRows:3,cutoffSafeSourceLinkedPreRows:2}]};
+ const v=projectStudyPreservationRows([x,{...x,near_expiry_ordinal:null,linked_pre_rows:0,cutoff_safe_pre_rows:0,exact_live_pre_rows:0,live_packet_b_link_rows:0,population_query_id:"private"}],expected);
+ assert.equal(v.cells[0].liveOriginals,2);assert.equal(v.cells[0].livePacketBMetadataLinks,1);
+ assert.equal(v.nearExpiry[0].exactLivePreWithoutLivePacketBMetadataLink,1);
+ assert.equal(v.trainingEligibilityCertified,false);assert.equal(v.missingLiveLinkNotProofOfHistoricalLoss,true);
+ assert.equal(JSON.stringify(v).includes("private"),false);
+ for(const patch of [{live_packet_b_link_rows:3},{exact_source_binding:false},{near_expiry_ordinal:2},{cutoff_safe_pre_rows:1}])assert.throws(()=>projectStudyPreservationRows([{...x,...patch}],expected),/METADATA_SCOPE/);
+ assert.throws(()=>projectStudyPreservationRows([x,x]),/METADATA_SCOPE/);
 });

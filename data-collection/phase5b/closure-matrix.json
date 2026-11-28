@@ -1,11 +1,11 @@
 {
-  "asOfUtc": "2026-11-28T10:12:29Z",
-  "exactCandidate": "d9ab4eda6083edc9e0b390d9ae40b9254bcab313",
+  "asOfUtc": "2026-11-28T13:46:18Z",
+  "exactCandidate": "a75c894b5906d675251c39d61b5ce54ba90a06b2",
   "canonicalRegister": "../phase6/RECOVERY_REGISTER.md",
   "counts": {
-    "narrowCorrected": 23,
+    "narrowCorrected": 22,
     "exactCiGreenPendingDeployment": 0,
-    "partialOrOpen": 34,
+    "partialOrOpen": 35,
     "historicalLoss": 2
   },
   "failures": [
@@ -80,7 +80,7 @@
         "I143",
         "I144"
       ],
-      "next": "Tokenless policy derivation deployed; actual protected preview 46140377128 passed. Verify inactive then active configuration, and genuine future conditional admission.",
+      "next": "Actual protected active policy readback 46146440443 and owner quiescence reconciliation completed. Candidate checks independent signer readiness before paid SOURCE. Genuine future eligible signed conditional admission, PRE and durable preservation remain required.",
       "closureStatus": "NOT_CLOSED",
       "scientificRisk": "P0_SCIENTIFIC",
       "workstream": "preservation_admission"
@@ -424,7 +424,7 @@
         "I144",
         "I148"
       ],
-      "next": "Tokenless policy derivation deployed; actual protected preview 46140377128 passed. Verify inactive then active configuration, and genuine future conditional admission.",
+      "next": "Actual protected active policy readback 46146440443 and owner quiescence reconciliation completed. Candidate checks independent signer readiness before paid SOURCE. Genuine future eligible signed conditional admission, PRE and durable preservation remain required.",
       "closureStatus": "NOT_CLOSED",
       "scientificRisk": "P0_SCIENTIFIC",
       "workstream": "preservation_admission"
@@ -623,7 +623,7 @@
         "I147",
         "I149"
       ],
-      "next": "Actual PG16 46140847311 caught native-only scoped SQL rejecting committed conditional T6. Additive V0115 and separate conditional scoped reader candidate; exact PG16/CI and owner installation, independent T24 witness, protected issuer and actual settlement remain.",
+      "next": "Native-only scoped SQL failure reproduced in actual PG16 46140847311. Staged V0115 now binds the exact existing V0087 verified task and receipt, checks empty-page restricted admission; exact CI, paused owner commissioning, independent T24 witness, protected issuer and actual settlement remain.",
       "closureStatus": "NOT_CLOSED",
       "scientificRisk": "P0_SCIENTIFIC",
       "workstream": "outcome_truth"
@@ -690,15 +690,14 @@
     },
     {
       "id": "F048",
-      "classification": "NARROW_CORRECTION_RECORDED",
+      "classification": "PARTIAL_OR_OPEN",
       "implementations": [
         "I109"
       ],
-      "next": "Preserve the deployed narrow correction; no intentional recurrence test or broader scientific acceptance inferred.",
-      "closureStatus": "CLOSED",
+      "next": "Prior narrow correction remains deployed; new pooled T24 metadata BEGIN-acknowledgement defect requires exact PG16/CI and coordinated deployment. No production recurrence demonstrated.",
+      "closureStatus": "NOT_CLOSED",
       "scientificRisk": "OPERATIONAL",
-      "workstream": "preservation_admission",
-      "closureEvidence": "I108 swallowed an uncertain ROLLBACK; could return a success receipt despite unverified cleanup. Actual Stage28 adapter already destroys every connection on release; no actual pooled reuse or production recurrence established. Direct disposable pool fixture exercises cleanup semantics. Exact reviewed #982 tree equals deployed main 9426eda5f749e43b1e798b1c308f5c428f696882. Exact source-diagnostics CI 46130715325 and offline safety 46130715089 passed; owner paused cutover and full retention 46133273814 verified. Actual protected read-only custody run 46133743593 completed successfully on that main. The actual protected custody read completed; negative rollback/BEGIN regression refuses a receipt and discards the connection. No live rollback fault was induced."
+      "workstream": "preservation_admission"
     },
     {
       "id": "F049",
@@ -832,8 +831,8 @@
     }
   ],
   "binaryClosure": {
-    "closed": 23,
-    "notClosed": 36,
+    "closed": 22,
+    "notClosed": 37,
     "definition": "CLOSED only for an explicitly evidenced narrowly defined correction. Reproduced software defect plus exact regression and verified deployment can close that implementation defect without deliberately provoking an unsafe paid production fault. Scientific admission, preservation, outcome truth, historical losses and recurrence claims require their own positive evidence. No broader component or future recurrence guarantee."
   },
   "riskDefinition": {
