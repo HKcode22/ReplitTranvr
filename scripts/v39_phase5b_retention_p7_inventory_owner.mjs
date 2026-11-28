@@ -87,8 +87,14 @@ export function projectNearExpiryRows(rows,observedAtUtc,globalNextHourCount){
   let reconciliation;
   if(scope!=="ACTIVE_STUDY_SCOPE")reconciliation="NOT_IN_ACTIVE_STUDY_SCOPE";
   else if(expected!==observedMembers)reconciliation="MEMBER_BINDING_COUNT_MISMATCH_HOLD";
+  else if(taskStates.WRITE_STARTED_UNKNOWN>0||taskStates.QUARANTINED>0)
+   reconciliation="UNCERTAIN_WRITE_REQUIRES_INDEPENDENT_RECONCILIATION_NO_REPLAY";
+  else if(cutoffSafe>0)reconciliation="CUTOFF_SAFE_PRE_PRESENT_PACKET_B_LINK_UNVERIFIED";
+  else if(taskStates.VERIFIED_ON_TIME>0||pre>0)
+   reconciliation="COMMIT_RECEIPT_OR_PRE_CLOCK_REQUIRES_INDEPENDENT_RECONCILIATION";
   else if(timeScreen>0)reconciliation="NATIVE_CUTOFF_LEAD_PRESCREEN_REQUIRES_FULL_REVIEW";
-  else reconciliation="NO_NATIVE_CUTOFF_LEAD_PRESCREEN_MEMBER";
+  else if(native>0)reconciliation="NATIVE_SHAPE_PRESENT_BUT_CUTOFF_LEAD_PRESCREEN_FAILED";
+  else reconciliation="NO_NATIVE_SHAPE_PASS_MEMBER";
   return {
    candidateOrdinal:ordinal,studyScope:scope,runDayIndex:day,airportStratum:slot,horizon,
    sourceAvailableAtUtc:sourceAt,rawPersistedAtUtc:persisted,accessDeadlineUtc:deadline,
@@ -108,8 +114,10 @@ export function projectNearExpiryRows(rows,observedAtUtc,globalNextHourCount){
   // Same-record intersection only. This is a necessary-condition screen,
   // never a count of finally eligible originals or approved Packet B links.
   approachingExpiryWithNativePreScreenOriginals:candidates.filter(x=>
-   x.studyScope==="ACTIVE_STUDY_SCOPE"&&x.cutoffLeadPreScreenMembers>0&&
-   x.cutoffSafeSourceLinkedPreRows===0).length,
+   x.reconciliation==="NATIVE_CUTOFF_LEAD_PRESCREEN_REQUIRES_FULL_REVIEW").length,
+  uncertainOriginalsRequiringReconciliation:candidates.filter(x=>
+   x.reconciliation==="UNCERTAIN_WRITE_REQUIRES_INDEPENDENT_RECONCILIATION_NO_REPLAY"||
+   x.reconciliation==="COMMIT_RECEIPT_OR_PRE_CLOCK_REQUIRES_INDEPENDENT_RECONCILIATION").length,
   nativeCutoffLeadPreScreenMembers:candidates.reduce((n,x)=>n+x.cutoffLeadPreScreenMembers,0),
   finalScientificEligibilityCertified:false,stage14PermitIssued:false,
   conditionalPolicyStateRead:false,packetBSourceLinkageForCandidates:false,

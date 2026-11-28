@@ -38,7 +38,7 @@ test("T127 reconciles each next-hour original to study scope and existing work w
  assert.equal(x.candidates[0].runDayIndex,4);
  assert.equal(x.candidates[0].airportStratum,"HUB");
  assert.equal(x.candidates[0].horizon,"T-24h");
- assert.equal(x.candidates[0].reconciliation,"NO_NATIVE_CUTOFF_LEAD_PRESCREEN_MEMBER");
+ assert.equal(x.candidates[0].reconciliation,"NO_NATIVE_SHAPE_PASS_MEMBER");
  assert.equal(x.candidates[0].existingV0087Tasks.total,0);
  assert.equal(x.candidates[0].sourceLinkedPreRows,0);
  assert.equal(x.candidates[0].privatePacketsForStudyDay.sourceLinkedToThisOriginal,false);
@@ -57,6 +57,24 @@ test("T127 no scoped open prescreen member cannot become a pending near-expiry o
  const x=projectNearExpiryRows([first,second],"2026-11-28T00:30:00.000Z",2);
  assert.equal(x.approachingExpiryWithNativePreScreenOriginals,0);
  assert.equal(x.nativeCutoffLeadPreScreenMembers,0);
+});
+test("T127 separates prospective prescreen, uncertain write, committed PRE, and clock failure",()=>{
+ const at="2026-11-28T00:30:00.000Z";
+ const projectOne=change=>projectNearExpiryRows([{...near,...change}],at,1);
+ const pending=projectOne({native_shape_pass_members:1,cutoff_lead_prescreen_members:1});
+ assert.equal(pending.approachingExpiryWithNativePreScreenOriginals,1);
+ assert.equal(pending.finalScientificEligibilityCertified,false);
+ const unknown=projectOne({native_shape_pass_members:1,cutoff_lead_prescreen_members:1,
+  task_count:1,task_write_started_unknown:1});
+ assert.equal(unknown.approachingExpiryWithNativePreScreenOriginals,0);
+ assert.equal(unknown.uncertainOriginalsRequiringReconciliation,1);
+ assert.match(unknown.candidates[0].reconciliation,/NO_REPLAY/);
+ const committed=projectOne({native_shape_pass_members:1,cutoff_lead_prescreen_members:1,
+  source_linked_pre_rows:1,cutoff_safe_pre_rows:1});
+ assert.equal(committed.candidates[0].reconciliation,"CUTOFF_SAFE_PRE_PRESENT_PACKET_B_LINK_UNVERIFIED");
+ assert.equal(committed.approachingExpiryWithNativePreScreenOriginals,0);
+ const clockFailed=projectOne({native_shape_pass_members:1,cutoff_lead_prescreen_members:0});
+ assert.equal(clockFailed.candidates[0].reconciliation,"NATIVE_SHAPE_PRESENT_BUT_CUTOFF_LEAD_PRESCREEN_FAILED");
 });
 test("T127 rejects a denominator mismatch, expired candidate, malformed scope, and unsafe row identity",()=>{
  assert.throws(()=>projectNearExpiryRows([near],"2026-11-28T00:30:00.000Z",2),/COUNT_OR_CLOCK/);
