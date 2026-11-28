@@ -42,13 +42,19 @@ elif [[ "$MODE" == DEPLOY_EXACT_REVIEWED_PAUSED_TARGET_983 || "$MODE" == RECOVER
  OLD=9426eda5f749e43b1e798b1c308f5c428f696882
  ROLD=2d96b22345908aa4334335aa899aec71b2fec2cb
  ROUTE_MODE=PAUSED
+elif [[ "$MODE" == DEPLOY_EXACT_REVIEWED_PAUSED_TARGET_984 || "$MODE" == RECOVER_EXACT_MERGED_PAUSED_TARGET_984 ]];then
+ TARGET_ONLY=1
+ TARGET_PR=984
+ OLD=a02e3d6eddc378871f030848235746de160b71e5
+ ROLD=2d96b22345908aa4334335aa899aec71b2fec2cb
+ ROUTE_MODE=PAUSED
 fi
 H="${2:-}"
 ENV=phase6-protected-runtime
 stage=ADMISSION
 hold(){ echo "HOLD_SOURCE_ONLY_CUTOVER stage=$stage reason=$1" >&2;exit 2; }
 trap 'echo "SOURCE_ONLY_CUTOVER_INTERRUPTED stage=$stage; inspect actual main and pins; never blindly replay" >&2' ERR
-[[ ( "$MODE" == DEPLOY_EXACT_REVIEWED_SOURCE_ONLY_SUCCESSOR || "$MODE" == DEPLOY_EXACT_REVIEWED_SOURCE_ONLY_TARGET_979 || "$MODE" == DEPLOY_EXACT_REVIEWED_SOURCE_ONLY_TARGET_980 || "$MODE" == RECOVER_EXACT_MERGED_SOURCE_ONLY_TARGET_980 || "$MODE" == DEPLOY_EXACT_REVIEWED_SOURCE_ONLY_TARGET_981 || "$MODE" == RECOVER_EXACT_MERGED_SOURCE_ONLY_TARGET_981 || "$MODE" == DEPLOY_EXACT_REVIEWED_SOURCE_ONLY_TARGET_982 || "$MODE" == RECOVER_EXACT_MERGED_SOURCE_ONLY_TARGET_982 || "$MODE" == DEPLOY_EXACT_REVIEWED_PAUSED_TARGET_982 || "$MODE" == RECOVER_EXACT_MERGED_PAUSED_TARGET_982 || "$MODE" == DEPLOY_EXACT_REVIEWED_PAUSED_TARGET_983 || "$MODE" == RECOVER_EXACT_MERGED_PAUSED_TARGET_983 ) && "$H" =~ ^[a-f0-9]{40}$ && "$#" == 2 ]] || hold EXACT_MODE
+[[ ( "$MODE" == DEPLOY_EXACT_REVIEWED_SOURCE_ONLY_SUCCESSOR || "$MODE" == DEPLOY_EXACT_REVIEWED_SOURCE_ONLY_TARGET_979 || "$MODE" == DEPLOY_EXACT_REVIEWED_SOURCE_ONLY_TARGET_980 || "$MODE" == RECOVER_EXACT_MERGED_SOURCE_ONLY_TARGET_980 || "$MODE" == DEPLOY_EXACT_REVIEWED_SOURCE_ONLY_TARGET_981 || "$MODE" == RECOVER_EXACT_MERGED_SOURCE_ONLY_TARGET_981 || "$MODE" == DEPLOY_EXACT_REVIEWED_SOURCE_ONLY_TARGET_982 || "$MODE" == RECOVER_EXACT_MERGED_SOURCE_ONLY_TARGET_982 || "$MODE" == DEPLOY_EXACT_REVIEWED_PAUSED_TARGET_982 || "$MODE" == RECOVER_EXACT_MERGED_PAUSED_TARGET_982 || "$MODE" == DEPLOY_EXACT_REVIEWED_PAUSED_TARGET_983 || "$MODE" == RECOVER_EXACT_MERGED_PAUSED_TARGET_983 || "$MODE" == DEPLOY_EXACT_REVIEWED_PAUSED_TARGET_984 || "$MODE" == RECOVER_EXACT_MERGED_PAUSED_TARGET_984 ) && "$H" =~ ^[a-f0-9]{40}$ && "$#" == 2 ]] || hold EXACT_MODE
 [[ "$(gh api user --jq .login)" == HKcode22 ]] || hold OWNER
 main(){ gh api "repos/$1/git/ref/heads/main" --jq .object.sha; }
 tree(){ gh api "repos/$1/git/commits/$2" --jq .tree.sha; }
@@ -95,7 +101,7 @@ ci(){
  j="$(gh api "repos/$repo/actions/runs?head_sha=$head&event=pull_request&per_page=100")"
  jq -e --arg h "$head" --argjson n "$minimum" '.total_count<=100 and (.workflow_runs|length)==.total_count and .total_count>=$n and all(.workflow_runs[];.head_sha==$h and .status=="completed" and .conclusion=="success" and .run_attempt==1)' <<<"$j" >/dev/null || hold EXACT_CI_NOT_ALL_GREEN
  if [[ "$repo" == "$R" && "$TARGET_ONLY" == 1 ]];then
-  if [[ "$TARGET_PR" == 981 || "$TARGET_PR" == 982 || "$TARGET_PR" == 983 ]];then
+  if [[ "$TARGET_PR" == 981 || "$TARGET_PR" == 982 || "$TARGET_PR" == 983 || "$TARGET_PR" == 984 ]];then
    target_981_ci_ok "$j" "$head" || hold MANDATORY_981_CI_MISSING
    local run jobs
    run="$(jq -er '[.workflow_runs[]|select(.path==".github/workflows/phase5-reviewed-replit-callback-only-build-no-provider.yml")|.id]|if length==1 then .[0] else error("callback run") end' <<<"$j")"
@@ -123,7 +129,7 @@ merge_exact(){
  else hold NO_REVIEWED_MERGE_METHOD;fi
  # Metadata reads and draft promotion may consume the original time margin.
  # For #980, recertify quiet and fresh evidence at the final merge boundary.
- if [[ "$repo" == "$R" && ( "$num" == 980 || "$num" == 981 || "$num" == 982 || "$num" == 983 ) ]];then
+ if [[ "$repo" == "$R" && ( "$num" == 980 || "$num" == 981 || "$num" == 982 || "$num" == 983 || "$num" == 984 ) ]];then
   all_main_quiet || hold ACTIVE_NO_CANCEL
   if [[ "$ROUTE_MODE" == PAUSED ]];then
    verify_paused "$OLD"
@@ -386,10 +392,10 @@ verify_paused_recovery(){
 blob(){ gh api "repos/$R/git/blobs/$1" --jq .content | base64 --decode > "$2"; [[ "$(git hash-object "$2")" == "$1" ]] || hold BLOB_MISMATCH; }
 stage=EXACT_CI
 if [[ "$TARGET_ONLY" == 1 ]];then
- if [[ "$TARGET_PR" == 981 || "$TARGET_PR" == 982 || "$TARGET_PR" == 983 ]];then ci "$R" "$H" 29;elif [[ "$TARGET_PR" == 980 ]];then ci "$R" "$H" 23;else ci "$R" "$H" 12;fi
+ if [[ "$TARGET_PR" == 981 || "$TARGET_PR" == 982 || "$TARGET_PR" == 983 || "$TARGET_PR" == 984 ]];then ci "$R" "$H" 29;elif [[ "$TARGET_PR" == 980 ]];then ci "$R" "$H" 23;else ci "$R" "$H" 12;fi
  [[ "$(main "$L")" == "$ROLD" ]] || hold RELAY_BASE_DRIFT
  STATE="$(statecheck "$R" "$TARGET_PR" "$OLD" "$H")"
- if [[ "$MODE" == RECOVER_EXACT_MERGED_SOURCE_ONLY_TARGET_980 || "$MODE" == RECOVER_EXACT_MERGED_SOURCE_ONLY_TARGET_981 || "$MODE" == RECOVER_EXACT_MERGED_SOURCE_ONLY_TARGET_982 || "$MODE" == RECOVER_EXACT_MERGED_PAUSED_TARGET_982 || "$MODE" == RECOVER_EXACT_MERGED_PAUSED_TARGET_983 ]];then
+ if [[ "$MODE" == RECOVER_EXACT_MERGED_SOURCE_ONLY_TARGET_980 || "$MODE" == RECOVER_EXACT_MERGED_SOURCE_ONLY_TARGET_981 || "$MODE" == RECOVER_EXACT_MERGED_SOURCE_ONLY_TARGET_982 || "$MODE" == RECOVER_EXACT_MERGED_PAUSED_TARGET_982 || "$MODE" == RECOVER_EXACT_MERGED_PAUSED_TARGET_983 || "$MODE" == RECOVER_EXACT_MERGED_PAUSED_TARGET_984 ]];then
   [[ "$STATE" == MERGED ]] || hold RECOVERY_REQUIRES_EXACT_MERGED_TREE
  else
   [[ "$STATE" == OPEN ]] || hold NO_BLIND_REPLAY
@@ -405,7 +411,7 @@ blob cc7121bbb91715ce066ae2c84e5656227853a473 "$TMP/funnel.cjs"
 blob 8df852a34c08ba91a6b3a0441b2718579901a5ca "$TMP/retention.sh"
 if [[ "$ROUTE_MODE" == PAUSED ]];then blob 53d403000f7f199d1eecbcc6c84e5f1d3ffa7d26 "$TMP/pause.sh";bash -n "$TMP/pause.sh";fi
 bash -n "$TMP/pins.sh";bash -n "$TMP/retention.sh";node --check "$TMP/census.mjs";node --check "$TMP/funnel.cjs"
-if [[ "$MODE" == RECOVER_EXACT_MERGED_SOURCE_ONLY_TARGET_980 || "$MODE" == RECOVER_EXACT_MERGED_SOURCE_ONLY_TARGET_981 || "$MODE" == RECOVER_EXACT_MERGED_SOURCE_ONLY_TARGET_982 || "$MODE" == RECOVER_EXACT_MERGED_PAUSED_TARGET_982 || "$MODE" == RECOVER_EXACT_MERGED_PAUSED_TARGET_983 ]];then
+if [[ "$MODE" == RECOVER_EXACT_MERGED_SOURCE_ONLY_TARGET_980 || "$MODE" == RECOVER_EXACT_MERGED_SOURCE_ONLY_TARGET_981 || "$MODE" == RECOVER_EXACT_MERGED_SOURCE_ONLY_TARGET_982 || "$MODE" == RECOVER_EXACT_MERGED_PAUSED_TARGET_982 || "$MODE" == RECOVER_EXACT_MERGED_PAUSED_TARGET_983 || "$MODE" == RECOVER_EXACT_MERGED_PAUSED_TARGET_984 ]];then
  stage=EXACT_MERGED_980_RECOVERY
  NEW="$(main "$R")"
  target_980_pins_ok "$OLD" "$NEW" || hold PIN_SCOPE_DRIFT
@@ -444,7 +450,7 @@ stage=PREMERGE_RETENTION
 bash "$TMP/retention.sh" ENSURE_EXACT_CURRENT_MAIN_FULL_RETENTION_BASELINE "$OLD"
 stage=QUIET_AND_GAP
 # Do the potentially slow scoped pin enumeration before the final DB census.
-if [[ "$TARGET_PR" == 980 || "$TARGET_PR" == 981 || "$TARGET_PR" == 982 || "$TARGET_PR" == 983 ]];then target_980_pins_ok "$OLD" "$OLD" || hold PIN_SCOPE_DRIFT;fi
+if [[ "$TARGET_PR" == 980 || "$TARGET_PR" == 981 || "$TARGET_PR" == 982 || "$TARGET_PR" == 983 || "$TARGET_PR" == 984 ]];then target_980_pins_ok "$OLD" "$OLD" || hold PIN_SCOPE_DRIFT;fi
 wait_all_quiet
 # Recheck STOP and task state after the retention baseline and wait. A
 # pre-wait census is not evidence that no new task has appeared.
