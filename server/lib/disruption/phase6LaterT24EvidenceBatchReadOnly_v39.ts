@@ -31,6 +31,8 @@ export type P6LaterT24EvidenceStatus=
  "T24_PARTIAL_OR_AMBIGUOUS_NO_REPLAY"|
  "T24_RECEIPT_OR_NATIVE_ANCHOR_MISMATCH"|
  "T24_PRIVATE_CUSTODY_INVALID_OR_EXPIRED_UNRESOLVED"|
+ "T24_SIGNED_WITNESS_BINDING_UNAVAILABLE"|
+ "POST_T24_WITNESS_WINDOW_ELAPSED_UNRESOLVED"|
  "LATER_REVIEW_LEAD_MISSED_CENSOR";
 type ReviewReceipt={expectedReceiptSha256:string;receipt:P5Stage24ReviewedT24Receipt};
 export interface P6LaterT24EvidenceReadScope{
@@ -129,7 +131,8 @@ export async function readP6LaterT24EvidencePage(pool:Pick<Pool,"connect">,dossi
  }
  return readP6ExactSelectedLaterT24Evidence(pool,selected,{...scope,runDayIndex:dossier.runDayIndex,sourceObservedDbClockUtc:dossier.sourceObservedDbClockUtc},byReceipt,unresolved);
 }
-type SelectedEvidence={source:{flightInstanceId:string;selectedTNativeUtc:string;ownPreCutoffUtc:string;horizon:string}};
+type SelectedEvidence={source:{flightInstanceId:string;selectedTNativeUtc:string;ownPreCutoffUtc:string;horizon:string;
+ expectedT24ReceiptSha256?:string;preIssuedAtUtc?:string;sourceExpiresAtUtc?:string;assessmentWatermarkUtc?:string}};
 type SelectedScope=Pick<P6LaterT24EvidenceReadScope,"expectedDossierSha256"|"expectedFrameSha256"|"expectedConfigSha256"|"expectedSelectedTVersion"|"pageIndex">&{runDayIndex:number;sourceObservedDbClockUtc:string};
 /** Both identity tiers use exactly the same existing persisted witness and
  * immutable readback rules. The native and conditional admission checks
@@ -138,9 +141,10 @@ async function readP6ExactSelectedLaterT24Evidence(pool:Pick<Pool,"connect">,sel
   scope:SelectedScope,byReceipt:ReadonlyMap<string,ReviewReceipt>,unresolved:readonly string[],conditionalMetadataReaderLogin?:string,
   // Private positional authority: never read this mode from a caller's
   // extensible native scope. Only the conditional entry passes its frame.
-  conditionalFrozenT24SourceWindow?:{startUtc:string;endUtc:string}){
+  conditionalFrozenT24SourceWindow?:{startUtc:string;endUtc:string},postCommittedT6=false){
  const priorClock=utc(scope.sourceObservedDbClockUtc),ids=selected.map(e=>e.source.flightInstanceId);
- const c=await pool.connect();let begun=false;
+ if(postCommittedT6&&(!conditionalFrozenT24SourceWindow||!conditionalMetadataReaderLogin||selected.some(e=>e.source.horizon!=="T-6h")))hold("POST_WITNESS_PRIVATE_MODE");
+ const c=await pool.connect();let begun=false,rollbackAttempted=false,discard=false;
  try{
   await c.query("BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY");begun=true;
   await c.query("SET LOCAL statement_timeout='10000ms'");
@@ -180,7 +184,9 @@ async function readP6ExactSelectedLaterT24Evidence(pool:Pick<Pool,"connect">,sel
     sr=snaps.get(id)??[],wr=witnesses.get(id)??[],r=byReceipt.get(id);
    let status:P6LaterT24EvidenceStatus;
    let receiptSha256:string|null=null;
-   if(!conditionalFrozenT24SourceWindow&&now>=cutoff-900000)status="LATER_REVIEW_LEAD_MISSED_CENSOR";
+   if(postCommittedT6&&!H.test(s.expectedT24ReceiptSha256??""))status="T24_SIGNED_WITNESS_BINDING_UNAVAILABLE";
+   else if(postCommittedT6&&(now>=utc(s.sourceExpiresAtUtc)||now>=utc(s.assessmentWatermarkUtc)))status="POST_T24_WITNESS_WINDOW_ELAPSED_UNRESOLVED";
+   else if(!postCommittedT6&&!conditionalFrozenT24SourceWindow&&now>=cutoff-900000)status="LATER_REVIEW_LEAD_MISSED_CENSOR";
    else if(unresolved.includes(id))status="T24_PRIVATE_CUSTODY_INVALID_OR_EXPIRED_UNRESOLVED";
    else if(sr.length===0&&wr.length===0){
     if(r)status="T24_RECEIPT_OR_NATIVE_ANCHOR_MISMATCH";
@@ -201,13 +207,28 @@ async function readP6ExactSelectedLaterT24Evidence(pool:Pick<Pool,"connect">,sel
       expectedSelectedTVersion:scope.expectedSelectedTVersion,expectedFrameSha256:scope.expectedFrameSha256,
        expectedConfigSha256:scope.expectedConfigSha256,cutoffUtc:new Date(frozenCutoff).toISOString(),horizon:s.horizon as "T-6h"|"T-90m"});
      if(utc(r.receipt.stage17PostCommitReadbackAtUtc)>now)hold("FUTURE_T24_READBACK");
-     if(now>=frozenCutoff-900000)status="LATER_REVIEW_LEAD_MISSED_CENSOR";
+     // A committed T6 is different from a proposed later PRE. Its original
+     // cutoff was already enforced; rechecking the future PRE lead would
+     // censor every valid POST review. Bind the exact previously signed T24
+     // digest, frozen T and original PRE time instead, never move a cutoff.
+     if(postCommittedT6&&(r.expectedReceiptSha256!==s.expectedT24ReceiptSha256||frozen!==native||frozenCutoff!==cutoff||
+        utc(r.receipt.stage17PostCommitReadbackAtUtc)>=utc(s.preIssuedAtUtc)))hold("POST_SIGNED_WITNESS_OR_PRE_CLOCK_DRIFT");
+     if(!postCommittedT6&&now>=frozenCutoff-900000)status="LATER_REVIEW_LEAD_MISSED_CENSOR";
      else{status="T24_PERSISTED_AND_SEPARATE_RECEIPT_MATCH_REVIEW_REQUIRED";receiptSha256=r.expectedReceiptSha256;}
     }catch{status="T24_RECEIPT_OR_NATIVE_ANCHOR_MISMATCH";}
    }
    return Object.freeze({flightInstanceId:id,horizon:s.horizon as "T-6h"|"T-90m",status,receiptSha256});
   });
-  await c.query("ROLLBACK");begun=false;
+  if(postCommittedT6){
+   const completed=await c.query("SELECT clock_timestamp() AS now"),at=utc(completed.rows[0]?.now);
+   if(completed.rowCount!==1||at<now||at-priorClock>120000)hold("POST_WITNESS_READ_CLOCK_DRIFT");
+   for(let i=0;i<decisions.length;i++)if(decisions[i].receiptSha256!==null&&
+     (at>=utc(selected[i].source.sourceExpiresAtUtc)||at>=utc(selected[i].source.assessmentWatermarkUtc)))
+    decisions[i]=Object.freeze({...decisions[i],status:"POST_T24_WITNESS_WINDOW_ELAPSED_UNRESOLVED",receiptSha256:null});
+   now=at;
+  }
+  rollbackAttempted=true;
+  try{await c.query("ROLLBACK");begun=false;}catch{discard=true;hold("ROLLBACK_UNACKNOWLEDGED");}
   const counts:Partial<Record<P6LaterT24EvidenceStatus,number>>={};
   for(const d of decisions)counts[d.status]=(counts[d.status]??0)+1;
   const report={status:"ACTUAL_T24_EVIDENCE_PAGE_FOR_SEPARATE_LATER_REVIEW_NO_GO",expectedDossierSha256:scope.expectedDossierSha256,
@@ -215,8 +236,8 @@ async function readP6ExactSelectedLaterT24Evidence(pool:Pick<Pool,"connect">,sel
    candidateCount:decisions.length,counts,sourceRightsCertified:false,reviewedPacketsIssued:0,providerCalls:0,databaseWrites:0,phase6PaidGo:false};
   return Object.freeze(Object.defineProperty(report,"privateDecisions",{value:Object.freeze(decisions),enumerable:false})) as typeof report&{readonly privateDecisions:readonly Decision[]};
  }finally{
-  if(begun)await c.query("ROLLBACK").catch(()=>{});
-  c.release();
+  if(begun&&!rollbackAttempted){try{await c.query("ROLLBACK");}catch{discard=true;}}
+  if(discard)c.release(true);else c.release();
  }
 }
 
@@ -349,4 +370,60 @@ export async function readP6ConditionalLaterT24EvidencePage(
   privateCustodyUnresolvedCount:got.unresolvedCount,scientificReviewStillRequired:true,standaloneLaterAuthorized:false};
  return Object.freeze(Object.defineProperties(summary,{privateDecisions:{value:evidence.privateDecisions,enumerable:false},
   privateCustodyReceipts:{value:Object.freeze([...byReceipt.values()]),enumerable:false}})) as typeof summary&{readonly privateDecisions:readonly Decision[];readonly privateCustodyReceipts:readonly ReviewReceipt[]};
+}
+
+/** Conditional POST planning only: exact committed T6 + already verified
+ * Packet B candidates use the existing separately authenticated T24 custody
+ * and restricted metadata views. No new signer, table, queue, permission,
+ * retroactive witness, standalone approval or actual physical label. */
+export interface P6ConditionalPostWitnessAnchor {
+ flightInstanceId:string;selectedTNativeUtc:string;predictionCutoffUtc:string;preIssuedAtUtc:string;
+ sourceExpiresAtUtc:string;assessmentWatermarkUtc:string;expectedT24ReceiptSha256?:string;
+ configSha256:string;selectedTVersion:string;
+}
+export interface P6ConditionalPostWitnessReadScope {
+ independentConditionalPostWitnessReadApproved:true;existingPaidDispatchApproved:false;
+ manifestSha256:string;rightsSha256:string;releaseSha256:string;reviewedCodeSha:string;
+ expectedFrameSha256:string;sourceQueryDigestSha256:string;runDayIndex:number;
+ sourceObservedDbClockUtc:string;serviceWindowStartUtc:string;serviceWindowEndUtc:string;
+}
+export async function readP6ConditionalPostT24WitnessPage(prePool:Pick<Pool,"connect">,anchors:readonly P6ConditionalPostWitnessAnchor[],
+ scope:P6ConditionalPostWitnessReadScope,custody:PendingStoredT24Custody){
+ const t=custody?.trust;
+ if(!scope||scope.independentConditionalPostWitnessReadApproved!==true||scope.existingPaidDispatchApproved!==false||
+    ![scope.manifestSha256,scope.rightsSha256,scope.releaseSha256,scope.expectedFrameSha256,scope.sourceQueryDigestSha256].every(v=>H.test(v??""))||
+    !/^[a-f0-9]{40}$/.test(scope.reviewedCodeSha??"")||!Number.isSafeInteger(scope.runDayIndex)||scope.runDayIndex<1||scope.runDayIndex>31||
+    !t||t.independentT24CustodyTrustApproved!==true||t.runDayIndex!==scope.runDayIndex||t.reviewedCodeSha!==scope.reviewedCodeSha||
+    t.manifestSha256!==scope.manifestSha256||t.rightsSha256!==scope.rightsSha256||t.releaseSha256!==scope.releaseSha256||t.expectedFrameSha256!==scope.expectedFrameSha256||
+    !H.test(t.expectedConfigSha256??"")||typeof t.expectedSelectedTVersion!=="string"||t.expectedSelectedTVersion.length<10||
+    !custody.scope||!prePool||typeof prePool.connect!=="function"||!Array.isArray(anchors)||anchors.length<1||anchors.length>16)
+  return hold("CONDITIONAL_POST_WITNESS_SCOPE");
+ const sourceAt=utc(scope.sourceObservedDbClockUtc),start=utc(scope.serviceWindowStartUtc),end=utc(scope.serviceWindowEndUtc);
+ if(start>=end||new Set(anchors.map(x=>x.flightInstanceId)).size!==anchors.length)hold("CONDITIONAL_POST_WITNESS_PAGE");
+ const selected=anchors.map(a=>{
+  const T=utc(a.selectedTNativeUtc),cutoff=utc(a.predictionCutoffUtc),pre=utc(a.preIssuedAtUtc),expiry=utc(a.sourceExpiresAtUtc),watermark=utc(a.assessmentWatermarkUtc);
+  if(!/^leg:g5a:[a-f0-9]{64}$/.test(a.flightInstanceId)||T<start||T>=end||T-cutoff!==21600000||pre>=cutoff||pre>sourceAt||watermark!==T+7200000||expiry<=watermark||sourceAt>=watermark||
+     a.configSha256!==t.expectedConfigSha256||a.selectedTVersion!==t.expectedSelectedTVersion||
+     (a.expectedT24ReceiptSha256!==undefined&&!H.test(a.expectedT24ReceiptSha256)))hold("CONDITIONAL_POST_WITNESS_ANCHOR");
+  return {source:{flightInstanceId:a.flightInstanceId,selectedTNativeUtc:a.selectedTNativeUtc,ownPreCutoffUtc:a.predictionCutoffUtc,horizon:"T-6h",
+    expectedT24ReceiptSha256:a.expectedT24ReceiptSha256,preIssuedAtUtc:a.preIssuedAtUtc,sourceExpiresAtUtc:a.sourceExpiresAtUtc,assessmentWatermarkUtc:a.assessmentWatermarkUtc}};
+ });
+ const got=await readP6T24WitnessCustodyBatch({client:custody.readerClient,trusts:anchors.map(a=>({...t,flightInstanceId:a.flightInstanceId})),scope:custody.scope});
+ if(utc(got.observedDbClockUtc)<sourceAt||utc(got.observedDbClockUtc)-sourceAt>120000||got.requestedCount!==anchors.length)hold("POST_CUSTODY_CLOCK_OR_DENOMINATOR");
+ const byReceipt=new Map<string,ReviewReceipt>(),unresolved:string[]=[];
+ for(const x of got.privateDecisions){
+  if(x.status==="EXACT_CUSTODY_RECEIPT_AWAIT_SCIENTIFIC_REVIEW")byReceipt.set(x.flightInstanceId,{receipt:x.receipt,expectedReceiptSha256:x.receipt.receiptSha256});
+  else if(x.status==="CUSTODY_INVALID_OR_EXPIRED_UNRESOLVED")unresolved.push(x.flightInstanceId);
+ }
+ const read=await readP6ExactSelectedLaterT24Evidence(prePool,selected,{expectedDossierSha256:scope.sourceQueryDigestSha256,
+  expectedFrameSha256:scope.expectedFrameSha256,expectedConfigSha256:t.expectedConfigSha256,expectedSelectedTVersion:t.expectedSelectedTVersion,
+  pageIndex:1,runDayIndex:scope.runDayIndex,sourceObservedDbClockUtc:got.observedDbClockUtc},byReceipt,unresolved,custody.scope.expectedSessionLogin,
+  {startUtc:scope.serviceWindowStartUtc,endUtc:scope.serviceWindowEndUtc},true);
+ if(utc(read.observedDbClockUtc)-sourceAt>120000)hold("POST_WITNESS_TOTAL_CLOCK");
+ const verified=read.privateDecisions.filter(d=>d.status==="T24_PERSISTED_AND_SEPARATE_RECEIPT_MATCH_REVIEW_REQUIRED"&&d.receiptSha256!==null).length;
+ const summary={status:"ACTUAL_CONDITIONAL_POST_T24_WITNESS_READ_NO_GO",runDayIndex:scope.runDayIndex,candidateCount:anchors.length,
+  verifiedT24WitnessCount:verified,unresolvedT24WitnessCount:anchors.length-verified,observedDbClockUtc:read.observedDbClockUtc,
+  counts:read.counts,scientificReviewStillRequired:true,standaloneLaterAuthorized:false,postIssuerCommissioned:false,physicalGateOutCertified:false,
+  providerCalls:0,databaseWrites:0,phase6PaidGo:false};
+ return Object.freeze(Object.defineProperty(summary,"privateDecisions",{value:read.privateDecisions,enumerable:false})) as typeof summary&{readonly privateDecisions:readonly Decision[]};
 }

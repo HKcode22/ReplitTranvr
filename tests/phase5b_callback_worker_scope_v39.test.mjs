@@ -225,13 +225,15 @@ test("T142 exact POST-worker successor refuses callback publication and unreview
 test("T146 conditional Packet B worker successor preserves callback publication refusal",()=>{
  const base="a02e3d6eddc378871f030848235746de160b71e5",scoped="server/lib/disruption/phase7PostScopedGroup_v39.ts",union=[...postUnion,scoped];
  assert.equal(union.length,14);
- const changes={[BASE]:union,[base]:[scoped],[PIN]:union};
+ const p7=[scoped,"server/lib/disruption/phase5V0083FuturePostOriginalDb_v39.ts","server/lib/disruption/phase6LaterT24EvidenceBatchReadOnly_v39.ts","server/lib/disruption/phase6PostNativePreCandidateReadOnce_v39.mjs"];
+ const changes={[BASE]:union,[base]:p7,[PIN]:union};
  const result=runGuard({base,fixture:{changes}});
  assert.equal(result.status,0,result.stdout+result.stderr);
  assert.equal(result.stdout.trim(),passMarker);
  assert.equal(wrapperReadCount(result),1);
  for(const incomplete of union.map(path=>union.filter(x=>x!==path)))
   assertHold(runGuard({base,fixture:{changes:{...changes,[BASE]:incomplete}}}));
+ for(const missing of p7)assertHold(runGuard({base,fixture:{changes:{...changes,[base]:p7.filter(x=>x!==missing)}}}));
  assertHold(runGuard({base,fixture:{changes:{...changes,[base]:[]}}}));
- assertHold(runGuard({base,fixture:{changes:{...changes,[base]:[scoped,"server/index.ts"]}}}));
+ assertHold(runGuard({base,fixture:{changes:{...changes,[base]:[...p7,"server/index.ts"]}}}));
 });

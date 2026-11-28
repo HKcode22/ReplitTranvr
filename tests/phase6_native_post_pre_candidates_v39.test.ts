@@ -109,8 +109,9 @@ describe("native POST candidate pages require exact signed SOURCE and later PRE 
  it("isolates conditional later PRE from native anchor selection without losing valid peers",()=>{
   const f=pendingFixture(),old=f.index.privateParsedIndex.entries[1],later=JSON.parse(f.index.getFrozen(old.filePath).toString());
   const original=later.entries[0],conditional="leg:g5a:"+H("4");
-  function run(id:string,separate=false,marker=true){
-   const bytes=Buffer.from(JSON.stringify({...later,entries:[original,{...original,expectedFlightInstanceId:id,expectedPacketSha256:H("9")}]}));
+  function run(id:string,separate=false,marker=true,witnessDigest?:string){
+   const bytes=Buffer.from(JSON.stringify({...later,entries:[original,{...original,expectedFlightInstanceId:id,expectedPacketSha256:H("9"),
+    ...(witnessDigest===undefined?{}:{expectedT24ReceiptSha256:witnessDigest})}]}));
    const parsed={...f.index.privateParsedIndex,entries:[f.index.privateParsedIndex.entries[0],{...old,fileSha256:h(bytes)}]};
    const raw=Buffer.from(JSON.stringify(parsed)),selector={...f.selector,indexSha256:h(raw)};
    const index:any={redactedSummary:{...f.index.redactedSummary,indexSha256:h(raw)}};
@@ -128,6 +129,10 @@ describe("native POST candidate pages require exact signed SOURCE and later PRE 
   expect(sep.privateCandidates).toEqual([{flightInstanceId:conditional,expectedSelectedTNativeUtc:original.expectedSelectedTNativeUtc,
    expectedPacketSha256:H("9"),boundSourceQueryDigests:[f.selector.queryDigestSha256]}]);
   expect(JSON.stringify(sep)).not.toContain(conditional);
+  const witnessed=run(conditional,true,true,H("6"));
+  expect(witnessed.privateCandidates[0].expectedT24ReceiptSha256).toBe(H("6"));
+  expect(JSON.stringify(witnessed)).not.toContain(H("6"));
+  expect(()=>run(conditional,true,true,"bad")).toThrow("SIGNED_CONDITIONAL_T24_RECEIPT_DIGEST");
   expect(()=>run(conditional,true,false)).toThrow("CONDITIONAL_T6_SIGNED_SCOPE_REQUIRED");
   expect(()=>proposeP6NativePostPhysicalWindow({page:sep,policyBytes:Buffer.alloc(0),expectedPolicySha256:H("1"),trust:f.trust})).toThrow("UNAPPROVED_PHYSICAL_WINDOW_SCOPE");
  });
@@ -393,7 +398,8 @@ describe("separate conditional actual T6 metadata read preserves frozen referenc
  const row={flight_instance_id:id,snapshot_id:"1001",horizon:"T-6h",query_digest:H("c"),created_at:at("05:19"),
   prediction_cutoff_utc:at("05:20"),selected_t_milestone_utc:T,fids_response_hash:H("3"),original_available_at:at("05:10"),
   population_query_id:"12345678-1234-4123-8123-123456789abc",source_expires_at_utc:"2027-02-11T04:10:00.000Z",
-  binding_response_hash:H("3"),member_available_at:at("05:11"),reported_departure_utc:at("11:35")};
+  binding_response_hash:H("3"),member_available_at:at("05:11"),reported_departure_utc:at("11:35"),
+  config_hash:H("7"),selected_t_version:"gate-out:reviewed-ci"};
  function fixture(rows:any[]=[row],clock=at("11:00"),rollbackFails=false){
   const calls:string[]=[],released:boolean[]=[];
   const client={query:async(sql:string,args?:any[])=>{
@@ -419,7 +425,8 @@ describe("separate conditional actual T6 metadata read preserves frozen referenc
  it("censors missing, duplicate, late, wrong source, expired-at-watermark and changed frozen T",async()=>{
   for(const rows of [[],[row,row],[{...row,created_at:at("05:21")}],[{...row,query_digest:H("9")}],
    [{...row,source_expires_at_utc:at("13:20")}],[{...row,selected_t_milestone_utc:at("11:35")}],
-   [{...row,reported_departure_utc:at("12:00")}],[{...row,member_available_at:at("05:20")}]])
+   [{...row,reported_departure_utc:at("12:00")}],[{...row,member_available_at:at("05:20")}],
+   [{...row,created_at:at("05:20")}],[{...row,config_hash:"bad"}],[{...row,selected_t_version:"bad"}]])
    expect((await auditP5ConditionalPostActualT6Batch(fixture(rows).pool,scope)).eligibleCount).toBe(0);
   expect((await auditP5ConditionalPostActualT6Batch(fixture([row],at("13:20")).pool,scope)).eligibleCount).toBe(0);
  });

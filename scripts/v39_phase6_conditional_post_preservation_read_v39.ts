@@ -11,6 +11,7 @@ import type {P6PostPreservationAnchor} from "../server/lib/disruption/phase6Actu
 import type {Phase7DerivedReleaseContract} from "../server/lib/disruption/phase6DerivedTrainingReleaseContract_v39";
 import type {Phase7ReviewedTransformationProfile} from "../server/lib/disruption/phase7ReviewedSourceTransformation_v39";
 import {hashPhase7DurableCandidate} from "../server/lib/disruption/phase7DurableDerivedBundleCandidate_v39";
+import {readP6ConditionalPostT24WitnessPage,type P6ConditionalPostWitnessAnchor} from "../server/lib/disruption/phase6LaterT24EvidenceBatchReadOnly_v39";
 const H=/^[a-f0-9]{64}$/,ID=/^leg:g5a:[a-f0-9]{64}$/;
 const hold=(s:string):never=>{throw Error("HOLD_P6_CONDITIONAL_POST_PRESERVATION_"+s)};
 const hash=(x:unknown):x is string=>typeof x==="string"&&H.test(x);
@@ -95,6 +96,7 @@ async function join(input:Reader,base:BaseScope,actual:{status:string;privateDec
   decisions.push(Object.freeze({flightInstanceId:d.flightInstanceId,status:"ACTUAL_T6_AND_PACKET_B_GROUP_VERIFIED_FOR_SEPARATE_POST_REVIEW" as const,
    anchor:Object.freeze(anchor),expectedSignedPacketSha256:d.expectedSignedPacketSha256,
    originalPopulationQueryId:d.originalPopulationQueryId,reportedScheduledDepartureUtc:d.reportedScheduledDepartureUtc,
+   configSha256:d.configSha256,selectedTVersion:d.selectedTVersion,
    assessmentWatermarkUtc:d.assessmentWatermarkUtc,groupId,fragments:Object.freeze(result.fragments)}));
  }
  if(sourceEligible!==actual.eligibleCount||decisions.length+unresolvedGroups.length!==sourceEligible)hold("ELIGIBLE_DENOMINATOR_DRIFT");
@@ -123,7 +125,8 @@ export async function readP6ConditionalPostT6PreservationBatch(sourcePool:Pick<P
  * scoped Packet B reader, with no provider, signer, writer or new roles.
  * Do not use the output as a paid admission or physical outcome.
  */
-export async function readP6SignedConditionalPostPreservationPage(args:Parameters<typeof readP6ActualConditionalT6PostPreCandidatePage>[0],input:Reader){
+export async function readP6SignedConditionalPostPreservationPage(args:Parameters<typeof readP6ActualConditionalT6PostPreCandidatePage>[0],input:Reader,
+ witness?:{independentConditionalPostWitnessReadApproved:true;metadataPool:Pick<Pool,"connect">;custody:Parameters<typeof readP6ConditionalPostT24WitnessPage>[3]}){
  if(args?.policy?.independentConditionalPostCandidateReadOnlyApproved!==true||
   args?.policy?.independentConditionalPostPreservationReadApproved!==true||
   !Number.isSafeInteger(args.pageSize)||args.pageSize<1||args.pageSize>MAX||
@@ -133,6 +136,30 @@ export async function readP6SignedConditionalPostPreservationPage(args:Parameter
  const base={manifestSha256:s.manifestSha256,rightsSha256:s.rightsReviewSha256,queryDigestSha256:s.queryDigestSha256,
   runDayIndex:s.runDayIndex,airportIcao:s.airportIcao,reviewedFrameSha256:page.privateReviewedFrameSha256,protocolSha256:s.conditionalServiceScope.protocolSha256};
  const result=await join(input,base,Object.freeze(Object.defineProperty({...page,candidateCount:page.pageCandidateCount},"privateDecisions",{value:page.privateDecisions,enumerable:false})));
- return Object.freeze(Object.defineProperties({...result,totalCandidateCount:page.totalCandidateCount,remainingAfterPageCount:page.remainingAfterPageCount},{
-  privateDecisions:{value:result.privateDecisions,enumerable:false},privateUnresolvedGroups:{value:result.privateUnresolvedGroups,enumerable:false},privateNextCursor:{value:page.privateNextCursor,enumerable:false}}));
+ let evidence:Awaited<ReturnType<typeof readP6ConditionalPostT24WitnessPage>>|undefined;
+ if(witness){
+  if(witness.independentConditionalPostWitnessReadApproved!==true||args.policy.independentConditionalPostWitnessReadApproved!==true)hold("SEPARATE_WITNESS_APPROVAL");
+  const signed=new Map<string,{expectedT24ReceiptSha256?:string;expectedPacketSha256:string;expectedSelectedTNativeUtc:string}>(
+   page.privateCandidates.map((x:any)=>[x.flightInstanceId,x]));
+  const anchors:P6ConditionalPostWitnessAnchor[]=result.privateDecisions.map(d=>{
+   const candidate=signed.get(d.flightInstanceId);
+   if(!candidate||candidate.expectedPacketSha256!==d.expectedSignedPacketSha256||candidate.expectedSelectedTNativeUtc!==d.anchor.selectedNativeTUtc)return hold("SIGNED_WITNESS_ANCHOR_DRIFT");
+   return {flightInstanceId:d.flightInstanceId,selectedTNativeUtc:d.anchor.selectedNativeTUtc,
+    predictionCutoffUtc:new Date(utc(d.anchor.selectedNativeTUtc)-21600000).toISOString(),preIssuedAtUtc:d.anchor.preIssuedAtUtc,
+    sourceExpiresAtUtc:d.anchor.sourceExpiresAtUtc,assessmentWatermarkUtc:d.assessmentWatermarkUtc,
+    expectedT24ReceiptSha256:candidate.expectedT24ReceiptSha256,configSha256:d.configSha256,selectedTVersion:d.selectedTVersion};
+  });
+  if(anchors.length)evidence=await readP6ConditionalPostT24WitnessPage(witness.metadataPool,anchors,{
+   independentConditionalPostWitnessReadApproved:true,existingPaidDispatchApproved:false,manifestSha256:base.manifestSha256,
+   rightsSha256:base.rightsSha256,releaseSha256:args.trust.releaseSha256,reviewedCodeSha:args.trust.reviewedCodeSha,
+   expectedFrameSha256:base.reviewedFrameSha256,sourceQueryDigestSha256:base.queryDigestSha256,runDayIndex:base.runDayIndex,
+   sourceObservedDbClockUtc:result.observedDbClockUtc,serviceWindowStartUtc:s.expectedServiceWindowStartUtc,serviceWindowEndUtc:s.expectedServiceWindowEndUtc},witness.custody);
+ }
+ const witnessCount=evidence?.verifiedT24WitnessCount??0;
+ return Object.freeze(Object.defineProperties({...result,totalCandidateCount:page.totalCandidateCount,remainingAfterPageCount:page.remainingAfterPageCount,
+  independentT24WitnessVerified:witnessCount>0&&witnessCount===result.verifiedPacketBGroupCount,
+  verifiedT24WitnessCount:witnessCount,unresolvedT24WitnessCount:result.verifiedPacketBGroupCount-witnessCount,
+  observedDbClockUtc:evidence?.observedDbClockUtc??result.observedDbClockUtc},{
+  privateDecisions:{value:result.privateDecisions,enumerable:false},privateUnresolvedGroups:{value:result.privateUnresolvedGroups,enumerable:false},
+  privateWitnessDecisions:{value:evidence?.privateDecisions??Object.freeze([]),enumerable:false},privateNextCursor:{value:page.privateNextCursor,enumerable:false}}));
 }

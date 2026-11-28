@@ -77,9 +77,13 @@ function selectP6PostPreCandidatePage({index,selector,trust,sourceScope,t24Curre
    if(conditionalNamespace(f.expectedFlightInstanceId)){
     if(!conditionalId(f.expectedFlightInstanceId))hold("CONDITIONAL_IDENTITY_NAMESPACE_DRIFT");
     conditionalSeen.add(f.expectedFlightInstanceId+"|"+f.expectedHorizon);
-    if(conditional)conditionalBy.set(f.expectedFlightInstanceId,Object.freeze({
-     flightInstanceId:f.expectedFlightInstanceId,expectedSelectedTNativeUtc:f.expectedSelectedTNativeUtc,
-     expectedPacketSha256:f.expectedPacketSha256,boundSourceQueryDigests:Object.freeze([selector.queryDigestSha256])}));
+    if(conditional){
+     if(f.expectedT24ReceiptSha256!==undefined&&(typeof f.expectedT24ReceiptSha256!=="string"||!H.test(f.expectedT24ReceiptSha256)))hold("SIGNED_CONDITIONAL_T24_RECEIPT_DIGEST");
+     conditionalBy.set(f.expectedFlightInstanceId,Object.freeze({
+      flightInstanceId:f.expectedFlightInstanceId,expectedSelectedTNativeUtc:f.expectedSelectedTNativeUtc,
+      expectedPacketSha256:f.expectedPacketSha256,boundSourceQueryDigests:Object.freeze([selector.queryDigestSha256]),
+      ...(f.expectedT24ReceiptSha256===undefined?{}:{expectedT24ReceiptSha256:f.expectedT24ReceiptSha256})}));
+    }
     continue;
    }
    // Never substitute a valid PRE from another query to qualify this exact query.

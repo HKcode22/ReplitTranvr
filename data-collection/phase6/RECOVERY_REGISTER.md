@@ -893,3 +893,7 @@ New [S-series register](../phase5b/SIMPLIFICATION_REGISTER.md) and [current exec
 ## Nov28 actual corrected pause and CI cache isolation
 
 Owner receipt at 12:37:32Z S001/T137 verified paused configuration and quiet snapshot with zero writes; no active policy install inferred. F025 existing CI family: exact e0e32493 job 140980159844 failed at npm cache rename EEXIST/ENOENT before actor tests; no evidence of production role fault. Per-run cache isolation staged, same lockfile/tests, no force. S002 active dispatch correlation and known-run reconciliation regression added; exact successor tests pending. See [checkpoint](../phase5b/checkpoints/2026-11-28_POST983_ACTUAL_PREVIEW_AND_PACKET_B_POST_INTEGRATION.md). No new F closure or paid authority.
+
+## Nov28 conditional POST witness integration (S007, existing F029/F042/I149/T146)
+
+Exact signed conditional T6 registry retains expected T24 receipt digest; actual T6 config/version and strictly pre-cutoff commit now bound to existing Packet B and actual independently signed custody + V0113 persisted witness. Reuse Stage24 verification; committed POST planning mode is distinct from future PRE lead, no retroactive/standalone permission or physical label. Existing real V0091 PG16 workflow extended with existing actual private custody chain; exact tests pending. No new F/C gate or closure, no production mutation. [Checkpoint](../phase5b/checkpoints/2026-11-28_POST983_ACTUAL_PREVIEW_AND_PACKET_B_POST_INTEGRATION.md).

@@ -595,7 +595,7 @@ export interface P5ConditionalPostT6BatchScope {
 }
 export const P5_FUTURE_CONDITIONAL_POST_ACTUAL_T6_SQL=
  "SELECT s.flight_instance_id,s.id::text AS snapshot_id,s.horizon,q.query_digest,"+
- " s.created_at,s.prediction_cutoff_utc,s.selected_t_milestone_utc,s.fids_response_hash,"+
+ " s.created_at,s.prediction_cutoff_utc,s.selected_t_milestone_utc,s.fids_response_hash,s.config_hash,s.selected_t_version,"+
  " r.available_at AS original_available_at,b.population_query_id::text AS population_query_id,"+
  " b.source_expires_at_utc,b.response_hash AS binding_response_hash,"+
  " fp.available_at AS member_available_at,fp.dep_scheduled_utc AS reported_departure_utc"+
@@ -687,18 +687,20 @@ export async function auditP5ConditionalPostActualT6Batch(pool:Pick<Pool,"connec
    const x=a[0];
    if(typeof x.snapshot_id!=="string"||! /^[1-9][0-9]{0,17}$/.test(x.snapshot_id)||
     x.horizon!=="T-6h"||x.query_digest!==scope.queryDigestSha256||!conditionalPostHash(x.fids_response_hash)||
-    x.fids_response_hash!==x.binding_response_hash||!conditionalPostUuid(x.population_query_id))
+    x.fids_response_hash!==x.binding_response_hash||!conditionalPostUuid(x.population_query_id)||
+    !conditionalPostHash(x.config_hash)||typeof x.selected_t_version!=="string"||x.selected_t_version.length<10||x.selected_t_version.length>512)
     return unavailable("T6_SOURCE_BINDING");
    const native=conditionalDbClock(x.selected_t_milestone_utc),cutoff=conditionalDbClock(x.prediction_cutoff_utc),
     issued=conditionalDbClock(x.created_at),available=conditionalDbClock(x.original_available_at),
     member=conditionalDbClock(x.member_available_at),expiry=conditionalDbClock(x.source_expires_at_utc),
     reported=conditionalDbClock(x.reported_departure_utc);
-   if(native!==T||cutoff!==T-21600000||available>member||member>issued||issued>cutoff||issued>now||
+   if(native!==T||cutoff!==T-21600000||available>member||member>issued||issued>=cutoff||issued>now||
     reported<start||reported>=end||issued>=expiry||expiry<=completed||expiry<=W||completed>=W)
     return unavailable("T6_CLOCK_RETENTION_OR_WATERMARK");
    return Object.freeze({flightInstanceId:p.flightInstanceId,status:"ACTUAL_RETAINED_CONDITIONAL_T6_FOR_POST_REVIEW" as const,
     snapshotId:x.snapshot_id,queryDigestSha256:scope.queryDigestSha256,expectedSignedPacketSha256:p.expectedPacketSha256,
     originalPopulationQueryId:x.population_query_id,originalSourceResponseSha256:x.fids_response_hash,
+    configSha256:x.config_hash as string,selectedTVersion:x.selected_t_version as string,
     originalSourceAvailableAtUtc:new Date(available).toISOString(),preIssuedAtUtc:new Date(issued).toISOString(),
     selectedScheduledDepartureUtc:new Date(T).toISOString(),reportedScheduledDepartureUtc:new Date(reported).toISOString(),
     predictionCutoffUtc:new Date(cutoff).toISOString(),sourceExpiresAtUtc:new Date(expiry).toISOString(),
