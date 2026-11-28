@@ -2,6 +2,8 @@
 
 ## Current state — Nov27 after #980
 
+**17:55:36 PST actual owner inventory:** the previously requested I133/T127 readback succeeded; no repeat requested. 148 timely bindings, 86 live, 62 expired, 9,126 historical member observations, zero linked/cutoff-safe PRE/global Packet B objects. Six next-hour study originals all Day3 T6 native shape failed; zero tasks or lead pre-screen. Do not attempt historical rescue by changing signed scope or expiry. [Latest evidence](checkpoints/2026-11-27_1755_PST_ACTUAL_EXPIRY_AND_T075_DIGEST_PARITY.md). Next prioritize prospective commissioning, exact safe worker release and witnessed PRE/Packet B. The previous protected main readback lacks the new composite commitment; fresh protected successor readback, reviewed decision and exact installation path are required, not a repeat of the old no-commitment probe.
+
 The numbered instructions and dated handoffs below are historical snapshots; their pending cutover/readback commands are superseded by this section and the [latest checkpoint](checkpoints/2026-11-27_PHASE5B_POST980_DEPLOYMENT_AND_CUSTODY_READBACK.md). Do not repeat a completed operation.
 
 1. Keep enabled SOURCE and independent retention running. #980 merged after natural Day4 drain as main `24df876fc612c0e4fdfb6f69585ed90bcc56f9b8`; owner updated reviewed runtime/retention pins and confirmed relay executable unchanged at `2d96b22345908aa4334335aa899aec71b2fec2cb`.
