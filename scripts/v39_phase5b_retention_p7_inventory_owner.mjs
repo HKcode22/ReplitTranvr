@@ -124,6 +124,83 @@ export function projectNearExpiryRows(rows,observedAtUtc,globalNextHourCount){
   preScreenIsNotAWriteAuthorization:true,providerCalls:0,databaseWrites:0
  };
 }
+/** S011 / F026. Actual source-to-PRE-to-durable link metadata, not a
+ * substitute for the independently authenticated Stage14 commit/readback.
+ * Only currently live originals; expired mappings must never be rebuilt. */
+export const P7_LIVE_STUDY_LINK_METADATA_SQL=`
+ WITH live_global AS MATERIALIZED (
+  SELECT r.population_query_id,r.available_at source_available_at_utc,r.response_hash actual_response_hash,
+   b.manifest_sha256,b.query_digest,b.response_hash,b.rights_review_sha256,b.bound_at_utc,b.source_expires_at_utc,
+   least(r.raw_persisted_at_utc+interval '24 hours',coalesce(b.source_expires_at_utc,r.raw_persisted_at_utc+interval '24 hours')) deadline,
+   q.run_day_index,q.horizon,q.airport_icao,q.rights_review_sha256 query_rights_sha256
+  FROM clean.fids_query_response r LEFT JOIN clean.phase5_fids_original_binding_v39 b USING(population_query_id)
+  LEFT JOIN clean.phase5_fids_allowed_query_v39 q ON q.query_digest=b.query_digest AND q.manifest_sha256=$1 AND b.manifest_sha256=$1
+  WHERE r.raw_payload IS NOT NULL AND r.raw_expired_at_utc IS NULL
+   AND least(r.raw_persisted_at_utc+interval '24 hours',coalesce(b.source_expires_at_utc,r.raw_persisted_at_utc+interval '24 hours'))>transaction_timestamp()
+ ), near_global AS MATERIALIZED (
+  SELECT population_query_id,row_number() OVER(ORDER BY deadline,population_query_id)::int near_expiry_ordinal
+  FROM live_global WHERE deadline<=transaction_timestamp()+interval '1 hour'
+ ), study AS MATERIALIZED (
+  SELECT g.*,n.near_expiry_ordinal,coalesce(g.actual_response_hash=g.response_hash AND g.rights_review_sha256=g.query_rights_sha256 AND g.bound_at_utc<=transaction_timestamp(),false) exact_source_binding
+  FROM live_global g LEFT JOIN near_global n USING(population_query_id)
+  WHERE g.manifest_sha256=$1 AND g.run_day_index IS NOT NULL
+ ), pre AS (
+  SELECT g.population_query_id,g.run_day_index,g.horizon,g.near_expiry_ordinal,g.exact_source_binding,s.id snapshot_id,
+   s.created_at<s.prediction_cutoff_utc cutoff_safe,
+   (g.exact_source_binding AND s.created_at<s.prediction_cutoff_utc AND s.created_at<=transaction_timestamp()
+    AND s.prediction_cutoff_utc=s.selected_t_milestone_utc-(CASE g.horizon WHEN 'T-24h' THEN interval '24 hours' WHEN 'T-6h' THEN interval '6 hours' WHEN 'T-90m' THEN interval '90 minutes' END)
+    AND g.bound_at_utc<=s.created_at AND g.source_available_at_utc<=fp.available_at AND fp.available_at<=s.created_at
+    AND fp.provider_content_expired_at_utc IS NULL AND fp.population_role='requested_airport_primary'
+    AND fp.source_type='fids' AND fp.query_direction='Departure' AND fp.source_airport_icao=g.airport_icao AND fp.dep_airport_icao=g.airport_icao) exact_live_pre,
+   (l.expires_at_utc>transaction_timestamp() AND l.expires_at_utc<=g.deadline AND f.horizon=s.horizon
+    AND f.cohort_bucket=g.run_day_index-1 AND f.split=(CASE WHEN g.run_day_index<=20 THEN 'train' WHEN g.run_day_index<=25 THEN 'validation' ELSE 'test' END)
+    AND f.research_expiry_utc>transaction_timestamp() AND f.research_expiry_utc=pol.research_expiry_utc
+    AND l.expires_at_utc<=f.research_expiry_utc AND l.expires_at_utc<=pol.valid_until_utc
+    AND pol.valid_from_utc<=s.created_at AND pol.valid_until_utc>transaction_timestamp()) exact_live_link
+  FROM study g
+  LEFT JOIN clean.flight_snapshots s ON s.population_query_id=g.population_query_id::text AND s.fids_response_hash=g.response_hash
+   AND s.horizon=g.horizon AND s.prediction_state='PRE_DEPARTURE'
+  LEFT JOIN clean.flight_population fp ON fp.population_query_id=g.population_query_id AND fp.population_member_id=s.population_member_id
+   AND fp.canonical_flight_instance_id=s.flight_instance_id AND fp.response_hash=g.response_hash
+  LEFT JOIN phase7_private.pre_source_link_v39 l ON l.snapshot_id=s.id
+  LEFT JOIN phase7_private.pre_fragment_v39 f ON f.row_id=l.row_id
+  LEFT JOIN phase7_private.pre_preservation_policy_v39 pol ON pol.manifest_sha256=g.manifest_sha256
+   AND pol.rights_sha256=g.rights_review_sha256 AND pol.contract_sha256=f.contract_sha256 AND pol.profile_sha256=f.profile_sha256
+ )
+ SELECT run_day_index,horizon,near_expiry_ordinal,exact_source_binding,
+  count(DISTINCT snapshot_id)::int linked_pre_rows,
+  count(DISTINCT snapshot_id) FILTER(WHERE cutoff_safe)::int cutoff_safe_pre_rows,
+  count(DISTINCT snapshot_id) FILTER(WHERE exact_live_pre)::int exact_live_pre_rows,
+  count(DISTINCT snapshot_id) FILTER(WHERE exact_live_pre AND exact_live_link)::int live_packet_b_link_rows
+ FROM pre GROUP BY population_query_id,run_day_index,horizon,near_expiry_ordinal,exact_source_binding
+ ORDER BY run_day_index,horizon,near_expiry_ordinal NULLS LAST,population_query_id LIMIT 6145`;
+export function projectStudyPreservationRows(rows,nearReport){
+ const fail=()=>{throw Error("HOLD_P5B_STUDY_PRESERVATION_METADATA_SCOPE");};
+ if(!Array.isArray(rows)||rows.length>6144)fail();
+ const cells=new Map(),near=[],seen=new Set();
+ for(const x of rows){
+  const d=x.run_day_index,h=x.horizon,ord=x.near_expiry_ordinal;
+  const counts=[x.linked_pre_rows,x.cutoff_safe_pre_rows,x.exact_live_pre_rows,x.live_packet_b_link_rows];
+  if(!Number.isSafeInteger(d)||d<1||d>31||!NEAR_EXPIRY_HORIZONS.includes(h)||
+    typeof x.exact_source_binding!=="boolean"||counts.some(v=>!Number.isSafeInteger(v)||v<0)||
+    counts.some((v,i)=>i>0&&v>counts[i-1])||(!x.exact_source_binding&&counts[2]!==0)||
+    (ord!==null&&(!Number.isSafeInteger(ord)||ord<1||ord>MAX_NEAR_EXPIRY_CANDIDATES||seen.has(ord))))fail();
+  const k=d+"|"+h,c=cells.get(k)??{day:d,horizon:h,liveOriginals:0,sourceBindingMismatchOriginals:0,sourceLinkedPreRows:0,cutoffSafePreRows:0,exactLivePreRows:0,livePacketBMetadataLinks:0,exactLivePreWithoutLivePacketBMetadataLink:0};
+  c.liveOriginals++;c.sourceBindingMismatchOriginals+=Number(!x.exact_source_binding);c.sourceLinkedPreRows+=counts[0];c.cutoffSafePreRows+=counts[1];c.exactLivePreRows+=counts[2];c.livePacketBMetadataLinks+=counts[3];c.exactLivePreWithoutLivePacketBMetadataLink+=counts[2]-counts[3];cells.set(k,c);
+  if(ord!==null){seen.add(ord);near.push({candidateOrdinal:ord,day:d,horizon:h,exactSourceBinding:x.exact_source_binding,sourceLinkedPreRows:counts[0],cutoffSafePreRows:counts[1],exactLivePreRows:counts[2],livePacketBMetadataLinks:counts[3],exactLivePreWithoutLivePacketBMetadataLink:counts[2]-counts[3]});}
+ }
+ if(nearReport){
+  const expected=nearReport.candidates.filter(x=>x.studyScope==="ACTIVE_STUDY_SCOPE");
+  if(expected.length!==near.length||expected.some(x=>!near.some(y=>y.candidateOrdinal===x.candidateOrdinal&&y.day===x.runDayIndex&&y.horizon===x.horizon&&y.sourceLinkedPreRows===x.sourceLinkedPreRows&&y.cutoffSafePreRows===x.cutoffSafeSourceLinkedPreRows)))fail();
+ }
+ return {status:"P5B_STUDY_LIVE_EXACT_PRE_PACKET_B_LINK_METADATA_READONLY",cells:[...cells.values()],nearExpiry:near.sort((a,b)=>a.candidateOrdinal-b.candidateOrdinal),
+  exactLiveLinkNotIndependentReadback:true,missingLiveLinkNotProofOfHistoricalLoss:true,expiredMappingNotReconstructed:true,trainingEligibilityCertified:false,providerCalls:0,databaseWrites:0};
+}
+export async function readStudyPreservationMetadata(c,manifest,nearReport){
+ if(!/^[a-f0-9]{64}$/.test(manifest??""))throw Error("HOLD_P5B_STUDY_PRESERVATION_METADATA_SCOPE");
+ return projectStudyPreservationRows((await c.query(P7_LIVE_STUDY_LINK_METADATA_SQL,[manifest])).rows,nearReport);
+}
+
 export async function readInventory(c){
  let begun=false;
  try{
@@ -151,7 +228,7 @@ export async function readInventory(c){
     FROM bound GROUP BY 1,2
    ), pre AS (
     SELECT b.run_day_index,b.horizon,count(DISTINCT s.id)::int linked_pre_rows,
-      count(DISTINCT s.id) FILTER(WHERE s.created_at<=s.prediction_cutoff_utc)::int cutoff_safe_pre_rows
+      count(DISTINCT s.id) FILTER(WHERE s.created_at<s.prediction_cutoff_utc)::int cutoff_safe_pre_rows
     FROM bound b JOIN clean.flight_snapshots s ON s.population_query_id=b.population_query_id::text AND s.fids_response_hash=b.response_hash AND s.horizon=b.horizon AND s.prediction_state='PRE_DEPARTURE'
     GROUP BY 1,2
    )
@@ -263,7 +340,7 @@ export async function readInventory(c){
    ) t ON true
    LEFT JOIN LATERAL (
     SELECT count(*)::int source_linked_pre_rows,
-     count(*) FILTER(WHERE snap.created_at<=snap.prediction_cutoff_utc)::int cutoff_safe_pre_rows
+     count(*) FILTER(WHERE snap.created_at<snap.prediction_cutoff_utc)::int cutoff_safe_pre_rows
     FROM clean.flight_snapshots snap
     WHERE snap.population_query_id=g.population_query_id::text AND snap.fids_response_hash=g.response_hash
      AND snap.horizon=g.horizon AND snap.prediction_state='PRE_DEPARTURE'
@@ -278,11 +355,12 @@ export async function readInventory(c){
   const nearExpiryGlobal=nearExpiry.length?safeCount(nearExpiry[0].global_count):0;
   const nearExpiryObserved=nearExpiry.filter(x=>x.candidate_ordinal!==null);
   const nearExpiryReport=projectNearExpiryRows(nearExpiryObserved,new Date(id.at).toISOString(),nearExpiryGlobal);
+  const studyPreservation=await readStudyPreservationMetadata(c,auth[0].manifest_sha256,nearExpiryReport);
   const fragments=(await c.query("SELECT split,horizon,count(*)::int rows,count(*) FILTER(WHERE research_expiry_utc>transaction_timestamp())::int unexpired FROM phase7_private.pre_fragment_v39 GROUP BY 1,2 ORDER BY 1,2")).rows;
   const bundles=(await c.query("SELECT count(*)::int rows,count(*) FILTER(WHERE research_expiry_utc>transaction_timestamp())::int unexpired,(SELECT count(*)::int FROM phase7_private.pre_source_link_v39) links,(SELECT count(*)::int FROM phase7_private.pre_preservation_policy_v39) policies FROM phase7_private.derived_release_bundle_v39")).rows[0];
   const result=project(rows,fragments,bundles,new Date(id.at).toISOString());
   begun=false;await c.query("ROLLBACK");
-  return {...result,nearExpiry:nearExpiryReport};
+  return {...result,nearExpiry:nearExpiryReport,studyPreservation};
  }finally{if(begun)await c.query("ROLLBACK");}
 }
 /** I124/T118: count-only current native shape diagnostics. Mirrors the

@@ -19,6 +19,7 @@ import {makeP5CdV0091RegisterArgs,makeP5CdReviewedSourceRegistrationCall} from "
 import {beforeAll,afterAll,describe,it,expect} from "vitest";
 import {Pool,Client} from "pg";
 import {inspectV0115,installV0115Once,V0115_PATH,NATIVE_PATH} from "../scripts/v39_phase5b_v0115_owner_once_v39.mjs";
+import {readStudyPreservationMetadata} from "../scripts/v39_phase5b_retention_p7_inventory_owner.mjs";
 import {createHash,generateKeyPairSync,sign} from "node:crypto";
 import {URL as NodeURL} from "node:url";
 import {readFileSync} from "node:fs";
@@ -1024,6 +1025,16 @@ active("Phase5 C+D actual Stage14 source-bound parallel PRE on disposable PG16",
       expect(verified.privateDecisions[0].anchor).toMatchObject({snapshotId:saved.committedSnapshotId,flightInstanceId:flight,
        selectedNativeTUtc:t.toISOString(),sourceResponseSha256:response});
       expect(verified.privateDecisions[0].fragments.some(f=>f.packet.rows[0].horizon==="T-6h")).toBe(true);
+      const census=async()=>{
+       const c=await admin.connect();
+       try{await c.query("BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY");
+        const meta=await readStudyPreservationMetadata(c,manifest);
+        expect(JSON.stringify(meta)).not.toContain(flight);expect(JSON.stringify(meta)).not.toContain(qid2);
+        expect(meta.trainingEligibilityCertified).toBe(false);
+        return meta.cells.find((x:{day:number;horizon:string})=>x.day===1&&x.horizon==="T-6h");
+       }finally{await c.query("ROLLBACK");c.release();}
+      };
+      const preservedBefore=await census();expect(preservedBefore?.livePacketBMetadataLinks).toBeGreaterThanOrEqual(1);
       expect(JSON.stringify(verified)).not.toContain(flight);expect(JSON.stringify(verified)).not.toContain(response);
       const mixed=await readP6ConditionalPostT6PreservationBatch(scoped,{...scope,candidates:[...scope.candidates,{...scope.candidates[0],flightInstanceId:"leg:g5a:"+sha("absent same-frame CI flight")}]},input);
       expect(mixed).toMatchObject({candidateCount:2,sourceEligibleCount:1,verifiedPacketBGroupCount:1,unresolvedPacketBGroupCount:0,unavailableCount:1,phase6PaidGo:false});
@@ -1112,6 +1123,11 @@ active("Phase5 C+D actual Stage14 source-bound parallel PRE on disposable PG16",
       // Leave the fixture link expired for the existing due-only sweep below.
       // Never extend or resurrect a link, even in this regression.
       await admin.query("UPDATE phase7_private.pre_source_link_v39 SET expires_at_utc=clock_timestamp()-interval '1 second' WHERE snapshot_id=$1",[saved.committedSnapshotId]);
+      const preservedAfter=await census();
+      expect(preservedAfter?.livePacketBMetadataLinks).toBe(preservedBefore!.livePacketBMetadataLinks-1);
+      expect(preservedAfter?.exactLivePreRows).toBe(preservedBefore!.exactLivePreRows);
+      expect(preservedAfter?.exactLivePreWithoutLivePacketBMetadataLink).toBe(preservedBefore!.exactLivePreWithoutLivePacketBMetadataLink+1);
+      console.log("S011_REAL_STUDY_PRE_PACKET_B_LIVE_LINK_METADATA_BEFORE_AFTER_EXPIRY_PASS");
       const absent=await readP6ConditionalPostT6PreservationBatch(scoped,scope,input);
       expect(absent).toMatchObject({candidateCount:1,sourceEligibleCount:1,verifiedPacketBGroupCount:0,unresolvedPacketBGroupCount:1,unavailableCount:1,postPacketsIssued:0,phase6PaidGo:false});
       expect(absent.privateDecisions).toEqual([]);
