@@ -11,6 +11,7 @@ on:
       - 'tests/phase5_stage14_bound_flight_pre_real_pg_v39.test.ts'
       - 'migrations/staged/V0079__phase5_fids_31day_physical_attempt_and_original_binding_v39.sql'
       - 'migrations/staged/V0081__phase5_t24_separate_transaction_postcommit_witness_v39.sql'
+      - 'scripts/v39_phase5b_source_only_successor_owner.sh'
       - '.github/workflows/phase5b-conditional-t24-witness-pg16.yml'
 permissions:
   contents: read
