@@ -230,3 +230,55 @@ test("T144 tokenless deterministic recipe reproduces exact protected preview byt
   assert.throws(()=>deriveP6ConditionalPolicyFromReviewedRecipe(wrong),/HOLD_P6_CONDITIONAL_POLICY_CANDIDATE_/);
  assert.throws(()=>previewP6ConditionalDerivationRecipe({...args,custody:{...custody,observedDbClockUtc:prospective.preparationOpensUtc}}),/HOLD_P6_CONDITIONAL_POLICY_CANDIDATE_/);
 });
+
+import {deriveP6ConditionalRuntimeEnvironment} from "../scripts/v39_phase5b_conditional_policy_derivation_v39.mjs";
+test("T145 tokenless protected consumers derive only their existing policy, staged and active never overlap",()=>{
+ const base=p6ConditionalCommitment("base",baseDigests),{baseDigests:unused,...rest}=review;
+ const decision={...rest,schema:"v39.phase5b.prospective-conditional-commissioning-commitment-review.v1",basePolicyCommitmentSha256:base};
+ const reviewBytes=buf(decision),reviewSha256=sha(reviewBytes);
+ const custody={status:"P6_ACTUAL_PROTECTED_CONDITIONAL_POLICY_CUSTODY_READONLY",prospective,observedDbClockUtc:now,basePolicyCommitmentSha256:base,
+  exactThreePolicyDigestsValidated:true,exact31PlanPinsValidated:true,canonicalNativePredecessorBytes:true,nativePolicyPresent:true,baseIntervalCoversRemainingStudy:true,publicActorsVerified:true,
+  conditionalPolicyFieldState:"ABSENT",signingOrPublishingCapabilityPresent:false,actualConditionalPolicyInstalledVerified:false,actualConditionalPreCommitVerified:false,
+  providerCalls:0,databaseWrites:0,githubWrites:0,signaturesIssued:0,phase6PaidGo:false};
+ const x=previewP6ConditionalDerivationRecipe({...inputs,custody,reviewBytes,reviewSha256}),candidate=prepare(inputs);
+ const approval=buf({schema:"v39.phase5b.conditional-derivation-approval.v1",reviewBase64:reviewBytes.toString("base64"),recipe:x.recipe,recipeSha256:x.recipeSha256}).toString("base64");
+ const daily={P6_NONPAID_DAILY_POLICY_BASE64:dailyBytes.toString("base64"),P6_NONPAID_DAILY_POLICY_SHA256:baseDigests.daily,
+  P6_PHASE5B_DERIVATION_LANE_FINGERPRINT_SHA256:fp,P6_PHASE5B_DERIVATION_EXECUTABLE_SHA:"c".repeat(40),
+  GITHUB_ACTIONS:"true",GITHUB_REPOSITORY:"HKcode22/ReplitTranvr",GITHUB_REF:"refs/heads/main",GITHUB_RUN_ATTEMPT:"1",GITHUB_SHA:"c".repeat(40),
+  P6_CONDITIONAL_SERVICE_PROTOCOL_SHA256:"",P6_CONDITIONAL_LATER_METADATA_READ_ENABLED:""};
+ const active={...daily,P6_PHASE5B_DERIVATION_APPROVAL_BASE64:approval};
+ const target="scripts/v39_phase6_private_t24_restartable_enrollment_v39.mjs",full="scripts/v39_phase6_nonpaid_source_day_github_runtime_v39.mjs";
+ const a=deriveP6ConditionalRuntimeEnvironment(active,target);
+ assert.equal(a.env.P6_NONPAID_DAILY_POLICY_BASE64,candidate.privatePolicyBytes.daily.toString("base64"));assert.equal(a.env.P6_NONPAID_DAILY_POLICY_SHA256,candidate.dailySha256);
+ assert.equal(a.env.P6_CONDITIONAL_SERVICE_PROTOCOL_SHA256,decision.protocolSha256);assert.equal(a.env.P6_CONDITIONAL_LATER_METADATA_READ_ENABLED,"1");
+ assert.equal(a.env.P6_NONPAID_SIGNING_POLICY_BASE64,undefined);assert.equal(a.env.P6_NONPAID_TRANSPORT_TRUST_BASE64,undefined);
+ assert.equal(a.env.P6_PHASE5B_DERIVATION_APPROVAL_BASE64,undefined);assert.equal(a.maskValues.length,2);
+ const inactive=deriveP6ConditionalRuntimeEnvironment(daily,target);assert.equal(inactive.derived,false);assert.equal(inactive.env.P6_NONPAID_DAILY_POLICY_BASE64,daily.P6_NONPAID_DAILY_POLICY_BASE64);
+ const all={...daily,P6_NONPAID_SIGNING_POLICY_BASE64:signingBytes.toString("base64"),P6_NONPAID_SIGNING_POLICY_SHA256:baseDigests.signing,
+  P6_NONPAID_TRANSPORT_TRUST_BASE64:transportBytes.toString("base64"),P6_NONPAID_TRANSPORT_TRUST_SHA256:baseDigests.transport,
+  P6_NONPAID_SOURCE_CONFIRM:"VERIFY_FUTURE_CONDITIONAL_POLICY_CUSTODY_NO_PROVIDER",GITHUB_EVENT_NAME:"workflow_dispatch",GITHUB_ACTOR:"HKcode22",
+  P6_CONDITIONAL_COMMITMENT_REVIEW_BASE64:reviewBytes.toString("base64"),P6_CONDITIONAL_COMMITMENT_REVIEW_SHA256:reviewSha256,
+  P6_PHASE5B_CONDITIONAL_EXPECTED_CANDIDATE_SHA256:x.recipe.candidateCommitmentSha256,P6_PHASE5B_CONDITIONAL_REVIEW_PROTOCOL_SHA256:decision.protocolSha256};
+ const stageEnv={...all,P6_PHASE5B_DERIVATION_STAGED_APPROVAL_BASE64:approval,P6_PHASE5B_CONDITIONAL_INSTALL_ACTION:"VERIFY_STAGED_CONDITIONAL_SUCCESSOR"};
+ const staged=deriveP6ConditionalRuntimeEnvironment(stageEnv,full);
+ assert.equal(staged.env.P6_PHASE5B_CONDITIONAL_ACTIVE_PROTOCOL_SHA256,undefined);
+ assert.equal(staged.env.P6_NONPAID_TRANSPORT_TRUST_SHA256,candidate.transportSha256);assert.equal(staged.maskValues.length,6);
+ const activeEnv={...all,P6_PHASE5B_DERIVATION_APPROVAL_BASE64:approval,P6_PHASE5B_CONDITIONAL_INSTALL_ACTION:"VERIFY_ACTIVE_CONDITIONAL_SUCCESSOR"};
+ assert.equal(deriveP6ConditionalRuntimeEnvironment(activeEnv,full).env.P6_PHASE5B_CONDITIONAL_ACTIVE_PROTOCOL_SHA256,decision.protocolSha256);
+ for(const bad of [{...active,GITHUB_SHA:"d".repeat(40)},{...active,P6_PHASE5B_DERIVATION_LEGACY_SELECTOR:decision.protocolSha256},
+  {...active,P6_PHASE5B_DERIVATION_LANE_FINGERPRINT_SHA256:h("wrong actor")},{...active,P6_NONPAID_DAILY_POLICY_BASE64:""},
+  {...active,P6_CONDITIONAL_SERVICE_PROTOCOL_SHA256:h("drift")},{...active,P6_PHASE5B_DERIVATION_STAGED_APPROVAL_BASE64:approval}])
+  assert.throws(()=>deriveP6ConditionalRuntimeEnvironment(bad,target),/HOLD_P6_CONDITIONAL_POLICY_CANDIDATE_/);
+ for(const bad of [{...stageEnv,P6_PHASE5B_CONDITIONAL_INSTALL_ACTION:"STAGE_EXACT_REVIEWED_CONDITIONAL_SUCCESSOR"},{...stageEnv,GITHUB_ACTOR:"other"},
+  {...stageEnv,P6_PHASE5B_CONDITIONAL_EXPECTED_CANDIDATE_SHA256:h("drift")},{...activeEnv,P6_PHASE5B_CONDITIONAL_INSTALL_TOKEN:"unapproved"}])
+  assert.throws(()=>deriveP6ConditionalRuntimeEnvironment(bad,full),/HOLD_P6_CONDITIONAL_POLICY_CANDIDATE_/);
+ assert.throws(()=>deriveP6ConditionalRuntimeEnvironment(stageEnv,target),/DERIVATION_RUNTIME_ACTION/);
+});
+test("T145 all eight protected consumers use the same tokenless approval and exact in-memory wrapper",()=>{
+ for(const name of [".github/workflows/phase6-nonpaid-source-day-prepare-publish.yml",".github/workflows/phase6-private-later-enrollment.yml",".github/workflows/phase5-cd-github-bounded-pre-tick.yml",".github/workflows/phase5-cd-github-one-queued-t24-witness-main-manual.yml",".github/workflows/phase5-one-signed-day-source-child-dispatch.yml",".github/workflows/phase5-source-upcoming-queue-main-scheduled-readonly.yml",".github/workflows/phase6-direct-recovery-tick.yml",".github/workflows/phase6-rolling-controller-bounded-session.yml"]){
+  const y=readFileSync(name,"utf8");
+  assert.match(y,/P6_PHASE5B_DERIVATION_APPROVAL_BASE64:.*vars\.P6_PHASE5B_CONDITIONAL_DERIVATION_APPROVAL_BASE64/,name);
+  assert.match(y,/node scripts\/v39_phase5b_conditional_derived_exec_v39\.mjs (npx --no-install tsx|node) scripts\//,name);
+  assert.doesNotMatch(y,/secrets\.P6_PHASE5B_DERIVATION_/);
+ }
+});

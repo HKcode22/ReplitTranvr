@@ -19,6 +19,11 @@ on:
         required: false
         default: ''
         type: string
+      conditional_derivation_approval_base64:
+        description: 'Nonsecret exact preview recipe and reviewed metadata; independent staged readback only'
+        required: false
+        default: ''
+        type: string
       conditional_action:
         description: 'Empty/preview, STAGE_EXACT_REVIEWED_CONDITIONAL_SUCCESSOR, VERIFY_STAGED_CONDITIONAL_SUCCESSOR or VERIFY_ACTIVE_CONDITIONAL_SUCCESSOR; owner custody only'
         required: false
@@ -43,6 +48,8 @@ on:
     paths:
       - 'scripts/v39_phase5b_source_only_successor_owner.sh'
       - 'scripts/v39_phase5b_conditional_policy_candidate_v39.mjs'
+      - 'scripts/v39_phase5b_conditional_policy_derivation_v39.mjs'
+      - 'scripts/v39_phase5b_conditional_derived_exec_v39.mjs'
       - 'scripts/v39_phase5b_conditional_policy_install_v39.mjs'
       - 'scripts/v39_phase5b_conditional_review_metadata_v39.mjs'
       - 'tests/phase5b_conditional_policy_candidate_v39.test.mjs'
@@ -153,12 +160,17 @@ jobs:
           V39_P5_PROVIDER_CONTRACT_SHA256: ${{ secrets.V39_P5_PROVIDER_CONTRACT_SHA256 }}
           P6_PRIVATE_SOURCE_STORED_REVIEW_APPROVED: ${{ secrets.P6_PRIVATE_SOURCE_STORED_REVIEW_APPROVED }}
           P6_PRIVATE_SOURCE_STABLE_TRUST_BASE64: ${{ secrets.P6_PRIVATE_SOURCE_STABLE_TRUST_BASE64 }}
-          P6_NONPAID_DAILY_POLICY_BASE64: ${{ ((inputs.conditional_action == 'VERIFY_STAGED_CONDITIONAL_SUCCESSOR' || vars.P6_PHASE5B_CONDITIONAL_ACTIVE_PROTOCOL_SHA256 != '') && secrets.P6_PHASE5B_CONDITIONAL_DAILY_POLICY_BASE64 || inputs.conditional_action != 'VERIFY_STAGED_CONDITIONAL_SUCCESSOR' && vars.P6_PHASE5B_CONDITIONAL_ACTIVE_PROTOCOL_SHA256 == '' && secrets.P6_NONPAID_DAILY_POLICY_BASE64 || '') }}
-          P6_NONPAID_DAILY_POLICY_SHA256: ${{ ((inputs.conditional_action == 'VERIFY_STAGED_CONDITIONAL_SUCCESSOR' || vars.P6_PHASE5B_CONDITIONAL_ACTIVE_PROTOCOL_SHA256 != '') && secrets.P6_PHASE5B_CONDITIONAL_DAILY_POLICY_SHA256 || inputs.conditional_action != 'VERIFY_STAGED_CONDITIONAL_SUCCESSOR' && vars.P6_PHASE5B_CONDITIONAL_ACTIVE_PROTOCOL_SHA256 == '' && secrets.P6_NONPAID_DAILY_POLICY_SHA256 || '') }}
-          P6_NONPAID_SIGNING_POLICY_BASE64: ${{ ((inputs.conditional_action == 'VERIFY_STAGED_CONDITIONAL_SUCCESSOR' || vars.P6_PHASE5B_CONDITIONAL_ACTIVE_PROTOCOL_SHA256 != '') && secrets.P6_PHASE5B_CONDITIONAL_SIGNING_POLICY_BASE64 || inputs.conditional_action != 'VERIFY_STAGED_CONDITIONAL_SUCCESSOR' && vars.P6_PHASE5B_CONDITIONAL_ACTIVE_PROTOCOL_SHA256 == '' && secrets.P6_NONPAID_SIGNING_POLICY_BASE64 || '') }}
-          P6_NONPAID_SIGNING_POLICY_SHA256: ${{ ((inputs.conditional_action == 'VERIFY_STAGED_CONDITIONAL_SUCCESSOR' || vars.P6_PHASE5B_CONDITIONAL_ACTIVE_PROTOCOL_SHA256 != '') && secrets.P6_PHASE5B_CONDITIONAL_SIGNING_POLICY_SHA256 || inputs.conditional_action != 'VERIFY_STAGED_CONDITIONAL_SUCCESSOR' && vars.P6_PHASE5B_CONDITIONAL_ACTIVE_PROTOCOL_SHA256 == '' && secrets.P6_NONPAID_SIGNING_POLICY_SHA256 || '') }}
-          P6_NONPAID_TRANSPORT_TRUST_BASE64: ${{ ((inputs.conditional_action == 'VERIFY_STAGED_CONDITIONAL_SUCCESSOR' || vars.P6_PHASE5B_CONDITIONAL_ACTIVE_PROTOCOL_SHA256 != '') && secrets.P6_PHASE5B_CONDITIONAL_TRANSPORT_TRUST_BASE64 || inputs.conditional_action != 'VERIFY_STAGED_CONDITIONAL_SUCCESSOR' && vars.P6_PHASE5B_CONDITIONAL_ACTIVE_PROTOCOL_SHA256 == '' && secrets.P6_NONPAID_TRANSPORT_TRUST_BASE64 || '') }}
-          P6_NONPAID_TRANSPORT_TRUST_SHA256: ${{ ((inputs.conditional_action == 'VERIFY_STAGED_CONDITIONAL_SUCCESSOR' || vars.P6_PHASE5B_CONDITIONAL_ACTIVE_PROTOCOL_SHA256 != '') && secrets.P6_PHASE5B_CONDITIONAL_TRANSPORT_TRUST_SHA256 || inputs.conditional_action != 'VERIFY_STAGED_CONDITIONAL_SUCCESSOR' && vars.P6_PHASE5B_CONDITIONAL_ACTIVE_PROTOCOL_SHA256 == '' && secrets.P6_NONPAID_TRANSPORT_TRUST_SHA256 || '') }}
+          P6_PHASE5B_DERIVATION_APPROVAL_BASE64: ${{ vars.P6_PHASE5B_CONDITIONAL_DERIVATION_APPROVAL_BASE64 || '' }}
+          P6_PHASE5B_DERIVATION_STAGED_APPROVAL_BASE64: ${{ inputs.conditional_derivation_approval_base64 || '' }}
+          P6_PHASE5B_DERIVATION_LEGACY_SELECTOR: ${{ vars.P6_PHASE5B_CONDITIONAL_ACTIVE_PROTOCOL_SHA256 || '' }}
+          P6_PHASE5B_DERIVATION_LANE_FINGERPRINT_SHA256: ${{ (vars.P6_PHASE5B_CONDITIONAL_DERIVATION_APPROVAL_BASE64 != '' || inputs.conditional_derivation_approval_base64 != '') && secrets.P6_PHASE7_PRE_LANE_EVIDENCE_AUTHORITY_FINGERPRINT_SHA256 || '' }}
+          P6_PHASE5B_DERIVATION_EXECUTABLE_SHA: ${{ vars.P6_PHASE5B_RUNTIME_EXECUTABLE_SHA || '' }}
+          P6_NONPAID_DAILY_POLICY_BASE64: ${{ (((inputs.conditional_action == 'VERIFY_STAGED_CONDITIONAL_SUCCESSOR' && inputs.conditional_derivation_approval_base64 == '') || vars.P6_PHASE5B_CONDITIONAL_ACTIVE_PROTOCOL_SHA256 != '') && secrets.P6_PHASE5B_CONDITIONAL_DAILY_POLICY_BASE64 || (inputs.conditional_action != 'VERIFY_STAGED_CONDITIONAL_SUCCESSOR' || inputs.conditional_derivation_approval_base64 != '') && vars.P6_PHASE5B_CONDITIONAL_ACTIVE_PROTOCOL_SHA256 == '' && secrets.P6_NONPAID_DAILY_POLICY_BASE64 || '') }}
+          P6_NONPAID_DAILY_POLICY_SHA256: ${{ (((inputs.conditional_action == 'VERIFY_STAGED_CONDITIONAL_SUCCESSOR' && inputs.conditional_derivation_approval_base64 == '') || vars.P6_PHASE5B_CONDITIONAL_ACTIVE_PROTOCOL_SHA256 != '') && secrets.P6_PHASE5B_CONDITIONAL_DAILY_POLICY_SHA256 || (inputs.conditional_action != 'VERIFY_STAGED_CONDITIONAL_SUCCESSOR' || inputs.conditional_derivation_approval_base64 != '') && vars.P6_PHASE5B_CONDITIONAL_ACTIVE_PROTOCOL_SHA256 == '' && secrets.P6_NONPAID_DAILY_POLICY_SHA256 || '') }}
+          P6_NONPAID_SIGNING_POLICY_BASE64: ${{ (((inputs.conditional_action == 'VERIFY_STAGED_CONDITIONAL_SUCCESSOR' && inputs.conditional_derivation_approval_base64 == '') || vars.P6_PHASE5B_CONDITIONAL_ACTIVE_PROTOCOL_SHA256 != '') && secrets.P6_PHASE5B_CONDITIONAL_SIGNING_POLICY_BASE64 || (inputs.conditional_action != 'VERIFY_STAGED_CONDITIONAL_SUCCESSOR' || inputs.conditional_derivation_approval_base64 != '') && vars.P6_PHASE5B_CONDITIONAL_ACTIVE_PROTOCOL_SHA256 == '' && secrets.P6_NONPAID_SIGNING_POLICY_BASE64 || '') }}
+          P6_NONPAID_SIGNING_POLICY_SHA256: ${{ (((inputs.conditional_action == 'VERIFY_STAGED_CONDITIONAL_SUCCESSOR' && inputs.conditional_derivation_approval_base64 == '') || vars.P6_PHASE5B_CONDITIONAL_ACTIVE_PROTOCOL_SHA256 != '') && secrets.P6_PHASE5B_CONDITIONAL_SIGNING_POLICY_SHA256 || (inputs.conditional_action != 'VERIFY_STAGED_CONDITIONAL_SUCCESSOR' || inputs.conditional_derivation_approval_base64 != '') && vars.P6_PHASE5B_CONDITIONAL_ACTIVE_PROTOCOL_SHA256 == '' && secrets.P6_NONPAID_SIGNING_POLICY_SHA256 || '') }}
+          P6_NONPAID_TRANSPORT_TRUST_BASE64: ${{ (((inputs.conditional_action == 'VERIFY_STAGED_CONDITIONAL_SUCCESSOR' && inputs.conditional_derivation_approval_base64 == '') || vars.P6_PHASE5B_CONDITIONAL_ACTIVE_PROTOCOL_SHA256 != '') && secrets.P6_PHASE5B_CONDITIONAL_TRANSPORT_TRUST_BASE64 || (inputs.conditional_action != 'VERIFY_STAGED_CONDITIONAL_SUCCESSOR' || inputs.conditional_derivation_approval_base64 != '') && vars.P6_PHASE5B_CONDITIONAL_ACTIVE_PROTOCOL_SHA256 == '' && secrets.P6_NONPAID_TRANSPORT_TRUST_BASE64 || '') }}
+          P6_NONPAID_TRANSPORT_TRUST_SHA256: ${{ (((inputs.conditional_action == 'VERIFY_STAGED_CONDITIONAL_SUCCESSOR' && inputs.conditional_derivation_approval_base64 == '') || vars.P6_PHASE5B_CONDITIONAL_ACTIVE_PROTOCOL_SHA256 != '') && secrets.P6_PHASE5B_CONDITIONAL_TRANSPORT_TRUST_SHA256 || (inputs.conditional_action != 'VERIFY_STAGED_CONDITIONAL_SUCCESSOR' || inputs.conditional_derivation_approval_base64 != '') && vars.P6_PHASE5B_CONDITIONAL_ACTIVE_PROTOCOL_SHA256 == '' && secrets.P6_NONPAID_TRANSPORT_TRUST_SHA256 || '') }}
           P6_NONPAID_DAILY_REVIEWER_PRIVATE_KEY_BASE64: ${{ inputs.confirm != 'VERIFY_FUTURE_CONDITIONAL_POLICY_CUSTODY_NO_PROVIDER' && secrets.P6_NONPAID_DAILY_REVIEWER_PRIVATE_KEY_BASE64 || '' }}
           P6_NONPAID_QUERY_REVIEWER_PRIVATE_KEY_BASE64: ${{ inputs.confirm != 'VERIFY_FUTURE_CONDITIONAL_POLICY_CUSTODY_NO_PROVIDER' && secrets.P6_NONPAID_QUERY_REVIEWER_PRIVATE_KEY_BASE64 || '' }}
           P6_NONPAID_REGISTRY_REVIEWER_PRIVATE_KEY_BASE64: ${{ inputs.confirm != 'VERIFY_FUTURE_CONDITIONAL_POLICY_CUSTODY_NO_PROVIDER' && secrets.P6_NONPAID_REGISTRY_REVIEWER_PRIVATE_KEY_BASE64 || '' }}
@@ -180,7 +192,7 @@ jobs:
         run: |
           set -Eeuo pipefail
           set +x
-          npx --no-install tsx scripts/v39_phase6_nonpaid_source_day_github_runtime_v39.mjs
+          node scripts/v39_phase5b_conditional_derived_exec_v39.mjs npx --no-install tsx scripts/v39_phase6_nonpaid_source_day_github_runtime_v39.mjs
           if [[ "$P6_NONPAID_SOURCE_CONFIRM" == VERIFY_FUTURE_CONDITIONAL_POLICY_CUSTODY_NO_PROVIDER ]]; then
             echo 'BOUNDED_PROTECTED_CONDITIONAL_CUSTODY_NO_PROVIDER_NO_PAID_GO' >> "$GITHUB_STEP_SUMMARY"
           else

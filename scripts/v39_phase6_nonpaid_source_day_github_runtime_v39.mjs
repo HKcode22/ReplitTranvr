@@ -21,7 +21,7 @@ import {runP6StoredSourceDayPublication} from "../server/lib/disruption/phase6St
 import {commitP6Day1LateFixedRegistration} from "../server/lib/disruption/phase5EarlyAdaptiveDrawOwner_v39.ts";
 import {verifyP6Day1CommittedLateScope} from "../server/lib/disruption/phase6Day1LateRegistrationScope_v39.mjs";
 import {verifyP5EarlyDrawReadonlyAcl} from "./v39_phase5_github_six_slot_early_draw_owner_v39.ts";
-import {previewP6ConditionalCandidateFromCommitment,prepareP6ConditionalSuccessorStageFromCommitment} from "./v39_phase5b_conditional_policy_candidate_v39.mjs";
+import {previewP6ConditionalCandidateFromCommitment,previewP6ConditionalDerivationRecipe,prepareP6ConditionalSuccessorStageFromCommitment} from "./v39_phase5b_conditional_policy_candidate_v39.mjs";
 import {admitP6ConditionalInstallAction,P6_CONDITIONAL_INSTALL_ACTIONS as CA,stageP6ConditionalSuccessor,verifyP6ConditionalSuccessorReadback} from "./v39_phase5b_conditional_policy_install_v39.mjs";
 import {encodeP6PublicPolicyCommitment} from "./v39_phase5b_conditional_review_metadata_v39.mjs";
 const SHA=/^[a-f0-9]{64}$/,CODE=/^[a-f0-9]{40}$/;
@@ -459,7 +459,11 @@ export async function runP6NonpaidSourceDayGithub(env){
     return stageP6ConditionalSuccessor({env,candidate,review});
    }
    const candidatePreview=previewP6ConditionalCandidateFromCommitment(candidateArgs);
-   return Object.freeze({...receipt,candidatePreview:{...candidatePreview,candidatePublicCommitmentLetters:encodeP6PublicPolicyCommitment(candidatePreview.candidateCommitmentSha256)}});
+   const derivation=previewP6ConditionalDerivationRecipe(candidateArgs);
+   if(derivation.recipe.candidateCommitmentSha256!==candidatePreview.candidateCommitmentSha256)hold("CONDITIONAL_DERIVATION_PREVIEW_DRIFT");
+   return Object.freeze({...receipt,candidatePreview:{...candidatePreview,candidatePublicCommitmentLetters:encodeP6PublicPolicyCommitment(candidatePreview.candidateCommitmentSha256)},
+    derivationPreview:derivation});
+
   }
   let selection,lateScope;
   if(ctx.mode==="day1_recovery"){
