@@ -5,7 +5,17 @@ import {tmpdir} from 'node:os';
 import {join,resolve} from 'node:path';
 import {spawnSync,execFileSync} from 'node:child_process';
 const script=resolve('scripts/v39_phase5b_owner_wait_once_980.sh');
-const helper=execFileSync('git',['cat-file','-p','1bbec6f1d0dacbc0432b5c7c36955b43163855fa']);
+const helperBlob='1bbec6f1d0dacbc0432b5c7c36955b43163855fa';
+const helper=execFileSync('git',['cat-file','blob',helperBlob]);
+test('T130 exact historical fixture identity, shallow CI acquisition and no replacement by mutable branch',()=>{
+ assert.equal(execFileSync('git',['hash-object','--stdin'],{input:helper,encoding:'utf8'}).trim(),helperBlob);
+ const workflow=readFileSync(resolve('.github/workflows/phase5b-source-diagnostics-offline.yml'),'utf8');
+ const acquisition=workflow.indexOf('git fetch --no-tags --depth=1 origin c4408c621a84a2549355d935cca7333c5527d3c2');
+ const testStep=workflow.indexOf('- run: node --test tests/phase5b_progress_report_v39.test.mjs tests/phase5b_paid_audit_cli_transport_v39.test.mjs tests/phase5b_owner_wait_once_980_v39.test.mjs');
+ assert.ok(acquisition>=0&&testStep>acquisition);
+ assert.match(workflow,/git cat-file -e 1bbec6f1d0dacbc0432b5c7c36955b43163855fa\^\{blob\}/);
+ assert.match(workflow,/git cat-file blob 1bbec6f1d0dacbc0432b5c7c36955b43163855fa \| git hash-object --stdin/);
+});
 test('T126 waits without mutation then invokes exact reviewed helper once, never retries a hold',()=>{
  for(const scenario of ['quiet','active_then_quiet','before_window_then_quiet','expired','unknown','changed_main','helper_hold','wrong_head','wrong_blob']){
   const d=mkdtempSync(join(tmpdir(),'p5b-wait980-'));
