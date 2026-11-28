@@ -17,6 +17,12 @@ on:
       - 'scripts/v39_phase5_cd_v0091_owner_once.mjs'
       - 'scripts/v39_phase6_v0100_owner_schema_once_v39.mjs'
       - 'migrations/staged/V0100__phase6_restartable_exact_v0091_enrollment_v39.sql'
+      - 'scripts/v39_phase6_conditional_post_preservation_read_v39.ts'
+      - 'migrations/staged/V0115__phase5b_conditional_t6_scoped_packet_b_read_v39.sql'
+      - 'server/lib/disruption/phase7PostScopedGroup_v39.ts'
+      - 'server/lib/disruption/phase6LaterT24EvidenceBatchReadOnly_v39.ts'
+      - 'server/lib/disruption/phase6PostNativePreCandidateReadOnce_v39.mjs'
+      - 'server/lib/disruption/phase5V0083FuturePostOriginalDb_v39.ts'
       - 'tests/phase5_cd_v0088_existing_stage14_real_v0087_queue_pg16_v39.test.ts'
 permissions:
   contents: read
@@ -32,6 +38,7 @@ jobs:
       V39_P6_V0100_RESTARTABLE_CI: '1'
       V39_P5B_CONDITIONAL_QUEUE_CI: '1'
       V39_P5B_CONDITIONAL_POST_T6_CI: '1'
+      V39_P5B_CONDITIONAL_POST_WITNESS_CI: '1'
       V39_P7_STAGE14_PRESERVATION_DISPOSABLE: '1'
       V39_P5_E_NATIVE_ROUTE_STAGE14_CI: '1'
       V39_P5_CD_STAGE14_FENCE_DISPOSABLE: '0'
@@ -207,5 +214,34 @@ jobs:
           GRANT SELECT ON clean.phase5_fids_allowed_query_v39,clean.phase5_fids_original_binding_v39,
            clean.fids_query_response,clean.flight_population,clean.flight_snapshots TO phase5_fids_source_prod_20261107;
           SQL
-          npx --no-install vitest run             tests/phase5_cd_v0088_existing_stage14_real_v0087_queue_pg16_v39.test.ts
+          # Reuse existing real private custody schema and restricted roles
+          # for the synthetic T24 witness -> committed T6/Packet B consumer.
+          # Same exact empty owner chain used by day-epoch CI; no production.
+          psql "$DATABASE_URL" -X -v ON_ERROR_STOP=1 <<'SQL'
+          CREATE ROLE neondb_owner LOGIN CREATEROLE PASSWORD 'ci-only-day-real';
+          ALTER DATABASE neondb OWNER TO neondb_owner;
+          -- Metadata-only legacy-schema presence checks used by the exact owner chain.
+          GRANT USAGE ON SCHEMA clean TO neondb_owner;
+          SQL
+          CUSTODY_OWNER='postgresql://neondb_owner:ci-only-day-real@localhost:5432/neondb?sslmode=disable'
+          psql "$CUSTODY_OWNER" -X -v ON_ERROR_STOP=1 -f migrations/staged/V0094__phase6_private_frozen_packet_transport_inert_v39.sql
+          psql "$CUSTODY_OWNER" -X -v ON_ERROR_STOP=1 -f migrations/staged/V0095__phase6_private_source_query_post_packet_kind_scope_inert_v39.sql
+          node --input-type=module <<'JS'
+          import assert from "node:assert/strict";
+          import pg from "pg";
+          import {readFileSync} from "node:fs";
+          import {runEmptyOwnerChain} from "./scripts/v39_phase6_empty_private_schema_owner_chain_v39.mjs";
+          import {PATH,installV0101Once} from "./scripts/v39_phase6_v0101_owner_schema_once_v39.mjs";
+          const open=async()=>{const c=new pg.Client({connectionString:"postgresql://neondb_owner:ci-only-day-real@localhost:5432/neondb?sslmode=disable"});await c.connect();return c;};
+          assert.deepEqual((await runEmptyOwnerChain({open,installAllowed:true})).installed,["V0097","V0098","V0099"]);
+          assert.equal((await installV0101Once({open,bytes:readFileSync(PATH)})).status,"V0101_INSTALLED_EMPTY_T24_TRANSPORT_NO_GO");
+          JS
+          psql "$DATABASE_URL" -X -v ON_ERROR_STOP=1 -f migrations/staged/V0113__phase5b_conditional_t24_metadata_reader_v39.sql
+          psql "$DATABASE_URL" -X -v ON_ERROR_STOP=1 <<'SQL'
+          CREATE ROLE phase6_private_publisher_login_ci_postwitness LOGIN NOINHERIT PASSWORD 'ci-only';
+          CREATE ROLE phase6_private_reader_login_ci_postwitness LOGIN NOINHERIT PASSWORD 'ci-only';
+          GRANT phase6_private_frozen_publisher_v39 TO phase6_private_publisher_login_ci_postwitness WITH ADMIN FALSE, INHERIT FALSE, SET TRUE;
+          GRANT phase6_private_frozen_reader_v39 TO phase6_private_reader_login_ci_postwitness WITH ADMIN FALSE, INHERIT FALSE, SET TRUE;
+          SQL
+          npx --no-install vitest run tests/phase5_cd_v0088_existing_stage14_real_v0087_queue_pg16_v39.test.ts
           echo P5_V0091_REAL_ORIGINAL_SOURCE_TO_V0087_QUEUE_TO_EXISTING_STAGE14_PASS

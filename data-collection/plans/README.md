@@ -2,6 +2,8 @@
 
 # Data collection plans
 
+**START HERE: [V3.9 f.8 — CURRENT execution contract and precedence addendum](V3.9_DataCollectPlan_CURRENT.md).** This consolidates the adopted Phase 5–7 scientific and operational requirements by original section, rather than asking operators to reconcile separate historical prose. The original signed f.8 file remains byte-for-byte historical baseline. [Numbered Phase 5B simplification register](../phase5b/SIMPLIFICATION_REGISTER.md) tracks actual removal of unnecessary complexity.
+
 This directory is the entry point to the frozen study protocol, its amendments, and the current Phase 5B / Phase 6 recovery evidence. The canonical protocol files remain at their established paths; the links below make their relationship visible without copying, renaming, or replacing them.
 
 - **[Phase 5B / Phase 6 recovery map](PHASE5B_PHASE6_RECOVERY_MAP_2026-11-27.md)** — Packet A/B, Amendment E, C+D, current evidence, open P0s and next actions.
@@ -12,6 +14,23 @@ This directory is the entry point to the frozen study protocol, its amendments, 
 - **Amendment C:** [segmented source coverage](V3.9_DataCollectPlan_f.8_Amendment_C_20261107_Segmented_Source_Coverage.md).
 - **Amendment D:** [D1 prospective schedule-revision target proposal](V3.9_DataCollectPlan_f.8_Amendment_D_20261107_Prospective_Schedule_Revision_Primary.md) and [D2 four-hub sampling-scope proposal](V3.9_DataCollectPlan_f.8_Amendment_D_20261108_Four_HUB_Prospective_Scope.md). They are distinct proposals with distinct purposes.
 - **Amendment E:** [canonical traveler predictions and evidence tiers](../phase5/2026-11-11_AMENDMENT_E_CANONICAL_TRAVELER_PREDICTIONS_C_D_FREE_ADSB.md), [paired observability and material limits](../phase5/2026-11-15_AMENDMENT_E_PAIRED_OBSERVABILITY_AND_MATERIAL_LIMITS.md), and [Phase 6 freeze adoption](../phase5/evidence/2026-11-22_phase6_scientific_freeze_adoption.md). The separate [Nov 9 proposal snapshot](PROPOSED_Amendment_E_20261109_PRESERVED_NOT_ADOPTED.md) remains preserved as **not adopted**.
+
+## Current controlling navigation and maintenance status — November 28, 2026
+
+This update resolves stale navigation/status statements, not the signed protocol. The f.8 baseline and all exact signed study bytes remain unchanged. For the current executable interpretation read the [adopted November 22 scientific freeze](../phase5/evidence/2026-11-22_phase6_scientific_freeze_adoption.md), [runtime binding review](../phase5/evidence/2026-11-22_PHASE6_RUNTIME_BINDING_OWNER_DELEGATED_SCOPE_REVIEW.md), [canonical Amendment E](../phase5/2026-11-11_AMENDMENT_E_CANONICAL_TRAVELER_PREDICTIONS_C_D_FREE_ADSB.md), [Packet A/B parity](../phase5/evidence/2026-11-20_packet_b_amendment_e_field_parity_audit_NO_GO.md) and [Phase 5B hold](../phase5b/2026-11-28_SCIENTIFIC_REPAIR_HOLD.md). The historical pre-freeze wording in f.8 and older proposal/lineage records is not the live release state. Only the specifically adopted, prospective scope controls over conflicting older instructions. No new scientific amendment or paid authority is created here.
+
+| Decision | Binding interpretation |
+| --- | --- |
+| f.8, A/B | Preserve original research intent and exact sampled calendar; B supersedes A where a source-only shortcut would be scientific acceptance. Historical source-only pilot is not full Gate 5. |
+| C and D2 | Use the exact adopted segmented calendar and qualified four-HUB scope (not a retroactive strict original Gate 2 PASS); preserve seed, 31 ordered parent days and 20/5/6 grouped chronological split. |
+| D1 | Separate conditional reported-schedule change from T6 to fixed T+2 watermark; never a physical delay replacement or primary fallback after outcomes. |
+| Canonical E | Principal T6 continuous actual gate-out delay only when the same-milestone original schedule, independently authentic physical outcome, rights and sufficient coverage are established; T90 paired update, T24 comparator, cancellation and AIRBORNE/arrival ETA separate. Keep negative minutes and unknown/censored outcomes. |
+| Packet A | Full operational source-bound evidence under original source-specific expiry, rights, and clock constraints; not a permanent raw archive. |
+| Packet B | Only approved genuinely derived research fields; maintain all 16 feature dispositions, truthful missingness, distinct source rights and purpose-bound reference identifiers. Material parity failure stays visible. |
+| C+D | Existing signed SOURCE registry, durable V0087 queue/fence, Stage14 atomic PRE and Packet B, distinct independent readback; no competing queue. |
+| Phase 5B | Remove repeated approvals for identical reviewed scope, duplicated policy copies/credentials and unrelated paid-window constraints while paused. Optional features may be missing truthfully, never substitute provenance/rights, timing, identity, STOP, budget or expiry. |
+
+**Current maintenance:** ordinary paid SOURCE/POST and automatic future SOURCE preparation remain paused throughout November 28–29 Pacific; no automatic restart. Retention and reconciliation continue. No missed window is replayed or moved. See the updated [recovery map](PHASE5B_PHASE6_RECOVERY_MAP_2026-11-27.md) and [single runbook](../phase5b/RUNBOOK.md) for current state and actual next operations.
 
 ## Related operational and evidence records
 

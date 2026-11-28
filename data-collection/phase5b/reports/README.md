@@ -1,6 +1,10 @@
 # Phase5B recovery report — Nov27 post-#980 deployment
 
-## Current P0 readout — Nov27 17:55:36 PST owner receipt
+## Current P0 readout — Nov28 after #983
+
+See [current recovery map](../../plans/PHASE5B_PHASE6_RECOVERY_MAP_2026-11-27.md) and [single runbook](../RUNBOOK.md). #983 deployed at a02e3d6e; all 33 exact PR CI and new-main aggregate passed. Protected tokenless preview 46140377128 passed; inactive and active readback, actual PRE/Packet B and protected POST remain outstanding. Paid admissions remain paused throughout the weekend; retention active. Matrix 23/59 narrowly closed, 36 remaining. Older counts and commands below are historical only.
+
+## Historical P0 readout — Nov27 17:55:36 PST owner receipt
 
 Actual owner pinned `2ebc2c532fdfdb82437da993bcb7e06dbcf55f90` I133/T127 inventory (script SHA-256 `75969af9175a75566a6be3687c4d474e956bff8973c800d17793be0619662053`): **148 timely originals, 86 live, 62 expired metadata-only, 9,126 historical member observations, zero linked/cutoff-safe PRE, zero global Phase7 fragments/bundles/links (one policy).** Day2 52/0 live/4,902 members; Day3 64/54 live/2,352; Day4 32/32 live/1,872. At the receipt clock all six next-hour originals were active study Day3 T6, 312 member observations total (306 HUB, 6 MID_B); all had zero native-shape pass/lead pre-screen, zero V0087 tasks and zero linked PRE. No conditional policy state read, final eligibility, Stage14 permit or Packet B source-link certification. No provider calls or DB writes. Do not extend raw retention, infer six distinct flights or retroactively repair Day3. Existing F005/F026/F027 remain open.
 

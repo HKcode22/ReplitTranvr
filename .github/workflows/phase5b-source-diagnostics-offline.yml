@@ -70,6 +70,8 @@ on:
       - 'scripts/v39_phase5b_source_only_successor_owner.sh'
       - 'scripts/v39_phase5b_scientific_pause_owner.sh'
       - 'tests/phase5b_scientific_pause_owner_v39.test.mjs'
+      - 'scripts/v39_phase5b_resume_conditional_commission_owner.mjs'
+      - 'tests/phase5b_resume_conditional_commission_owner_v39.test.mjs'
       - 'scripts/v39_phase5b_callback_worker_only_guard.sh'
       - 'tests/phase5b_callback_worker_scope_v39.test.mjs'
       - 'scripts/v39_phase6_stored_source_postcommit_native_audit_v39.mjs'
@@ -109,7 +111,7 @@ jobs:
           node-version: '20'
       - run: node --check scripts/v39_phase5b_paid_child_audit_owner.mjs && node --check scripts/v39_phase5b_signed_calendar_coverage_owner.mjs && node --check scripts/v39_phase5b_conditional_query_scope_owner.mjs
       - run: node --test tests/phase5b_source_diagnostics_v39.test.mjs tests/phase5b_recovery_register_v39.test.mjs tests/phase5b_retention_p7_inventory_v39.test.mjs tests/phase5b_cutover_quiet_v39.test.mjs tests/phase5b_conditional_query_scope_owner_v39.test.mjs tests/phase5b_maintenance_and_f017_owner_v39.test.mjs tests/phase5b_owner_local_policy_predecessor_v39.test.mjs
-      - run: bash -n scripts/v39_phase5b_scientific_pause_owner.sh && node --test tests/phase5b_scientific_pause_owner_v39.test.mjs
+      - run: bash -n scripts/v39_phase5b_scientific_pause_owner.sh && node --check scripts/v39_phase5b_resume_conditional_commission_owner.mjs && node --test tests/phase5b_scientific_pause_owner_v39.test.mjs tests/phase5b_resume_conditional_commission_owner_v39.test.mjs
       - run: node --test tests/phase5b_callback_worker_scope_v39.test.mjs
       - run: npm ci --include=dev --no-audit --no-fund
       - run: npm run check

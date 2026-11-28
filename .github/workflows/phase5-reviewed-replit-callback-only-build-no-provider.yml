@@ -100,7 +100,7 @@ jobs:
         id: callback-admission
         shell: bash
         env:
-          WORKER_ONLY_PR: ${{ (github.event_name == 'pull_request' && (github.event.pull_request.number == 981 || github.event.pull_request.number == 982 || github.event.pull_request.base.sha == '9426eda5f749e43b1e798b1c308f5c428f696882') && github.event.pull_request.head.repo.full_name == github.repository) || (github.event_name == 'push' && (github.event.before == '697501b9443837018414082434cbe798ab835f92' || github.event.before == '9426eda5f749e43b1e798b1c308f5c428f696882')) }}
+          WORKER_ONLY_PR: ${{ (github.event_name == 'pull_request' && (github.event.pull_request.number == 981 || github.event.pull_request.number == 982 || github.event.pull_request.base.sha == '9426eda5f749e43b1e798b1c308f5c428f696882' || github.event.pull_request.base.sha == 'a02e3d6eddc378871f030848235746de160b71e5') && github.event.pull_request.head.repo.full_name == github.repository) || (github.event_name == 'push' && (github.event.before == '697501b9443837018414082434cbe798ab835f92' || github.event.before == '9426eda5f749e43b1e798b1c308f5c428f696882' || github.event.before == 'a02e3d6eddc378871f030848235746de160b71e5')) }}
           BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
           EXACT_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
         run: |

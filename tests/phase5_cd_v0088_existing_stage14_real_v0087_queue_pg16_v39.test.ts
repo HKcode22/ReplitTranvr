@@ -1,4 +1,7 @@
 import {auditP5ConditionalPostActualT6Batch} from "../server/lib/disruption/phase5V0083FuturePostOriginalDb_v39";
+import {readP6ConditionalPostT6PreservationBatch} from "../scripts/v39_phase6_conditional_post_preservation_read_v39";
+import {readP6ConditionalPostT24WitnessPage} from "../server/lib/disruption/phase6LaterT24EvidenceBatchReadOnly_v39";
+import {P6_T24_CUSTODY_SCHEMA,p6T24WitnessCustodyPath,p6T24WitnessCustodyPreimage,publishP6T24WitnessCustodyOnce} from "../server/lib/disruption/phase6PrivateT24WitnessReceiptTransport_v39.mjs";
 import {digestP5Stage24ReviewedReceipt,type P5Stage24ReviewedT24Receipt} from "../server/lib/disruption/phase5T24WitnessedLaterHorizonGuard_v39";
 import {verifyP5SignedLaterPreDayRegistry,type P5SignedLaterPreDayRegistry} from "../server/lib/disruption/phase5SignedLaterPreDayRegistry_v39";
 import type {P5SignedSourceBatchRegistry} from "../server/lib/disruption/phase5SignedPerDaySourceBatchReadonly_v39";
@@ -28,7 +31,7 @@ const sha=(s:string)=>createHash("sha256").update(s).digest("hex");
 const P7=process.env.V39_P7_STAGE14_PRESERVATION_DISPOSABLE==="1";
 const P7READER="phase7_pre_fragment_ci_reader";
 const P7SCOPED="phase7_post_group_ci_reader";
-import {readPhase7PostScopedGroup} from "../server/lib/disruption/phase7PostScopedGroup_v39";
+import {readPhase7PostScopedGroup,readPhase7ConditionalT6ScopedGroup} from "../server/lib/disruption/phase7PostScopedGroup_v39";
 import {
  persistP5V0079SingleBoundFlightPre,
  type P5Stage14SingleFlightPrePermit
@@ -225,6 +228,10 @@ active("Phase5 C+D actual Stage14 source-bound parallel PRE on disposable PG16",
    await admin.query("GRANT EXECUTE ON FUNCTION phase7_private.persist_bound_pre_fragment_v39(text,text,bigint,uuid,uuid,text,text,text,text,bytea,text,timestamptz,timestamptz,integer,timestamptz) TO "+ROLE);
    p7Reader=new Pool({connectionString:LOGIN_URL.replace(ROLE,P7READER),max:2});
    await admin.query("CREATE ROLE "+P7SCOPED+" LOGIN PASSWORD 'ci-only' NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOINHERIT; GRANT USAGE ON SCHEMA phase7_private TO "+P7SCOPED+"; GRANT EXECUTE ON FUNCTION phase7_private.read_bound_pre_group_v39(text,bigint,text,text,integer,text,text) TO "+P7SCOPED);
+   if(process.env.V39_P5B_CONDITIONAL_POST_T6_CI==="1"){
+    await admin.query(readFileSync("migrations/staged/V0115__phase5b_conditional_t6_scoped_packet_b_read_v39.sql","utf8"));
+    await admin.query("GRANT EXECUTE ON FUNCTION phase7_private.read_bound_conditional_t6_group_v39(text,bigint,text,text,integer,text,text,text) TO "+P7SCOPED);
+   }
    p7Scoped=new Pool({connectionString:LOGIN_URL.replace(ROLE,P7SCOPED),max:1});
    const shared={version:"v01",featureDictionarySha256:sha("synthetic dictionary"),termsReviewSha256:sha("synthetic terms"),derivedWorkReviewSha256:sha("synthetic derived review")};
    const expires=iso(now+7*86400000);
@@ -983,6 +990,113 @@ active("Phase5 C+D actual Stage14 source-bound parallel PRE on disposable PG16",
        expect((await auditP5ConditionalPostActualT6Batch(scoped,altered)).eligibleCount).toBe(0);
      await expect(auditP5ConditionalPostActualT6Batch(admin,scope)).rejects.toThrow("CONDITIONAL_POST_T6_RESTRICTED_SOURCE_SESSION");
      console.log("I147_T143_REAL_RESTRICTED_CONDITIONAL_POST_T6_READER_PASS");
+     if(p7&&p7Scoped){
+      const input={reader:p7Scoped,readerRole:P7SCOPED,contract:p7.contract,profile:p7.profile,
+       scope:{independentConditionalPostPreservationReadApproved:true as const,existingPaidDispatchApproved:false as const,
+        noProviderCredentialsInAudit:true as const,manifestSha256:manifest,rightsSha256:rights,
+        expectedContractSha256:hashPhase7DurableCandidate(p7.contract),expectedProfileSha256:hashPhase7DurableCandidate(p7.profile)}};
+      const verified=await readP6ConditionalPostT6PreservationBatch(scoped,scope,input);
+      expect(verified).toMatchObject({status:"ACTUAL_CONDITIONAL_POST_T6_AND_PACKET_B_GROUP_READ_NO_GO",candidateCount:1,
+       verifiedPacketBGroupCount:1,unavailableCount:0,independentT24WitnessVerified:false,postIssuerCommissioned:false,
+       physicalGateOutCertified:false,providerCalls:0,databaseWrites:0,postPacketsIssued:0,phase6PaidGo:false});
+      expect(verified.privateDecisions[0].anchor).toMatchObject({snapshotId:saved.committedSnapshotId,flightInstanceId:flight,
+       selectedNativeTUtc:t.toISOString(),sourceResponseSha256:response});
+      expect(verified.privateDecisions[0].fragments.some(f=>f.packet.rows[0].horizon==="T-6h")).toBe(true);
+      expect(JSON.stringify(verified)).not.toContain(flight);expect(JSON.stringify(verified)).not.toContain(response);
+      const mixed=await readP6ConditionalPostT6PreservationBatch(scoped,{...scope,candidates:[...scope.candidates,{...scope.candidates[0],flightInstanceId:"leg:g5a:"+sha("absent same-frame CI flight")}]},input);
+      expect(mixed).toMatchObject({candidateCount:2,sourceEligibleCount:1,verifiedPacketBGroupCount:1,unresolvedPacketBGroupCount:0,unavailableCount:1,phase6PaidGo:false});
+      expect(mixed.privateDecisions.map(x=>x.flightInstanceId)).toEqual([flight]);
+      // Real restricted custody and V0113 views on the same committed synthetic
+      // T6 + Packet B. The historical T24 row is an explicitly CI-only
+      // prerequisite; T074 separately proves the actual two-commit issuer.
+      if(process.env.V39_P5B_CONDITIONAL_POST_WITNESS_CI==="1"){
+       const pubLogin="phase6_private_publisher_login_ci_postwitness",readerLogin="phase6_private_reader_login_ci_postwitness";
+       const pubPool=new Pool({connectionString:LOGIN_URL.replace(ROLE,pubLogin),max:1});
+       const readPool=new Pool({connectionString:LOGIN_URL.replace(ROLE,readerLogin),max:2});
+       const pub=await pubPool.connect(),reader=await readPool.connect();
+       const metadata={connect:async()=>{const c=await readPool.connect();try{await c.query("SET ROLE phase6_private_frozen_reader_v39");return c;}catch(e){c.release(true);throw e;}}};
+       try{
+        await pub.query("SET ROLE phase6_private_frozen_publisher_v39");await reader.query("SET ROLE phase6_private_frozen_reader_v39");
+        const observed=(await admin.query("SELECT clock_timestamp() AS at")).rows[0].at.getTime();
+        const keys=generateKeyPairSync("ed25519"),fingerprint=createHash("sha256").update(keys.publicKey.export({type:"spki",format:"der"})).digest("hex");
+        const v=verified.privateDecisions[0],trust={independentT24CustodyTrustApproved:true as const,runDayIndex:1,
+         reviewedCodeSha:code,manifestSha256:manifest,rightsSha256:rights,releaseSha256:h("5"),policySha256:sha("CI custody policy"),
+         reviewerFingerprintSha256:fingerprint,reviewerPublicKeyPem:keys.publicKey.export({type:"spki",format:"pem"}).toString(),
+         expectedFrameSha256:p.reviewedFrameSha256,expectedConfigSha256:v.configSha256,expectedSelectedTVersion:v.selectedTVersion,
+         maximumRetentionHours:48,policyValidFromUtc:iso(observed-3600000),policyValidUntilUtc:iso(observed+48*3600000)};
+        const custodyScope={privateT24CustodyApproved:true as const,existingPaidDispatchApproved:false as const,adbAutoCollect:"0" as const,phase6ProcessArmed:"0" as const};
+        if(witness){
+         const packetBytes=Buffer.from(JSON.stringify({schema:"v39.phase6.private-t24-witness-candidate.v1",runDayIndex:1,manifestSha256:manifest,
+          candidate:{schema:"v39.phase5.unsigned-t24-stage24-handoff.v1",status:"DURABLE_T24_RECEIPT_CANDIDATE_AWAITING_INDEPENDENT_REVIEW",
+           receipt:witness,reviewedByIndependentAuthority:false,mayLaunchLaterPreAutomatically:false,providerCalls:0}}));
+         const wt={...trust,flightInstanceId:flight},review={schema:P6_T24_CUSTODY_SCHEMA,audience:"HKcode22/ReplitTranvr:PHASE6_T24_WITNESS_CUSTODY_ONLY",
+          logicalPath:p6T24WitnessCustodyPath(wt),runDayIndex:1,packetSha256:sha(packetBytes.toString("utf8")),receiptSha256:witness.receiptSha256,
+          reviewedCodeSha:code,manifestSha256:manifest,rightsSha256:rights,releaseSha256:h("5"),policySha256:trust.policySha256,
+          reviewedAtUtc:iso(observed),validUntilUtc:iso(observed+3600000),retentionNotAfterUtc:iso(observed+7200000),reviewerPublicKeyFingerprintSha256:fingerprint};
+         const wire={review,signatureBase64:sign(null,p6T24WitnessCustodyPreimage(review),keys.privateKey).toString("base64")};
+         await publishP6T24WitnessCustodyOnce({client:pub,trust:wt,wire,packetBytes,scope:{...custodyScope,expectedSessionLogin:pubLogin}});
+        }
+        const anchor={flightInstanceId:flight,selectedTNativeUtc:v.anchor.selectedNativeTUtc,predictionCutoffUtc:iso(ownCutoff),preIssuedAtUtc:v.anchor.preIssuedAtUtc,
+         sourceExpiresAtUtc:v.anchor.sourceExpiresAtUtc,assessmentWatermarkUtc:v.assessmentWatermarkUtc,configSha256:v.configSha256,selectedTVersion:v.selectedTVersion,
+         ...((reg.entries[0] as {expectedT24ReceiptSha256?:string}).expectedT24ReceiptSha256?{expectedT24ReceiptSha256:(reg.entries[0] as {expectedT24ReceiptSha256?:string}).expectedT24ReceiptSha256}:{})};
+        const ws={independentConditionalPostWitnessReadApproved:true as const,existingPaidDispatchApproved:false as const,manifestSha256:manifest,
+         rightsSha256:rights,releaseSha256:h("5"),reviewedCodeSha:code,expectedFrameSha256:p.reviewedFrameSha256,sourceQueryDigestSha256:q2,
+         runDayIndex:1,sourceObservedDbClockUtc:verified.observedDbClockUtc,serviceWindowStartUtc:t.toISOString(),serviceWindowEndUtc:end.toISOString()};
+        const custody={readerClient:reader,trust,scope:{...custodyScope,expectedSessionLogin:readerLogin}};
+        const got=await readP6ConditionalPostT24WitnessPage(metadata,[anchor],ws,custody);
+        expect(got).toMatchObject({status:"ACTUAL_CONDITIONAL_POST_T24_WITNESS_READ_NO_GO",candidateCount:1,verifiedT24WitnessCount:Number(witnessed),
+         unresolvedT24WitnessCount:Number(!witnessed),scientificReviewStillRequired:true,standaloneLaterAuthorized:false,postIssuerCommissioned:false,physicalGateOutCertified:false,providerCalls:0,databaseWrites:0,phase6PaidGo:false});
+        expect(JSON.stringify(got)).not.toContain(flight);
+        if(witness){
+         expect(got.privateDecisions[0].receiptSha256).toBe(witness.receiptSha256);
+         const drift=await readP6ConditionalPostT24WitnessPage(metadata,[{...anchor,expectedT24ReceiptSha256:sha("wrong signed digest")}],ws,custody);
+         expect(drift.verifiedT24WitnessCount).toBe(0);
+         expect(drift.privateDecisions[0].status).toBe("T24_RECEIPT_OR_NATIVE_ANCHOR_MISMATCH");
+        }else expect(got.privateDecisions[0].status).toBe("T24_SIGNED_WITNESS_BINDING_UNAVAILABLE");
+        await expect(readP6ConditionalPostT24WitnessPage(admin,[anchor],ws,custody)).rejects.toThrow("CONDITIONAL_METADATA_ROLE_OR_ACL");
+        await expect(readP6ConditionalPostT24WitnessPage(metadata,[{...anchor,configSha256:sha("changed config")}],ws,custody)).rejects.toThrow("CONDITIONAL_POST_WITNESS_ANCHOR");
+        console.log("S007_REAL_RESTRICTED_CONDITIONAL_T6_PACKET_B_SIGNED_T24_WITNESS_PASS");
+       }finally{pub.release(true);reader.release(true);await Promise.all([pubPool.end(),readPool.end()]);}
+      }
+      await expect(readP6ConditionalPostT6PreservationBatch(scoped,scope,{...input,scope:{...input.scope,expectedProfileSha256:sha("wrong profile")}})).rejects.toThrow("EXACT_SEPARATE_READ_SCOPE");
+      await expect(readP6ConditionalPostT6PreservationBatch(scoped,scope,{...input,reader:admin})).rejects.toThrow("READER_SCOPE_OR_CLOCK");
+      // Original source still present, but the actual temporary mapping is
+      // expired. Never plan a POST from a standalone T6 row without Packet B.
+      const anchor=verified.privateDecisions[0].anchor;
+      await expect(readPhase7PostScopedGroup(p7Scoped,P7SCOPED,p7.contract,p7.profile,anchor)).rejects.toMatchObject({code:"P0002"});
+      await expect(readPhase7ConditionalT6ScopedGroup(p7Scoped,P7SCOPED,p7.contract,p7.profile,anchor,sha("wrong protocol"))).rejects.toMatchObject({code:"P0002"});
+      // F048/T146: exercise the real restricted session and simulate a lost
+      // ROLLBACK acknowledgement at its adapter boundary. No positive receipt
+      // and no reuse of the uncertain connection, on success or refusal.
+      for(const protocolToRead of [protocol,sha("wrong protocol")]){
+       let rollbackCount=0;const releases:(boolean|Error|undefined)[]=[];
+       const lostRollback={connect:async()=>{
+        const client=await p7Scoped!.connect();
+        return new Proxy(client,{get(target,key){
+         if(key==="query")return (sql:string,...args:unknown[])=>{
+          if(sql==="ROLLBACK"){rollbackCount++;return Promise.reject(Error("CI_ROLLBACK_ACK_LOST"));}
+          return Reflect.apply(target.query,target,[sql,...args]);
+         };
+         if(key==="release")return (err?:boolean|Error)=>{releases.push(err);target.release(err);};
+         const val=Reflect.get(target,key);return typeof val==="function"?val.bind(target):val;
+        }});
+       }};
+       const attempt=readPhase7ConditionalT6ScopedGroup(lostRollback,P7SCOPED,p7.contract,p7.profile,anchor,protocolToRead);
+       await expect(attempt).rejects.toThrow("ROLLBACK_UNACKNOWLEDGED");
+       expect(rollbackCount).toBe(1);expect(releases).toEqual([true]);
+      }
+      // A fresh independent session remains usable after discarded sessions.
+      await expect(readPhase7ConditionalT6ScopedGroup(p7Scoped,P7SCOPED,p7.contract,p7.profile,anchor,protocol)).resolves.toMatchObject({fragments:expect.any(Array)});
+      // Leave the fixture link expired for the existing due-only sweep below.
+      // Never extend or resurrect a link, even in this regression.
+      await admin.query("UPDATE phase7_private.pre_source_link_v39 SET expires_at_utc=clock_timestamp()-interval '1 second' WHERE snapshot_id=$1",[saved.committedSnapshotId]);
+      const absent=await readP6ConditionalPostT6PreservationBatch(scoped,scope,input);
+      expect(absent).toMatchObject({candidateCount:1,sourceEligibleCount:1,verifiedPacketBGroupCount:0,unresolvedPacketBGroupCount:1,unavailableCount:1,postPacketsIssued:0,phase6PaidGo:false});
+      expect(absent.privateDecisions).toEqual([]);
+      expect(absent.privateUnresolvedGroups).toEqual([{flightInstanceId:flight,reason:"SCOPED_GROUP_UNAVAILABLE_OR_EXPIRED"}]);
+      expect(JSON.stringify(absent)).not.toContain(flight);
+      console.log("I149_T146_REAL_RESTRICTED_CONDITIONAL_T6_PACKET_B_GROUP_PASS");
+     }
     }finally{await source.end();}
    }
    if(p7){

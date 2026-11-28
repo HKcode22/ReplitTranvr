@@ -15,32 +15,58 @@ const role=(s:string)=>/^[a-z][a-z0-9_]{4,62}$/.test(s)&&!["postgres","neondb_ow
 const hold=(s:string):never=>{throw Error("HOLD_P7_SCOPED_POST_GROUP_"+s);};
 const sha=(b:Buffer)=>createHash("sha256").update(b).digest("hex");
 const fn="phase7_private.read_bound_pre_group_v39(text,bigint,text,text,integer,text,text)";
+const conditionalFn="phase7_private.read_bound_conditional_t6_group_v39(text,bigint,text,text,integer,text,text,text)";
+export const P7_POST_CONDITIONAL_T6_GROUP_SQL="SELECT group_id::text AS group_id,contract_sha256,profile_sha256,packet_sha256,packet_bytes FROM phase7_private.read_bound_conditional_t6_group_v39($1,$2::bigint,$3,$4,$5::integer,$6,$7,$8)";
 export const P7_POST_SCOPED_GROUP_SQL="SELECT group_id::text AS group_id,contract_sha256,profile_sha256,packet_sha256,packet_bytes FROM phase7_private.read_bound_pre_group_v39($1,$2::bigint,$3,$4,$5::integer,$6,$7)";
-async function assertPhase7PostScopedActor(c:import("pg").PoolClient,expectedRole:string,expiryMs:number){
+async function assertPhase7PostScopedActor(c:import("pg").PoolClient,expectedRole:string,expiryMs:number,scopedFn=fn){
  if(!role(expectedRole)||!Number.isFinite(expiryMs))hold("BAD_PREFLIGHT_SCOPE");
-  const q=(await c.query("SELECT current_user actor,session_user login,current_database() db,current_setting('transaction_read_only') ro,current_setting('server_version_num')::int version,pg_is_in_recovery() replica,clock_timestamp() AS at,r.rolsuper,r.rolcreaterole,r.rolcreatedb,r.rolbypassrls,r.rolreplication,EXISTS(SELECT 1 FROM pg_auth_members m WHERE m.member=r.oid) AS member,has_schema_privilege(current_user,'phase7_private','USAGE') can_use,has_schema_privilege(current_user,'phase7_private','CREATE') can_create,has_function_privilege(current_user,$1,'EXECUTE') can_scope,(SELECT count(*)<>8 OR coalesce(bool_or(has_any_column_privilege(current_user,c.oid,'SELECT,INSERT,UPDATE,REFERENCES') OR has_table_privilege(current_user,c.oid,'DELETE,TRUNCATE,TRIGGER')),true) FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace WHERE (n.nspname||'.'||c.relname)=ANY(ARRAY['phase7_private.pre_fragment_v39','phase7_private.pre_source_link_v39','phase7_private.pre_preservation_policy_v39','phase7_private.derived_release_bundle_v39','clean.flight_snapshots','clean.flight_population','clean.fids_query_response','clean.phase5_fids_original_binding_v39'])) AS can_direct FROM pg_roles r WHERE r.rolname=current_user",[fn])).rows;
+  const q=(await c.query("SELECT current_user actor,session_user login,current_database() db,current_setting('transaction_read_only') ro,current_setting('server_version_num')::int version,pg_is_in_recovery() replica,clock_timestamp() AS at,r.rolsuper,r.rolcreaterole,r.rolcreatedb,r.rolbypassrls,r.rolreplication,EXISTS(SELECT 1 FROM pg_auth_members m WHERE m.member=r.oid) AS member,has_schema_privilege(current_user,'phase7_private','USAGE') can_use,has_schema_privilege(current_user,'phase7_private','CREATE') can_create,has_function_privilege(current_user,$1,'EXECUTE') can_scope,(SELECT count(*)<>8 OR coalesce(bool_or(has_any_column_privilege(current_user,c.oid,'SELECT,INSERT,UPDATE,REFERENCES') OR has_table_privilege(current_user,c.oid,'DELETE,TRUNCATE,TRIGGER')),true) FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace WHERE (n.nspname||'.'||c.relname)=ANY(ARRAY['phase7_private.pre_fragment_v39','phase7_private.pre_source_link_v39','phase7_private.pre_preservation_policy_v39','phase7_private.derived_release_bundle_v39','clean.flight_snapshots','clean.flight_population','clean.fids_query_response','clean.phase5_fids_original_binding_v39'])) AS can_direct FROM pg_roles r WHERE r.rolname=current_user",[scopedFn])).rows;
   const x=q[0];
   if(q.length!==1||x.actor!==expectedRole||x.login!==expectedRole||x.db!=="neondb"||x.ro!=="on"||x.version<160000||x.version>=170000||x.replica!==false||x.can_use!==true||x.can_scope!==true||["rolsuper","rolcreaterole","rolcreatedb","rolbypassrls","rolreplication","member","can_create","can_direct"].some(k=>x[k]!==false)||
      !(x.at instanceof Date)||!Number.isFinite(x.at.getTime())||x.at.getTime()>=expiryMs)hold("READER_SCOPE_OR_CLOCK");
  return x;
 }
+/** F048 cleanup parity: a successful read is not returned before an
+ * acknowledged rollback; never recycle a session of uncertain state. */
+async function withScopedRead<T>(reader:Pick<Pool,"connect">,read:(c:import("pg").PoolClient)=>Promise<T>):Promise<T>{
+ const c=await reader.connect();
+ let rollbackAttempted=false,discard=false;
+ try{
+  await c.query("BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY");
+  await c.query("SET LOCAL statement_timeout='12000ms'");
+  const result=await read(c);
+  rollbackAttempted=true;
+  try{await c.query("ROLLBACK");}catch{discard=true;hold("ROLLBACK_UNACKNOWLEDGED");}
+  return result;
+ }catch(e){
+  if(!rollbackAttempted){
+   try{await c.query("ROLLBACK");}catch{discard=true;hold("ROLLBACK_UNACKNOWLEDGED");}
+  }
+  throw e;
+ }finally{c.release(discard);}
+}
 /** Check the same exact scoped-reader grants before a paid POST. */
 export async function preflightPhase7PostScopedReader(reader:Pick<Pool,"connect">,expectedRole:string,contract:Phase7DerivedReleaseContract){
- const c=await reader.connect();
- try{await c.query("BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY");await c.query("SET LOCAL statement_timeout='12000ms'");const x=await assertPhase7PostScopedActor(c,expectedRole,Date.parse(contract.researchExpiryUtc));return (x.at as Date).toISOString();}
- finally{await c.query("ROLLBACK").catch(()=>{});c.release();}
+ return withScopedRead(reader,async c=>{const x=await assertPhase7PostScopedActor(c,expectedRole,Date.parse(contract.researchExpiryUtc));return (x.at as Date).toISOString();});
 }
 export async function readPhase7PostScopedGroup(reader:Pick<Pool,"connect">,expectedRole:string,contract:Phase7DerivedReleaseContract,profile:Phase7ReviewedTransformationProfile,a:P6PostPreservationAnchor):Promise<{fragments:Phase7StoredPreFragment[];observedAtUtc:string}>{
+ return readScopedGroup(reader,expectedRole,contract,profile,a);
+}
+/** Conditional schedule-revision lane only; no native physical inference. */
+export async function readPhase7ConditionalT6ScopedGroup(reader:Pick<Pool,"connect">,expectedRole:string,contract:Phase7DerivedReleaseContract,profile:Phase7ReviewedTransformationProfile,a:P6PostPreservationAnchor,protocolSha256:string){
+ if(a?.horizon!=="T-6h"||typeof a.flightInstanceId!=="string"||!/^leg:g5a:[a-f0-9]{64}$/.test(a.flightInstanceId)||
+    typeof protocolSha256!=="string"||!H.test(protocolSha256))hold("CONDITIONAL_T6_SCOPE");
+ return readScopedGroup(reader,expectedRole,contract,profile,a,protocolSha256);
+}
+async function readScopedGroup(reader:Pick<Pool,"connect">,expectedRole:string,contract:Phase7DerivedReleaseContract,profile:Phase7ReviewedTransformationProfile,a:P6PostPreservationAnchor,protocolSha256?:string):Promise<{fragments:Phase7StoredPreFragment[];observedAtUtc:string}>{
  if(!role(expectedRole)||!a||a.ambiguousIdentity||!(/^[1-9][0-9]{0,17}$/).test(a.snapshotId)||
   ![a.manifestSha256,a.rightsSha256,a.queryDigestSha256,a.frameSha256].every(v=>H.test(v))||
   !Number.isSafeInteger(a.runDayIndex)||a.runDayIndex<1||a.runDayIndex>31||!(/^[A-Z0-9]{4}$/).test(a.airportIcao)||
   !Number.isFinite(Date.parse(a.sourceExpiresAtUtc))||!Number.isFinite(Date.parse(contract.researchExpiryUtc)))hold("BAD_ANCHOR");
- const c=await reader.connect();
- try{
-  await c.query("BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY");
-  await c.query("SET LOCAL statement_timeout='12000ms'");
-  const x=await assertPhase7PostScopedActor(c,expectedRole,Math.min(Date.parse(a.sourceExpiresAtUtc),Date.parse(contract.researchExpiryUtc)));
-  const q2=await c.query(P7_POST_SCOPED_GROUP_SQL,[a.manifestSha256,a.snapshotId,a.rightsSha256,a.queryDigestSha256,a.runDayIndex,a.airportIcao,a.frameSha256]);
+ return withScopedRead(reader,async c=>{
+  const x=await assertPhase7PostScopedActor(c,expectedRole,Math.min(Date.parse(a.sourceExpiresAtUtc),Date.parse(contract.researchExpiryUtc)),protocolSha256===undefined?fn:conditionalFn);
+  const args=[a.manifestSha256,a.snapshotId,a.rightsSha256,a.queryDigestSha256,a.runDayIndex,a.airportIcao,a.frameSha256];
+  const q2=protocolSha256===undefined?await c.query(P7_POST_SCOPED_GROUP_SQL,args):await c.query(P7_POST_CONDITIONAL_T6_GROUP_SQL,[...args,protocolSha256]);
   if(q2.rowCount!==q2.rows.length||q2.rows.length<1||q2.rows.length>3)hold("FRAGMENT_COUNT");
   const fragments=q2.rows.map((z):Phase7StoredPreFragment=>{
    if(!UUID.test(z.group_id)||z.contract_sha256!==hashPhase7DurableCandidate(contract)||z.profile_sha256!==hashPhase7DurableCandidate(profile)||!Buffer.isBuffer(z.packet_bytes)||z.packet_bytes.length>65536||sha(z.packet_bytes)!==z.packet_sha256)hold("FRAGMENT_BINDING");
@@ -54,9 +80,8 @@ export async function readPhase7PostScopedGroup(reader:Pick<Pool,"connect">,expe
    !fragments.some(f=>f.packet.rows[0].horizon===a.horizon))hold("ANCHOR_GROUP_DRIFT");
   const at=(await c.query("SELECT clock_timestamp() AS at")).rows[0]?.at;
   if(!(at instanceof Date)||!Number.isFinite(at.getTime())||at<x.at||at.getTime()>=Math.min(Date.parse(a.sourceExpiresAtUtc),Date.parse(contract.researchExpiryUtc)))hold("EXPIRED_DURING_READ");
-  await c.query("ROLLBACK");
   return {fragments,observedAtUtc:at.toISOString()};
- }finally{await c.query("ROLLBACK").catch(()=>{});c.release();}
+ });
 }
 /** The external reviewer must authenticate settlement and exact same-leg
  * evidence, including any expired comparator, before returning this scope.
