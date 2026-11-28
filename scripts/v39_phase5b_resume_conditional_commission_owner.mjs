@@ -14,7 +14,7 @@ import assert from "node:assert/strict";
 const R="HKcode22/ReplitTranvr",M="a02e3d6eddc378871f030848235746de160b71e5",L="2d96b22345908aa4334335aa899aec71b2fec2cb";
 const KEY="P6_PHASE5B_CONDITIONAL_DERIVATION_APPROVAL_BASE64",ENV="phase6-protected-runtime",WF="phase6-nonpaid-source-day-prepare-publish.yml";
 const REVIEW="243fcee2426649390ac7d712b3707bde6f15b0533c3241ee1949f77183a15ab3",RECIPE="eb444e1ec929c67819b110b482e324c2e6067f05fb75b6139ad2d25fe3277710",CANDIDATE="75bee0903ee8a6d275b95e4d0acd3b782b2a7f2363db4f1cece82e461469f2f7";
-const PREVIEW=46140377128,STAGED=46144830945;
+const PREVIEW=46140377128,STAGED=46144830945,WF_ID=418926752;
 const sha=b=>createHash("sha256").update(b).digest("hex");
 const letters=s=>[...s].map(c=>String.fromCharCode(97+parseInt(c,16))).join("");
 const hex=s=>{assert.match(s,/^[a-p]{64}$/);return [...s].map(c=>(c.charCodeAt(0)-97).toString(16)).join("");};
@@ -36,7 +36,7 @@ export function verifyDerivedReceipt(log,active,candidate,base){
 export function approvalFromPreview(saved,log,now){
  const bytes=Buffer.from(saved.reviewBase64,"base64"),d=JSON.parse(bytes);
  need(bytes.toString("base64")===saved.reviewBase64&&sha(bytes)===REVIEW&&saved.reviewSha256===REVIEW,"REVIEW_BYTES");
- need(d.firstEligibleRunDayIndex===5&&d.ownerDelegatedTechnicalScopeReviewed===true&&d.standaloneNoT24ProtocolSha256===null&&/^[a-f0-9]{64}$/.test(d.protocolSha256),"REVIEW_SCOPE");
+ need(d.schema==="v39.phase5b.prospective-conditional-commissioning-commitment-review.v1"&&d.firstEligibleRunDayIndex===5&&d.ownerDelegatedTechnicalScopeReviewed===true&&d.standaloneNoT24ProtocolSha256===null&&/^[a-f0-9]{64}$/.test(d.protocolSha256),"REVIEW_SCOPE");
  need(Number.isFinite(now)&&now<Date.parse("2026-11-29T02:45:00Z")&&now<Date.parse(d.effectiveUtc),"WINDOW_ELAPSED");
  const p=exactReceipt(log,"P6_ACTUAL_PROTECTED_CONDITIONAL_POLICY_CUSTODY_READONLY"),v=p.derivationPreview;
  need(p.actualConditionalPolicyInstalledVerified===false&&v?.status==="CONDITIONAL_DERIVATION_RECIPE_PREVIEW_NOT_ACTIVE","PREVIEW_SCOPE");
@@ -85,8 +85,33 @@ function runMeta(id){
  need(v.id===id&&v.head_sha===M&&v.head_branch==="main"&&v.event==="workflow_dispatch"&&v.actor?.login==="HKcode22"&&v.run_attempt===1&&v.status==="completed"&&v.conclusion==="success"&&v.path===".github/workflows/"+WF,"RUN_METADATA");
  return gh("run","view",String(id),"-R",R,"--log");
 }
+// Old gh CLI versions can report successful workflow_dispatch without a
+// run URL. Snapshot only the exact workflow, owner, branch and SHA; refuse
+// incomplete metadata or more than one new run rather than guessing.
+export function exactDispatchIds(data,notBefore){
+ need(data&&Number.isSafeInteger(data.total_count)&&data.total_count>=0&&data.total_count<=100&&Array.isArray(data.workflow_runs)&&data.workflow_runs.length===data.total_count,"DISPATCH_LIST_INCOMPLETE");
+ const ids=[];
+ for(const x of data.workflow_runs){
+  need(Number.isSafeInteger(x.id)&&x.id>0&&!ids.includes(x.id)&&x.workflow_id===WF_ID&&x.head_sha===M&&x.head_branch==="main"&&x.event==="workflow_dispatch"&&x.actor?.login==="HKcode22"&&x.path===".github/workflows/"+WF&&Number.isFinite(Date.parse(x.created_at))&&Date.parse(x.created_at)>=notBefore,"DISPATCH_LIST_SCOPE");
+  ids.push(x.id);
+ }
+ return ids;
+}
+export function newDispatchId(before,after,output){
+ const fresh=after.filter(id=>!before.includes(id));
+ const printed=[...new Set([...output.matchAll(/github\.com\/HKcode22\/ReplitTranvr\/actions\/runs\/([0-9]+)/g)].map(x=>Number(x[1])))];
+ need(fresh.length<=1&&printed.length<=1,"DISPATCH_ID_AMBIGUOUS");
+ if(fresh.length===0)return null;
+ need(printed.length===0||printed[0]===fresh[0],"DISPATCH_URL_MISMATCH");
+ return fresh[0];
+}
+function dispatchSnapshot(since){
+ const path="repos/"+R+"/actions/workflows/"+WF_ID+"/runs?branch=main&event=workflow_dispatch&actor=HKcode22&head_sha="+M+"&created="+encodeURIComponent(">="+new Date(since).toISOString())+"&per_page=100";
+ return exactDispatchIds(api(path),since);
+}
 function cli(){
- need(process.argv.length===4&&process.argv[2]==="RESUME_EXACT_INACTIVE_DAY5_RECIPE","EXACT_MODE");
+ const reconcile=process.argv[2]==="VERIFY_EXISTING_ACTIVE_DAY5_RECIPE";
+ need((process.argv.length===4&&process.argv[2]==="RESUME_EXACT_INACTIVE_DAY5_RECIPE")||(reconcile&&process.argv.length===5&&/^[0-9]+$/.test(process.argv[4])),"EXACT_MODE");
  const pausePath=resolve(process.argv[3]),reviewPath=join(homedir(),".travnr-phase5b-day5-9426eda5f749e43b1e798b1c308f5c428f696882.json");
  guard();
  stage="VERIFY_EXISTING_PREVIEW_AND_INACTIVE";
@@ -96,6 +121,20 @@ function cli(){
  stage="FRESH_PAUSED_SCOPE";selector(a);guard(a.effectiveUtc);pause(pausePath);guard(a.effectiveUtc);
  stage="EXACT_NONSECRET_SELECTOR";
  const current=selector(a);
+ if(reconcile){
+  need(current===a.approvalBase64,"NO_EXACT_ACTIVE_SELECTOR");
+  stage="RECONCILE_EXISTING_ACTIVE_READBACK";
+  runId=Number(process.argv[4]);need(Number.isSafeInteger(runId)&&runId>0&&runId!==PREVIEW&&runId!==STAGED,"ACTIVE_RUN_ID");
+  verifyDerivedReceipt(runMeta(runId),true,CANDIDATE,a.base);
+  pause(pausePath);need(selector(a)===a.approvalBase64,"SELECTOR_DRIFT");
+  console.log("TOKENLESS_CONDITIONAL_POLICY_COMMISSIONED");
+  console.log("PAID_COLLECTION_REMAINS_PAUSED_NO_AUTOMATIC_RESUME");return;
+ }
+ need(!current,"ALREADY_ACTIVE_SELECTOR_NO_AUTOMATIC_REDISPATCH");
+ // Bound listing before any mutation. Reuse one interval for the full
+ // discovery; UTC second precision matches GitHub created_at.
+ const since=Math.floor((Date.now()-300000)/1000)*1000,before=dispatchSnapshot(since);
+ guard(a.effectiveUtc);
  if(!current){
   // Only after actual inactive readback and fresh read-only pause; no broad
   // secret/write capability passed to the workflow. No second variable.
@@ -109,8 +148,12 @@ function cli(){
  // If the selector already exists, inspect actual active readback runs
  // before any new request. This command is readback-only, never paid.
  const out=gh("workflow","run",WF,"-R",R,"--ref","main","-f","run_day_index=5","-f","confirm=VERIFY_FUTURE_CONDITIONAL_POLICY_CUSTODY_NO_PROVIDER","-f","conditional_action=VERIFY_ACTIVE_CONDITIONAL_SUCCESSOR","-f","conditional_review_sha256="+REVIEW,"-f","conditional_review_base64="+a.reviewBase64,"-f","conditional_candidate_commitment_sha256="+CANDIDATE,"-f","conditional_protocol_sha256="+a.protocolSha256);
- const ids=[...new Set([...out.matchAll(/github\.com\/HKcode22\/ReplitTranvr\/actions\/runs\/([0-9]+)/g)].map(x=>x[1]))];
- need(ids.length===1,"DISPATCH_ID_UNKNOWN");runId=Number(ids[0]);console.log("ACTIVE_READBACK_RUN="+runId);
+ for(let i=0;i<12;i++){
+  const id=newDispatchId(before,dispatchSnapshot(since),out);
+  if(id!==null){runId=id;break;}
+  command("sleep",["2"],5000);
+ }
+ need(runId!==null,"DISPATCH_ID_UNKNOWN");console.log("ACTIVE_READBACK_RUN="+runId);
  command("gh",["run","watch",String(runId),"-R",R,"--exit-status"],240000);
  verifyDerivedReceipt(runMeta(runId),true,CANDIDATE,a.base);
  stage="FINAL_PAUSE";pause(pausePath);need(selector(a)===a.approvalBase64,"SELECTOR_DRIFT");

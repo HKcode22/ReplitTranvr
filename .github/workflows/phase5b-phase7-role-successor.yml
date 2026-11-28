@@ -13,6 +13,8 @@ jobs:
         with: {persist-credentials: false}
       - uses: actions/setup-node@v4
         with: {node-version: '22'}
-      - run: npm ci --include=dev --no-audit --no-fund
+      # Isolate this install from a shared/stale npm cache. Keep lockfile
+      # verification, no --force and no retry of a failed scientific test.
+      - run: npm ci --include=dev --no-audit --no-fund --cache "$RUNNER_TEMP/phase7-role-npm-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
       - run: npx --no-install vitest run tests/phase7_local_private_pre_handoff_v39.test.ts tests/phase7_post_actor_preflight_v39.test.ts tests/phase7_private_signed_review_transport_v39.test.ts
       - run: node --test tests/phase6_known_source_no_physical_start_v39.test.mjs
