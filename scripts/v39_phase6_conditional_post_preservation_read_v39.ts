@@ -6,7 +6,7 @@
 import type {Pool} from "pg";
 import {auditP5ConditionalPostActualT6Batch,type P5ConditionalPostT6BatchScope} from "../server/lib/disruption/phase5V0083FuturePostOriginalDb_v39";
 import {readP6ActualConditionalT6PostPreCandidatePage} from "../server/lib/disruption/phase6PostNativePreCandidateReadOnce_v39.mjs";
-import {readPhase7PostScopedGroup} from "../server/lib/disruption/phase7PostScopedGroup_v39";
+import {readPhase7ConditionalT6ScopedGroup} from "../server/lib/disruption/phase7PostScopedGroup_v39";
 import type {P6PostPreservationAnchor} from "../server/lib/disruption/phase6ActualPostOutcomeObservability_v39";
 import type {Phase7DerivedReleaseContract} from "../server/lib/disruption/phase6DerivedTrainingReleaseContract_v39";
 import type {Phase7ReviewedTransformationProfile} from "../server/lib/disruption/phase7ReviewedSourceTransformation_v39";
@@ -21,7 +21,7 @@ const utc=(x:unknown):number=>{
 const MAX=16;
 type T6Batch=Awaited<ReturnType<typeof auditP5ConditionalPostActualT6Batch>>;
 type T6Decision=T6Batch["privateDecisions"][number];
-type BaseScope=Pick<P5ConditionalPostT6BatchScope,"manifestSha256"|"rightsSha256"|"queryDigestSha256"|"runDayIndex"|"airportIcao"|"reviewedFrameSha256">;
+type BaseScope=Pick<P5ConditionalPostT6BatchScope,"manifestSha256"|"rightsSha256"|"queryDigestSha256"|"runDayIndex"|"airportIcao"|"reviewedFrameSha256"|"protocolSha256">;
 export interface P6ConditionalPostPreservationReadScope {
  independentConditionalPostPreservationReadApproved:true;
  existingPaidDispatchApproved:false;
@@ -36,7 +36,7 @@ function check(input:Reader,base:BaseScope){
  const s=input?.scope;
  if(!s||s.independentConditionalPostPreservationReadApproved!==true||s.existingPaidDispatchApproved!==false||
   s.noProviderCredentialsInAudit!==true||s.manifestSha256!==base.manifestSha256||s.rightsSha256!==base.rightsSha256||
-  ![s.manifestSha256,s.rightsSha256,s.expectedContractSha256,s.expectedProfileSha256,base.queryDigestSha256,base.reviewedFrameSha256].every(hash)||
+  ![s.manifestSha256,s.rightsSha256,s.expectedContractSha256,s.expectedProfileSha256,base.queryDigestSha256,base.reviewedFrameSha256,base.protocolSha256].every(hash)||
   hashPhase7DurableCandidate(input.contract)!==s.expectedContractSha256||hashPhase7DurableCandidate(input.profile)!==s.expectedProfileSha256||
   typeof input.reader?.connect!=="function"||typeof input.readerRole!=="string"||!input.readerRole)
   hold("EXACT_SEPARATE_READ_SCOPE");
@@ -71,7 +71,7 @@ async function join(input:Reader,base:BaseScope,actual:{status:string;privateDec
    sourceResponseSha256:d.originalSourceResponseSha256,ambiguousIdentity:false};
   // Missing, ambiguous, expired or wrong-scope groups fail closed before
   // planning a paid POST. Never turn a read failure into a negative label.
-  const result=await readPhase7PostScopedGroup(input.reader,input.readerRole,input.contract,input.profile,anchor);
+  const result=await readPhase7ConditionalT6ScopedGroup(input.reader,input.readerRole,input.contract,input.profile,anchor,base.protocolSha256);
   const at=utc(result.observedAtUtc);
   if(at<observed||at-start>120000||at>=utc(d.assessmentWatermarkUtc)||at>=utc(d.sourceExpiresAtUtc))hold("GROUP_READ_CLOCK_OR_WINDOW_DRIFT");
   observed=at;
@@ -80,7 +80,7 @@ async function join(input:Reader,base:BaseScope,actual:{status:string;privateDec
   if(!groupId||groups.has(groupId)||t6.length!==1||result.fragments.some(f=>f.groupId!==groupId))hold("GROUP_OR_T6_FRAGMENT_DRIFT");
   groups.add(groupId);
   for(const f of result.fragments){
-   const id=f.packet.rows[0]?.rowId;
+   const id=f.packet.rows[0]?.releaseRowId;
    if(typeof id!=="string"||!id||rows.has(id))hold("FRAGMENT_REUSE");
    rows.add(id);
   }
@@ -122,7 +122,7 @@ export async function readP6SignedConditionalPostPreservationPage(args:Parameter
  const page=await readP6ActualConditionalT6PostPreCandidatePage(args);
  const s=page.privateSourceScope;
  const base={manifestSha256:s.manifestSha256,rightsSha256:s.rightsReviewSha256,queryDigestSha256:s.queryDigestSha256,
-  runDayIndex:s.runDayIndex,airportIcao:s.airportIcao,reviewedFrameSha256:page.privateReviewedFrameSha256};
+  runDayIndex:s.runDayIndex,airportIcao:s.airportIcao,reviewedFrameSha256:page.privateReviewedFrameSha256,protocolSha256:s.conditionalServiceScope.protocolSha256};
  const result=await join(input,base,Object.freeze(Object.defineProperty({...page,candidateCount:page.pageCandidateCount},"privateDecisions",{value:page.privateDecisions,enumerable:false})));
  return Object.freeze(Object.defineProperties({...result,totalCandidateCount:page.totalCandidateCount,remainingAfterPageCount:page.remainingAfterPageCount},{
   privateDecisions:{value:result.privateDecisions,enumerable:false},privateNextCursor:{value:page.privateNextCursor,enumerable:false}}));

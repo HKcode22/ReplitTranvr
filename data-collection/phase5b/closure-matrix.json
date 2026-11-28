@@ -623,7 +623,7 @@
         "I147",
         "I149"
       ],
-      "next": "Actual T6 reader deployed and restricted PG16 verified. Candidate integrates scoped Packet B group; verify final exact CI, signed custody/witness, protected issuer and actual separate POST settlement.",
+      "next": "Actual PG16 46140847311 caught native-only scoped SQL rejecting committed conditional T6. Additive V0115 and separate conditional scoped reader candidate; exact PG16/CI and owner installation, independent T24 witness, protected issuer and actual settlement remain.",
       "closureStatus": "NOT_CLOSED",
       "scientificRisk": "P0_SCIENTIFIC",
       "workstream": "outcome_truth"

@@ -220,3 +220,13 @@ test("T142 exact POST-worker successor refuses callback publication and unreview
  for(const changed of [post.slice(1),[...post,"server/unreviewed.ts"],[...post,WRAPPER]])
   assertHold(runGuard({base:BASE_POST,fixture:{changes:{...changes,[BASE_POST]:changed}}}));
 });
+
+test("T146 conditional Packet B worker successor preserves callback publication refusal",()=>{
+ const base="a02e3d6eddc378871f030848235746de160b71e5",scoped="server/lib/disruption/phase7PostScopedGroup_v39.ts",union=[...fullInputs,scoped];
+ const changes={[BASE]:union,[base]:[scoped],[PIN]:union};
+ const result=runGuard({base,fixture:{changes}});
+ assert.equal(result.status,0,result.stdout+result.stderr);
+ assert.equal(result.stdout.trim(),passMarker);
+ assertHold(runGuard({base,fixture:{changes:{...changes,[base]:[]}}}));
+ assertHold(runGuard({base,fixture:{changes:{...changes,[base]:[scoped,"server/index.ts"]}}}));
+});

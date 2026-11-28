@@ -29,7 +29,7 @@ const sha=(s:string)=>createHash("sha256").update(s).digest("hex");
 const P7=process.env.V39_P7_STAGE14_PRESERVATION_DISPOSABLE==="1";
 const P7READER="phase7_pre_fragment_ci_reader";
 const P7SCOPED="phase7_post_group_ci_reader";
-import {readPhase7PostScopedGroup} from "../server/lib/disruption/phase7PostScopedGroup_v39";
+import {readPhase7PostScopedGroup,readPhase7ConditionalT6ScopedGroup} from "../server/lib/disruption/phase7PostScopedGroup_v39";
 import {
  persistP5V0079SingleBoundFlightPre,
  type P5Stage14SingleFlightPrePermit
@@ -226,6 +226,10 @@ active("Phase5 C+D actual Stage14 source-bound parallel PRE on disposable PG16",
    await admin.query("GRANT EXECUTE ON FUNCTION phase7_private.persist_bound_pre_fragment_v39(text,text,bigint,uuid,uuid,text,text,text,text,bytea,text,timestamptz,timestamptz,integer,timestamptz) TO "+ROLE);
    p7Reader=new Pool({connectionString:LOGIN_URL.replace(ROLE,P7READER),max:2});
    await admin.query("CREATE ROLE "+P7SCOPED+" LOGIN PASSWORD 'ci-only' NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOINHERIT; GRANT USAGE ON SCHEMA phase7_private TO "+P7SCOPED+"; GRANT EXECUTE ON FUNCTION phase7_private.read_bound_pre_group_v39(text,bigint,text,text,integer,text,text) TO "+P7SCOPED);
+   if(process.env.V39_P5B_CONDITIONAL_POST_T6_CI==="1"){
+    await admin.query(readFileSync("migrations/staged/V0115__phase5b_conditional_t6_scoped_packet_b_read_v39.sql","utf8"));
+    await admin.query("GRANT EXECUTE ON FUNCTION phase7_private.read_bound_conditional_t6_group_v39(text,bigint,text,text,integer,text,text,text) TO "+P7SCOPED);
+   }
    p7Scoped=new Pool({connectionString:LOGIN_URL.replace(ROLE,P7SCOPED),max:1});
    const shared={version:"v01",featureDictionarySha256:sha("synthetic dictionary"),termsReviewSha256:sha("synthetic terms"),derivedWorkReviewSha256:sha("synthetic derived review")};
    const expires=iso(now+7*86400000);
@@ -1001,14 +1005,13 @@ active("Phase5 C+D actual Stage14 source-bound parallel PRE on disposable PG16",
       await expect(readP6ConditionalPostT6PreservationBatch(scoped,scope,{...input,reader:admin})).rejects.toThrow("READER_SCOPE_OR_CLOCK");
       // Original source still present, but the actual temporary mapping is
       // expired. Never plan a POST from a standalone T6 row without Packet B.
-      const link=await admin.query("SELECT expires_at_utc FROM phase7_private.pre_source_link_v39 WHERE snapshot_id=$1",[saved.committedSnapshotId]);
-      expect(link.rows).toHaveLength(1);
-      try{
-       await admin.query("UPDATE phase7_private.pre_source_link_v39 SET expires_at_utc=clock_timestamp()-interval '1 second' WHERE snapshot_id=$1",[saved.committedSnapshotId]);
-       await expect(readP6ConditionalPostT6PreservationBatch(scoped,scope,input)).rejects.toThrow();
-      }finally{
-       await admin.query("UPDATE phase7_private.pre_source_link_v39 SET expires_at_utc=$2 WHERE snapshot_id=$1",[saved.committedSnapshotId,link.rows[0].expires_at_utc]);
-      }
+      const anchor=verified.privateDecisions[0].anchor;
+      await expect(readPhase7PostScopedGroup(p7Scoped,P7SCOPED,p7.contract,p7.profile,anchor)).rejects.toMatchObject({code:"P0002"});
+      await expect(readPhase7ConditionalT6ScopedGroup(p7Scoped,P7SCOPED,p7.contract,p7.profile,anchor,sha("wrong protocol"))).rejects.toMatchObject({code:"P0002"});
+      // Leave the fixture link expired for the existing due-only sweep below.
+      // Never extend or resurrect a link, even in this regression.
+      await admin.query("UPDATE phase7_private.pre_source_link_v39 SET expires_at_utc=clock_timestamp()-interval '1 second' WHERE snapshot_id=$1",[saved.committedSnapshotId]);
+      await expect(readP6ConditionalPostT6PreservationBatch(scoped,scope,input)).rejects.toThrow();
       console.log("I149_T146_REAL_RESTRICTED_CONDITIONAL_T6_PACKET_B_GROUP_PASS");
      }
     }finally{await source.end();}
