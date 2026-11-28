@@ -22,6 +22,9 @@ import {measureP5ConditionalSignedSchedulePair} from "./phase5ConditionalSignedS
 
 const SHA=/^[a-f0-9]{64}$/;
 const CONDITIONAL_ID=/^leg:g5a:[a-f0-9]{64}$/;
+// PostgreSQL emits UUIDs in this canonical spelling. Alternate hyphen
+// positions can name the same UUID and must not evade identity comparisons.
+const UUID=/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/;
 const HORIZONS=["T-24h","T-6h","T-90m"] as const;
 const HORIZON_OFFSETS_MS={"T-24h":86400000,"T-6h":21600000,"T-90m":5400000} as const;
 const SLOTS=["HUB","MID_A","MID_B","REGIONAL"] as const;
@@ -120,13 +123,17 @@ export function matchP5PreservedPreToSeparatedPostOutcomes(
      !Number.isInteger(a.runDayIndex)||a.runDayIndex<1||a.runDayIndex>31||
      !SLOTS.includes(a.slot)||!HORIZONS.includes(a.horizon)||
      !["PROVIDER_NATIVE_OPERATING_LEG","CONDITIONAL_QUERY_FILTERED_SERVICE"].includes(a.identityTier)||
-     !/^[1-9][0-9]{0,17}$/.test(a.preSnapshotId??"")||
-     !/^[a-f0-9-]{36}$/.test(a.phase7FragmentRowId??"")||
-     !/^[a-f0-9-]{36}$/.test(a.phase7GroupId??""))
+     typeof a.preSnapshotId!=="string"||!/^[1-9][0-9]{0,17}$/.test(a.preSnapshotId)||
+     typeof a.phase7FragmentRowId!=="string"||!UUID.test(a.phase7FragmentRowId)||
+     typeof a.phase7GroupId!=="string"||!UUID.test(a.phase7GroupId))
    hold("INVALID_PRE_ANCHOR_SCOPE");
   const isCondId=CONDITIONAL_ID.test(a.flightInstanceId);
   if((a.identityTier==="CONDITIONAL_QUERY_FILTERED_SERVICE")!==isCondId)
    hold("IDENTITY_TIER_NAMESPACE_MISMATCH");
+  // Date.parse also coerces arrays/numbers; require actual clock strings
+  // while preserving the existing accepted timestamp serialization.
+  if(typeof a.preIssuedAtUtc!=="string"||typeof a.predictionCutoffUtc!=="string")
+   hold("PRE_CUTOFF_INVARIANT_VIOLATED");
   const preMs=Date.parse(a.preIssuedAtUtc),cutMs=Date.parse(a.predictionCutoffUtc);
   if(!Number.isFinite(preMs)||!Number.isFinite(cutMs)||preMs>cutMs)
    hold("PRE_CUTOFF_INVARIANT_VIOLATED");

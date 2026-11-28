@@ -136,6 +136,121 @@ describe("T136 native POST binds the frozen PRE reference and original without c
   return {anchor,outcome};
  }
 
+ function structuralPair(identityTier:P5PreservedPreOutcomeAnchor["identityTier"]){
+  const {anchor}=fixture();
+  const flightInstanceId=identityTier==="PROVIDER_NATIVE_OPERATING_LEG"?anchor.flightInstanceId:
+   "leg:g5a:"+sha("T136 identity boundary conditional service");
+  const first:P5PreservedPreOutcomeAnchor={...anchor,identityTier,flightInstanceId};
+  const second:P5PreservedPreOutcomeAnchor={...first,horizon:"T-90m",preSnapshotId:"3103",
+   phase7FragmentRowId:"33333333-3333-4333-8333-333333333303",
+   preIssuedAtUtc:"2026-11-30T14:28:00.000Z",predictionCutoffUtc:"2026-11-30T14:30:00.000Z"};
+  return [first,second] as const;
+ }
+
+ it("rejects nonprimitive PRE and Phase7 identities before cohort comparisons",()=>{
+  for(const tier of ["PROVIDER_NATIVE_OPERATING_LEG","CONDITIONAL_QUERY_FILTERED_SERVICE"] as const){
+   const [first,second]=structuralPair(tier);
+   for(const field of ["preSnapshotId","phase7FragmentRowId","phase7GroupId"] as const){
+    const changed={...first,[field]:[first[field]] as unknown as string};
+    for(const ordered of [[changed,second],[second,changed]])
+     expect(()=>matchP5PreservedPreToSeparatedPostOutcomes(ordered,[])).toThrow("INVALID_PRE_ANCHOR_SCOPE");
+   }
+   // Before I140's identity extension, separately allocated JSON arrays
+   // bypassed Set membership and counted one reused PRE/fragment as a pair.
+   const reused=[first,second].map(a=>({...a,preSnapshotId:[first.preSnapshotId] as unknown as string,
+    phase7FragmentRowId:[first.phase7FragmentRowId] as unknown as string}));
+   for(const ordered of [reused,[...reused].reverse()])
+    expect(()=>matchP5PreservedPreToSeparatedPostOutcomes(ordered,[])).toThrow("INVALID_PRE_ANCHOR_SCOPE");
+   // JSON numbers and strings also name the same PRE but are distinct Set keys.
+   const numeric={...second,preSnapshotId:Number(first.preSnapshotId) as unknown as string};
+   for(const ordered of [[first,numeric],[numeric,first]])
+    expect(()=>matchP5PreservedPreToSeparatedPostOutcomes(ordered,[])).toThrow("INVALID_PRE_ANCHOR_SCOPE");
+  }
+ });
+
+ it("still refuses primitive duplicate PRE or fragment identifiers in either input order",()=>{
+  for(const tier of ["PROVIDER_NATIVE_OPERATING_LEG","CONDITIONAL_QUERY_FILTERED_SERVICE"] as const){
+   const [first,second]=structuralPair(tier);
+   for(const field of ["preSnapshotId","phase7FragmentRowId"] as const){
+    const reused={...second,[field]:first[field]};
+    for(const ordered of [[first,reused],[reused,first]])
+     expect(()=>matchP5PreservedPreToSeparatedPostOutcomes(ordered,[])).toThrow("REUSED_PRE_OR_FRAGMENT_IDENTIFIER");
+   }
+  }
+ });
+
+ it("preserves one group per flight and rejects separately allocated shared-group aliases",()=>{
+  for(const tier of ["PROVIDER_NATIVE_OPERATING_LEG","CONDITIONAL_QUERY_FILTERED_SERVICE"] as const){
+   const [first,second]=structuralPair(tier);
+   const otherFlight={...second,flightInstanceId:(tier==="PROVIDER_NATIVE_OPERATING_LEG"?"leg:p5v1:":"leg:g5a:")+
+    sha("T136 another flight in the same tier")};
+   for(const ordered of [[first,otherFlight],[otherFlight,first]])
+    expect(()=>matchP5PreservedPreToSeparatedPostOutcomes(ordered,[])).toThrow("GROUP_REUSED_ACROSS_FLIGHTS");
+   const arrays=[first,otherFlight].map(a=>({...a,phase7GroupId:[first.phase7GroupId] as unknown as string}));
+   for(const ordered of [arrays,[...arrays].reverse()])
+    expect(()=>matchP5PreservedPreToSeparatedPostOutcomes(ordered,[])).toThrow("INVALID_PRE_ANCHOR_SCOPE");
+   const otherGroup={...second,phase7GroupId:"dddddddd-dddd-4ddd-8ddd-ddddddddddd1"};
+   for(const ordered of [[first,otherGroup],[otherGroup,first]])
+    expect(()=>matchP5PreservedPreToSeparatedPostOutcomes(ordered,[])).toThrow("CROSS_DAY_SPLIT_TIER_OR_GROUP_LEAKAGE");
+  }
+ });
+
+ it("rejects alternate UUID hyphen positions that would evade fragment or group identity checks",()=>{
+  const alias=(uuid:string)=>{
+   const hex=uuid.replace(/-/g,"");
+   return hex.slice(0,4)+"-"+hex.slice(4,12)+"-"+hex.slice(12,16)+"-"+hex.slice(16,20)+"-"+hex.slice(20);
+  };
+  for(const tier of ["PROVIDER_NATIVE_OPERATING_LEG","CONDITIONAL_QUERY_FILTERED_SERVICE"] as const){
+   const [first,second]=structuralPair(tier);
+   const reusedFragment={...second,phase7FragmentRowId:alias(first.phase7FragmentRowId)};
+   const reusedGroup={...second,flightInstanceId:(tier==="PROVIDER_NATIVE_OPERATING_LEG"?"leg:p5v1:":"leg:g5a:")+
+    sha("T136 UUID group alias flight"),phase7GroupId:alias(first.phase7GroupId)};
+   expect(reusedFragment.phase7FragmentRowId.replace(/-/g,"")).toBe(first.phase7FragmentRowId.replace(/-/g,""));
+   expect(reusedGroup.phase7GroupId.replace(/-/g,"")).toBe(first.phase7GroupId.replace(/-/g,""));
+   for(const reused of [reusedFragment,reusedGroup])
+    for(const ordered of [[first,reused],[reused,first]])
+     expect(()=>matchP5PreservedPreToSeparatedPostOutcomes(ordered,[])).toThrow("INVALID_PRE_ANCHOR_SCOPE");
+  }
+ });
+
+ it("retains valid distinct native and conditional pairs without restricting UUID versions or certifying readback",()=>{
+  const native=structuralPair("PROVIDER_NATIVE_OPERATING_LEG").map((a,i)=>({...a,
+   phase7FragmentRowId:"33333333-3333-0333-0333-33333333330"+(i+2),phase7GroupId:"cccccccc-cccc-0ccc-0ccc-ccccccccccc1"}));
+  const conditional=structuralPair("CONDITIONAL_QUERY_FILTERED_SERVICE").map((a,i)=>({...a,
+   preSnapshotId:String(4102+i),phase7FragmentRowId:"44444444-4444-f444-f444-44444444440"+(i+2),
+   phase7GroupId:"dddddddd-dddd-fddd-fddd-ddddddddddd1"}));
+  for(const ordered of [[...native,...conditional],[...conditional,...native].reverse()]){
+   const r=matchP5PreservedPreToSeparatedPostOutcomes(ordered,[]);
+   expect(r.coverage.totalDistinctLegs).toBe(2);expect(r.coverage.nativeLegs).toBe(1);
+   expect(r.coverage.conditionalLegs).toBe(1);expect(r.coverage.pairedT6T90).toBe(2);
+   expect(r.productionAnchorReadbackVerified).toBe(false);expect(r.coverage.observedNativePhysicalGateOut).toBe(0);
+   for(const leg of r.matchedLegs)expect(leg.physicalGateOutCertified).toBe(false);
+  }
+ });
+
+ it("rejects nonprimitive mandatory clocks without narrowing valid string serialization",()=>{
+  for(const tier of ["PROVIDER_NATIVE_OPERATING_LEG","CONDITIONAL_QUERY_FILTERED_SERVICE"] as const){
+   const [anchor]=structuralPair(tier);
+   // Absent optional metadata must not hide the mandatory clock boundary.
+   const bare={...anchor,selectedScheduledDepartureUtc:undefined,
+    originalSourceResponseSha256:undefined,originalSourceAvailableAtUtc:undefined};
+   for(const field of ["preIssuedAtUtc","predictionCutoffUtc"] as const){
+    expect(()=>matchP5PreservedPreToSeparatedPostOutcomes([
+     {...bare,[field]:[bare[field]] as unknown as string}
+    ],[])).toThrow("PRE_CUTOFF_INVARIANT_VIOLATED");
+   }
+   expect(()=>matchP5PreservedPreToSeparatedPostOutcomes([
+    {...bare,preIssuedAtUtc:0 as unknown as string}
+   ],[])).toThrow("PRE_CUTOFF_INVARIANT_VIOLATED");
+   expect(()=>matchP5PreservedPreToSeparatedPostOutcomes([
+    {...bare,preIssuedAtUtc:0 as unknown as string,predictionCutoffUtc:0 as unknown as string}
+   ],[])).toThrow("PRE_CUTOFF_INVARIANT_VIOLATED");
+   const alternate={...bare,preIssuedAtUtc:"2026-11-30T09:58:00+00:00",predictionCutoffUtc:"2026-11-30T10:00:00+00:00"};
+   const valid=matchP5PreservedPreToSeparatedPostOutcomes([alternate],[]);
+   expect(valid.coverage.withT6Primary).toBe(1);expect(valid.productionAnchorReadbackVerified).toBe(false);
+  }
+ });
+
  it.each([-12,0,22])("preserves a correctly bound signed %s-minute candidate with no label or readback promotion",delay=>{
   const {anchor,outcome}=fixture(delay),r=matchP5PreservedPreToSeparatedPostOutcomes([anchor],[outcome]);
   expect(r.matchedLegs[0].candidatePhysicalDelayMinutes).toBe(delay);
