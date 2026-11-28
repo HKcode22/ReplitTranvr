@@ -61,7 +61,7 @@ export async function readP5BRestBudget(c,expected={manifest:LIVE_MANIFEST,calen
   const cycle=await c.query("SELECT cycle_api_ceiling::int cycle_ceiling,other_category_reserved_units::int other_reserved,protected_api_floor_units::int protected_floor,physically_reserved_units::int fids_reserved FROM clean.phase5_fids_cycle_budget_v39 WHERE manifest_sha256=$1",[m]);
   if(cycle.rowCount!==1)hold("CYCLE");
   const caps=(await c.query("SELECT category,ceiling_units::int cap FROM clean.phase5_fids_cycle_rest_category_cap_v39 WHERE manifest_sha256=$1 ORDER BY category",[m])).rows;
-  const days=(await c.query("SELECT charge_day_utc::text day,daily_api_ceiling::int daily_ceiling,daily_other_reserved_units::int other_reserved,physically_reserved_units::int fids_reserved FROM clean.phase5_fids_utc_charge_budget_v39 WHERE manifest_sha256=$1 ORDER BY charge_day_utc",[m])).rows;
+  const days=(await c.query("SELECT charge_day_utc::text AS \"day\",daily_api_ceiling::int daily_ceiling,daily_other_reserved_units::int other_reserved,physically_reserved_units::int fids_reserved FROM clean.phase5_fids_utc_charge_budget_v39 WHERE manifest_sha256=$1 ORDER BY charge_day_utc",[m])).rows;
   const rows=(await c.query(P6_CATEGORY_ACCOUNTING_SQL,[m])).rows;
   const out=reconcileP5BRestBudget({rows,caps,days,cycle:cycle.rows[0],observedAtUtc:new Date(w.at).toISOString()},expected);
   attempted=true;await c.query("ROLLBACK");open=false;return out;
