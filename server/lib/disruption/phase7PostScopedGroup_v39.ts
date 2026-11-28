@@ -40,7 +40,7 @@ async function withScopedRead<T>(reader:Pick<Pool,"connect">,read:(c:import("pg"
   return result;
  }catch(e){
   if(!rollbackAttempted){
-   try{await c.query("ROLLBACK");}catch{discard=true;}
+   try{await c.query("ROLLBACK");}catch{discard=true;hold("ROLLBACK_UNACKNOWLEDGED");}
   }
   throw e;
  }finally{c.release(discard);}

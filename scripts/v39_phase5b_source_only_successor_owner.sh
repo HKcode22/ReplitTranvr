@@ -409,7 +409,10 @@ blob 3ee5830338e6e121befdb6d324e9c61311dc28ea "$TMP/pins.sh"
 blob 018a350036ebe0f2b326e322b586d4ef9b343dd1 "$TMP/census.mjs"
 blob cc7121bbb91715ce066ae2c84e5656227853a473 "$TMP/funnel.cjs"
 blob 8df852a34c08ba91a6b3a0441b2718579901a5ca "$TMP/retention.sh"
-if [[ "$ROUTE_MODE" == PAUSED ]];then blob 53d403000f7f199d1eecbcc6c84e5f1d3ffa7d26 "$TMP/pause.sh";bash -n "$TMP/pause.sh";fi
+if [[ "$ROUTE_MODE" == PAUSED ]];then
+ if [[ "$TARGET_PR" == 984 ]];then blob c47c4d688d746f3e7c8f3119d3eb9068c3840c30 "$TMP/pause.sh";else blob 53d403000f7f199d1eecbcc6c84e5f1d3ffa7d26 "$TMP/pause.sh";fi
+ bash -n "$TMP/pause.sh"
+fi
 bash -n "$TMP/pins.sh";bash -n "$TMP/retention.sh";node --check "$TMP/census.mjs";node --check "$TMP/funnel.cjs"
 if [[ "$MODE" == RECOVER_EXACT_MERGED_SOURCE_ONLY_TARGET_980 || "$MODE" == RECOVER_EXACT_MERGED_SOURCE_ONLY_TARGET_981 || "$MODE" == RECOVER_EXACT_MERGED_SOURCE_ONLY_TARGET_982 || "$MODE" == RECOVER_EXACT_MERGED_PAUSED_TARGET_982 || "$MODE" == RECOVER_EXACT_MERGED_PAUSED_TARGET_983 || "$MODE" == RECOVER_EXACT_MERGED_PAUSED_TARGET_984 ]];then
  stage=EXACT_MERGED_980_RECOVERY

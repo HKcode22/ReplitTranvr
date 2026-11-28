@@ -124,11 +124,16 @@ paused(){
  for key in "${keys[@]}";do required "$TMP/target" "$key" false;override "$TMP/target-env" "$key" false;done
 }
 active_snapshot(){
- local dest="$1" state
- : > "$TMP/active-lines"
- for state in queued in_progress waiting requested pending;do
+ local dest="$1" state attempt bad
+ # GitHub status pages are non-atomic: a moving run can invalidate a page.
+ # Retry only a fresh complete read-only snapshot, never a mutation, and
+ # never turn an invalid/incomplete page into evidence of quiescence.
+ for attempt in 1 2 3;do
+  bad=""
+  : > "$TMP/active-lines"
+  for state in queued in_progress waiting requested pending;do
   gh api "repos/$R/actions/runs?branch=main&status=$state&per_page=100" > "$TMP/runs" 2>/dev/null || hold ACTIVE_METADATA_UNVERIFIED
-  jq -ce --arg status "$state" '
+  if ! jq -ce --arg status "$state" '
     if (.total_count|type)=="number" and .total_count>=0 and .total_count<=100 and
       .total_count==(.total_count|floor) and (.workflow_runs|type)=="array" and
       (.workflow_runs|length)==.total_count and
@@ -142,9 +147,17 @@ active_snapshot(){
         ".github/workflows/phase5-one-signed-day-source-child-dispatch.yml",
         ".github/workflows/phase5-one-signed-future-post-v0083-main-manual.yml"]|index($p)!=null) |
       {id,path,status,createdAtUtc:.created_at}]
-    else error("active metadata") end' "$TMP/runs" >> "$TMP/active-lines" 2>/dev/null || hold ACTIVE_METADATA_MALFORMED
+    else error("active metadata") end' "$TMP/runs" >> "$TMP/active-lines" 2>/dev/null;then
+   bad="$state";break
+  fi
+  done
+  if [[ -z "$bad" ]];then
+   jq -s 'add|unique_by(.id)' "$TMP/active-lines" > "$dest" || hold ACTIVE_METADATA_MALFORMED
+   return 0
+  fi
+  printf 'ACTIVE_SNAPSHOT_RECHECK status=%s attempt=%s (no writes; full fresh scan required)\n' "$bad" "$attempt" >&2
  done
- jq -s 'add|unique_by(.id)' "$TMP/active-lines" > "$dest"
+ hold ACTIVE_METADATA_MALFORMED
 }
 pause_scope(){
  local key="$1" scope="$2" file="$3" x

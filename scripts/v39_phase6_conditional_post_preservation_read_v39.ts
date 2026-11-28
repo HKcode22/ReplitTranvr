@@ -50,14 +50,15 @@ async function join(input:Reader,base:BaseScope,actual:{status:string;privateDec
   actual.candidateCount>MAX||Object.getOwnPropertyDescriptor(actual,"privateDecisions")?.enumerable!==false||
   !Object.isFrozen(actual.privateDecisions))hold("ACTUAL_SOURCE_READ_REQUIRED");
  const start=utc(actual.observedDbClockUtc),groups=new Set<string>(),rows=new Set<string>(),flights=new Set<string>();
- let observed=start;
- const decisions=[];
+ let observed=start,sourceEligible=0;
+ const decisions=[],unresolvedGroups:{flightInstanceId:string;reason:"SCOPED_GROUP_UNAVAILABLE_OR_EXPIRED"}[]=[];
  for(const d of actual.privateDecisions){
   if(typeof d.flightInstanceId!=="string"||!ID.test(d.flightInstanceId)||flights.has(d.flightInstanceId))hold("FLIGHT_SCOPE");
   flights.add(d.flightInstanceId);
   if(d.status!=="ACTUAL_RETAINED_CONDITIONAL_T6_FOR_POST_REVIEW")continue;
+  sourceEligible++;
   if(d.queryDigestSha256!==base.queryDigestSha256||!hash(d.originalSourceResponseSha256)||!hash(d.expectedSignedPacketSha256)||
-   !/^[1-9][0-9]{0,17}$/.test(d.snapshotId)||utc(d.preIssuedAtUtc)>utc(d.predictionCutoffUtc)||
+   !/^[1-9][0-9]{0,17}$/.test(d.snapshotId)||utc(d.preIssuedAtUtc)>=utc(d.predictionCutoffUtc)||
    utc(d.originalSourceAvailableAtUtc)>utc(d.preIssuedAtUtc)||
    utc(d.selectedScheduledDepartureUtc)-utc(d.predictionCutoffUtc)!==21600000||
    utc(d.assessmentWatermarkUtc)-utc(d.selectedScheduledDepartureUtc)!==7200000||
@@ -69,9 +70,16 @@ async function join(input:Reader,base:BaseScope,actual:{status:string;privateDec
    selectedNativeTUtc:d.selectedScheduledDepartureUtc,preIssuedAtUtc:d.preIssuedAtUtc,
    originalSourceAvailableAtUtc:d.originalSourceAvailableAtUtc,sourceExpiresAtUtc:d.sourceExpiresAtUtc,
    sourceResponseSha256:d.originalSourceResponseSha256,ambiguousIdentity:false};
-  // Missing, ambiguous, expired or wrong-scope groups fail closed before
-  // planning a paid POST. Never turn a read failure into a negative label.
-  const result=await readPhase7ConditionalT6ScopedGroup(input.reader,input.readerRole,input.contract,input.profile,anchor,base.protocolSha256);
+  // One absent/expired exact group is a candidate-level unresolved state,
+  // not a reason to discard independently preserved peers. P0002 is the
+  // STRICT SELECT no-row refusal of V0115; the reader only propagates it
+  // after acknowledged rollback. All other faults (including duplicate
+  // rows, ACL, malformed bytes, uncertain cleanup) remain page-wide HOLD.
+  let result:Awaited<ReturnType<typeof readPhase7ConditionalT6ScopedGroup>>;
+  try{result=await readPhase7ConditionalT6ScopedGroup(input.reader,input.readerRole,input.contract,input.profile,anchor,base.protocolSha256);}
+  catch(e){if((e as {code?:string})?.code!=="P0002")throw e;
+   unresolvedGroups.push(Object.freeze({flightInstanceId:d.flightInstanceId,reason:"SCOPED_GROUP_UNAVAILABLE_OR_EXPIRED"}));continue;
+  }
   const at=utc(result.observedAtUtc);
   if(at<observed||at-start>120000||at>=utc(d.assessmentWatermarkUtc)||at>=utc(d.sourceExpiresAtUtc))hold("GROUP_READ_CLOCK_OR_WINDOW_DRIFT");
   observed=at;
@@ -89,14 +97,15 @@ async function join(input:Reader,base:BaseScope,actual:{status:string;privateDec
    originalPopulationQueryId:d.originalPopulationQueryId,reportedScheduledDepartureUtc:d.reportedScheduledDepartureUtc,
    assessmentWatermarkUtc:d.assessmentWatermarkUtc,groupId,fragments:Object.freeze(result.fragments)}));
  }
- if(decisions.length!==actual.eligibleCount)hold("ELIGIBLE_DENOMINATOR_DRIFT");
+ if(sourceEligible!==actual.eligibleCount||decisions.length+unresolvedGroups.length!==sourceEligible)hold("ELIGIBLE_DENOMINATOR_DRIFT");
  const result={status:"ACTUAL_CONDITIONAL_POST_T6_AND_PACKET_B_GROUP_READ_NO_GO",runDayIndex:base.runDayIndex,
-  candidateCount:actual.candidateCount,verifiedPacketBGroupCount:decisions.length,
+  candidateCount:actual.candidateCount,sourceEligibleCount:sourceEligible,verifiedPacketBGroupCount:decisions.length,
+  unresolvedPacketBGroupCount:unresolvedGroups.length,
   unavailableCount:actual.candidateCount-decisions.length,observedDbClockUtc:new Date(observed).toISOString(),
   independentT24WitnessVerified:false,postIssuerCommissioned:false,physicalGateOutCertified:false,
   providerCalls:0,databaseWrites:0,postPacketsIssued:0,phase6PaidGo:false};
- return Object.freeze(Object.defineProperty(result,"privateDecisions",{value:Object.freeze(decisions),enumerable:false})) as typeof result&
-  {readonly privateDecisions:readonly (typeof decisions)[number][]};
+ return Object.freeze(Object.defineProperties(result,{privateDecisions:{value:Object.freeze(decisions),enumerable:false},privateUnresolvedGroups:{value:Object.freeze(unresolvedGroups),enumerable:false}})) as typeof result&
+  {readonly privateDecisions:readonly (typeof decisions)[number][];readonly privateUnresolvedGroups:readonly (typeof unresolvedGroups)[number][]};
 }
 /** Restricted actual T6+group integration for the existing source-bound
  * batch path. A production caller must first authenticate the signed index;
@@ -125,5 +134,5 @@ export async function readP6SignedConditionalPostPreservationPage(args:Parameter
   runDayIndex:s.runDayIndex,airportIcao:s.airportIcao,reviewedFrameSha256:page.privateReviewedFrameSha256,protocolSha256:s.conditionalServiceScope.protocolSha256};
  const result=await join(input,base,Object.freeze(Object.defineProperty({...page,candidateCount:page.pageCandidateCount},"privateDecisions",{value:page.privateDecisions,enumerable:false})));
  return Object.freeze(Object.defineProperties({...result,totalCandidateCount:page.totalCandidateCount,remainingAfterPageCount:page.remainingAfterPageCount},{
-  privateDecisions:{value:result.privateDecisions,enumerable:false},privateNextCursor:{value:page.privateNextCursor,enumerable:false}}));
+  privateDecisions:{value:result.privateDecisions,enumerable:false},privateUnresolvedGroups:{value:result.privateUnresolvedGroups,enumerable:false},privateNextCursor:{value:page.privateNextCursor,enumerable:false}}));
 }

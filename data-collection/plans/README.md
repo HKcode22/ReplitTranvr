@@ -2,6 +2,8 @@
 
 # Data collection plans
 
+**START HERE: [V3.9 f.8 — CURRENT execution contract and precedence addendum](V3.9_DataCollectPlan_CURRENT.md).** This consolidates the adopted Phase 5–7 scientific and operational requirements by original section, rather than asking operators to reconcile separate historical prose. The original signed f.8 file remains byte-for-byte historical baseline. [Numbered Phase 5B simplification register](../phase5b/SIMPLIFICATION_REGISTER.md) tracks actual removal of unnecessary complexity.
+
 This directory is the entry point to the frozen study protocol, its amendments, and the current Phase 5B / Phase 6 recovery evidence. The canonical protocol files remain at their established paths; the links below make their relationship visible without copying, renaming, or replacing them.
 
 - **[Phase 5B / Phase 6 recovery map](PHASE5B_PHASE6_RECOVERY_MAP_2026-11-27.md)** — Packet A/B, Amendment E, C+D, current evidence, open P0s and next actions.

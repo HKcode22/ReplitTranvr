@@ -60,7 +60,7 @@ if(a[0]==="api"){
   if(c.failPostPauseRuns&&s.runReads>5)fail();
   const status=endpoint.match(/[?&]status=([^&]+)/)[1];
   const runs=s.active.filter(x=>x.status===status);
-  done({total_count:c.badRuns?101:runs.length,workflow_runs:runs});
+  done({total_count:c.badRuns?101:c.badRunsAt===s.runReads?runs.length+1:runs.length,workflow_runs:runs});
  }
 }
 if(a[0]==="variable"&&a[1]==="set"){
@@ -231,4 +231,11 @@ test("T137 recovery mode requires an exact distinct previous target and the actu
   const r=execute(mixedRecovery,recoveryMode,previous);held(r,"EXACT_SCOPE");assert.equal(r.actual.calls.length,0);
  }
  held(execute(s=>{mixedRecovery(s);s.config.initialMainDrift=true;},recoveryMode,previousTarget),"EXACT_MAIN_DRIFT");
+});
+
+// S001: a single inconsistent status response does not force a repeat of
+// a previously completed protected policy stage. Persistent drift still holds.
+test("T137 S001 fresh whole-snapshot retry recovers one inconsistent active page, never hides an active child",()=>{
+ const r=execute(s=>{for(const scope of ["target/repo",protectedScope])for(const k of keys)if(k in s.vars[scope])s.vars[scope][k]="false";s.config.badRunsAt=6;s.active=[row(301,"phase5-one-signed-day-source-child-dispatch.yml","queued")];},"VERIFY_PAUSED_ADMISSIONS_AND_FUTURE_PUBLICATION");
+ assert.equal(r.status,0,r.stderr);assert.equal(r.receipt.drainState,"DRAINING");assert.deepEqual(r.receipt.activeAfter.map(x=>x.id),[301]);assert.equal(r.actual.writes.length,0);assert.match(r.stderr,/ACTIVE_SNAPSHOT_RECHECK status=queued attempt=1/);assert.equal(r.actual.runReads,11);
 });

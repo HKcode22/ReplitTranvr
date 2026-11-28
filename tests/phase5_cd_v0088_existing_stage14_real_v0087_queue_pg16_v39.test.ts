@@ -1001,6 +1001,9 @@ active("Phase5 C+D actual Stage14 source-bound parallel PRE on disposable PG16",
        selectedNativeTUtc:t.toISOString(),sourceResponseSha256:response});
       expect(verified.privateDecisions[0].fragments.some(f=>f.packet.rows[0].horizon==="T-6h")).toBe(true);
       expect(JSON.stringify(verified)).not.toContain(flight);expect(JSON.stringify(verified)).not.toContain(response);
+      const mixed=await readP6ConditionalPostT6PreservationBatch(scoped,{...scope,candidates:[...scope.candidates,{...scope.candidates[0],flightInstanceId:"leg:g5a:"+sha("absent same-frame CI flight")}]},input);
+      expect(mixed).toMatchObject({candidateCount:2,sourceEligibleCount:1,verifiedPacketBGroupCount:1,unresolvedPacketBGroupCount:0,unavailableCount:1,phase6PaidGo:false});
+      expect(mixed.privateDecisions.map(x=>x.flightInstanceId)).toEqual([flight]);
       await expect(readP6ConditionalPostT6PreservationBatch(scoped,scope,{...input,scope:{...input.scope,expectedProfileSha256:sha("wrong profile")}})).rejects.toThrow("EXACT_SEPARATE_READ_SCOPE");
       await expect(readP6ConditionalPostT6PreservationBatch(scoped,scope,{...input,reader:admin})).rejects.toThrow("READER_SCOPE_OR_CLOCK");
       // Original source still present, but the actual temporary mapping is
@@ -1025,8 +1028,7 @@ active("Phase5 C+D actual Stage14 source-bound parallel PRE on disposable PG16",
         }});
        }};
        const attempt=readPhase7ConditionalT6ScopedGroup(lostRollback,P7SCOPED,p7.contract,p7.profile,anchor,protocolToRead);
-       if(protocolToRead===protocol)await expect(attempt).rejects.toThrow("ROLLBACK_UNACKNOWLEDGED");
-       else await expect(attempt).rejects.toMatchObject({code:"P0002"});
+       await expect(attempt).rejects.toThrow("ROLLBACK_UNACKNOWLEDGED");
        expect(rollbackCount).toBe(1);expect(releases).toEqual([true]);
       }
       // A fresh independent session remains usable after discarded sessions.
@@ -1034,7 +1036,11 @@ active("Phase5 C+D actual Stage14 source-bound parallel PRE on disposable PG16",
       // Leave the fixture link expired for the existing due-only sweep below.
       // Never extend or resurrect a link, even in this regression.
       await admin.query("UPDATE phase7_private.pre_source_link_v39 SET expires_at_utc=clock_timestamp()-interval '1 second' WHERE snapshot_id=$1",[saved.committedSnapshotId]);
-      await expect(readP6ConditionalPostT6PreservationBatch(scoped,scope,input)).rejects.toThrow();
+      const absent=await readP6ConditionalPostT6PreservationBatch(scoped,scope,input);
+      expect(absent).toMatchObject({candidateCount:1,sourceEligibleCount:1,verifiedPacketBGroupCount:0,unresolvedPacketBGroupCount:1,unavailableCount:1,postPacketsIssued:0,phase6PaidGo:false});
+      expect(absent.privateDecisions).toEqual([]);
+      expect(absent.privateUnresolvedGroups).toEqual([{flightInstanceId:flight,reason:"SCOPED_GROUP_UNAVAILABLE_OR_EXPIRED"}]);
+      expect(JSON.stringify(absent)).not.toContain(flight);
       console.log("I149_T146_REAL_RESTRICTED_CONDITIONAL_T6_PACKET_B_GROUP_PASS");
      }
     }finally{await source.end();}
