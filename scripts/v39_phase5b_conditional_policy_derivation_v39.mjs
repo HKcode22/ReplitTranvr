@@ -92,7 +92,7 @@ const decode=(x,max)=>{
 const stems={daily:"DAILY_POLICY",signing:"SIGNING_POLICY",transport:"TRANSPORT_TRUST"};
 export function deriveP6ConditionalRuntimeEnvironment(env,target){
  const active=env.P6_PHASE5B_DERIVATION_APPROVAL_BASE64||"",staged=env.P6_PHASE5B_DERIVATION_STAGED_APPROVAL_BASE64||"";
- const out={...env};for(const k of ENV_KEYS)delete out[k];
+ const out={...env};for(const k of [...ENV_KEYS,"P6_PHASE5B_DERIVATION_READBACK_MODE"])delete out[k];
  if(!active&&!staged)return {env:out,maskValues:[],derived:false};
  if(active&&staged||env.P6_PHASE5B_DERIVATION_LEGACY_SELECTOR||env.P6_PHASE5B_CONDITIONAL_ACTIVE_PROTOCOL_SHA256||
     env.GITHUB_ACTIONS!=="true"||env.GITHUB_REPOSITORY!==REPO||env.GITHUB_REF!=="refs/heads/main"||
@@ -126,6 +126,7 @@ export function deriveP6ConditionalRuntimeEnvironment(env,target){
   const b64=next[k].toString("base64"),digest=hash(next[k]);
   out[prefix+"_BASE64"]=b64;out[prefix+"_SHA256"]=digest;maskValues.push(b64,digest);
  }
+ if(custody)out.P6_PHASE5B_DERIVATION_READBACK_MODE=active?"ACTIVE_RECIPE":"INACTIVE_RECIPE";
  if(target===FULL){
   const composite=(side,digests)=>hash(JSON.stringify({schema:"v39.phase5b.custody-"+side+"-commitment.v1",...digests}));
   if(composite("base",base)!==a.recipe.basePolicyCommitmentSha256||

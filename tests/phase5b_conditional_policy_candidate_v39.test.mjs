@@ -262,9 +262,12 @@ test("T145 tokenless protected consumers derive only their existing policy, stag
  const stageEnv={...all,P6_PHASE5B_DERIVATION_STAGED_APPROVAL_BASE64:approval,P6_PHASE5B_CONDITIONAL_INSTALL_ACTION:"VERIFY_STAGED_CONDITIONAL_SUCCESSOR"};
  const staged=deriveP6ConditionalRuntimeEnvironment(stageEnv,full);
  assert.equal(staged.env.P6_PHASE5B_CONDITIONAL_ACTIVE_PROTOCOL_SHA256,undefined);
+ assert.equal(staged.env.P6_PHASE5B_DERIVATION_READBACK_MODE,"INACTIVE_RECIPE");
  assert.equal(staged.env.P6_NONPAID_TRANSPORT_TRUST_SHA256,candidate.transportSha256);assert.equal(staged.maskValues.length,6);
  const activeEnv={...all,P6_PHASE5B_DERIVATION_APPROVAL_BASE64:approval,P6_PHASE5B_CONDITIONAL_INSTALL_ACTION:"VERIFY_ACTIVE_CONDITIONAL_SUCCESSOR"};
  assert.equal(deriveP6ConditionalRuntimeEnvironment(activeEnv,full).env.P6_PHASE5B_CONDITIONAL_ACTIVE_PROTOCOL_SHA256,decision.protocolSha256);
+ assert.equal(deriveP6ConditionalRuntimeEnvironment(activeEnv,full).env.P6_PHASE5B_DERIVATION_READBACK_MODE,"ACTIVE_RECIPE");
+ assert.equal(deriveP6ConditionalRuntimeEnvironment({...daily,P6_PHASE5B_DERIVATION_READBACK_MODE:"ACTIVE_RECIPE"},target).env.P6_PHASE5B_DERIVATION_READBACK_MODE,undefined);
  for(const bad of [{...active,GITHUB_SHA:"d".repeat(40)},{...active,P6_PHASE5B_DERIVATION_LEGACY_SELECTOR:decision.protocolSha256},
   {...active,P6_PHASE5B_DERIVATION_LANE_FINGERPRINT_SHA256:h("wrong actor")},{...active,P6_NONPAID_DAILY_POLICY_BASE64:""},
   {...active,P6_CONDITIONAL_SERVICE_PROTOCOL_SHA256:h("drift")},{...active,P6_PHASE5B_DERIVATION_STAGED_APPROVAL_BASE64:approval}])
