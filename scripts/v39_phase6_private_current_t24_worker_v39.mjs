@@ -23,7 +23,7 @@ const hold=s=>{throw Error("HOLD_P6_CURRENT_T24_"+s);};
  * strings, connection info, packet bytes, stack traces or unknown SQL errors. */
 export function currentT24FailureDiagnostic(error){
  const m=typeof error?.message==="string"?error.message:"";
- return /^(?:HOLD_P6_(?:CURRENT_T24|T24_ENROLL|STORED_SOURCE_TRUST|PRIVATE_T24_QUEUE|LATER_CALENDAR|STORED_REVIEW|DAY_EPOCH|COMMITTED_T24_CUSTODY)[A-Z0-9_]*|HOLD_P7_PROTECTED_PRE_RESOLVER_[A-Z0-9_]+|REFUSED_P5_(?:CD_(?:GH_CODE_LINEAGE|GITHUB_PRE|T24_QUEUED)|CONDITIONAL)_[A-Z0-9_]+)$/.test(m)&&m.length<=160?m:"HOLD_P6_CURRENT_T24_REDACTED_NO_REPLAY";
+ return /^(?:HOLD_P6_(?:CURRENT_T24|T24_ENROLL|STORED_SOURCE_TRUST|PRIVATE_T24_QUEUE|LATER_CALENDAR|STORED_REVIEW|DAY_EPOCH)[A-Z0-9_]*|HOLD_P7_PROTECTED_PRE_RESOLVER_[A-Z0-9_]+|REFUSED_P5_CD_(?:GH_CODE_LINEAGE|GITHUB_PRE|T24_QUEUED)_[A-Z0-9_]+)$/.test(m)&&m.length<=160?m:"HOLD_P6_CURRENT_T24_REDACTED_NO_REPLAY";
 }
 
 export function admitP6CurrentT24Worker(env){
@@ -39,12 +39,12 @@ export function admitP6CurrentT24Worker(env){
  const trust=readP6T24ProtectedQueueTrust(env);
  if(base.approvedCodeSha!==trust.reviewedCodeSha||base.manifestSha256!==trust.manifestSha256||base.rightsSha256!==trust.rightsSha256)
   hold("STUDY_TRUST_DRIFT");
- if(trust.conditionalT24Scope){
-  if(!base.conditionalPreScope||
+ if(trust.conditionalT24Scope&&
+    (!base.conditionalPreScope||
      base.conditionalPreScope.protocolSha256!==trust.conditionalT24Scope.protocolSha256||
-     base.conditionalPreScope.externalContentUseReviewSha256!==trust.conditionalT24Scope.externalContentUseReviewSha256)
-   hold("CONDITIONAL_T24_PROTOCOL_SCOPE_MISSING_OR_DRIFT");
- }
+     base.conditionalPreScope.externalContentUseReviewSha256!==trust.conditionalT24Scope.externalContentUseReviewSha256||
+     env.P6_CONDITIONAL_SERVICE_PROTOCOL_SHA256!==trust.conditionalT24Scope.protocolSha256))
+  hold("CONDITIONAL_T24_PROTOCOL_SCOPE_MISSING_OR_DRIFT");
  // readP6T24ProtectedQueueTrust authenticated exact policy bytes already.
  const p=JSON.parse(Buffer.from(env.P6_NONPAID_DAILY_POLICY_BASE64,"base64").toString("utf8"));
  const lanes=p.nativeLaterReview.maximumT24ExecutionLanes;

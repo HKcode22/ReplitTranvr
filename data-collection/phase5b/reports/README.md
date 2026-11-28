@@ -1,0 +1,70 @@
+# Phase5B recovery report — Nov27 post-#980 deployment
+
+## Current P0 readout — Nov27 17:55:36 PST owner receipt
+
+Actual owner pinned `2ebc2c532fdfdb82437da993bcb7e06dbcf55f90` I133/T127 inventory (script SHA-256 `75969af9175a75566a6be3687c4d474e956bff8973c800d17793be0619662053`): **148 timely originals, 86 live, 62 expired metadata-only, 9,126 historical member observations, zero linked/cutoff-safe PRE, zero global Phase7 fragments/bundles/links (one policy).** Day2 52/0 live/4,902 members; Day3 64/54 live/2,352; Day4 32/32 live/1,872. At the receipt clock all six next-hour originals were active study Day3 T6, 312 member observations total (306 HUB, 6 MID_B); all had zero native-shape pass/lead pre-screen, zero V0087 tasks and zero linked PRE. No conditional policy state read, final eligibility, Stage14 permit or Packet B source-link certification. No provider calls or DB writes. Do not extend raw retention, infer six distinct flights or retroactively repair Day3. Existing F005/F026/F027 remain open.
+
+Predecessor #981 exact `bc93119a04dc6d97d6a3e9c2a24cbee6d36e902f` triggered 18 PR workflows; 17 passed including [offline safety](https://github.com/HKcode22/ReplitTranvr/actions/runs/46095030503), [real Stage14 PG16](https://github.com/HKcode22/ReplitTranvr/actions/runs/46095030606) and [source diagnostics PG16](https://github.com/HKcode22/ReplitTranvr/actions/runs/46095030509); [callback-only](https://github.com/HKcode22/ReplitTranvr/actions/runs/46095030506) failed. Do not claim callback publication or re-pin it. Independent T075 runtime digest fixes at [aa1028f4](https://github.com/HKcode22/ReplitTranvr/commit/aa1028f42add2e8eec445a549f63af541dff926b) locally validated; integrated CI and actual outcome evidence pending. Production remains `24df876fc612c0e4fdfb6f69585ed90bcc56f9b8`, SOURCE and retention unchanged. Latest next step: reviewed future commissioning and witnessed positive PRE/Packet B; see [new checkpoint](../checkpoints/2026-11-27_1755_PST_ACTUAL_EXPIRY_AND_T075_DIGEST_PARITY.md). All older counts below are historical.
+
+## Nov27 18:20 PST — final release hold isolated
+
+Exact 2eeefa6b: 29/30 passed, only source diagnostics [46097363166](https://github.com/HKcode22/ReplitTranvr/actions/runs/46097363166) failed at historical T126 Git blob missing from shallow checkout; owner shell stopped before cutover. Real combined witnessed-only T6/T90 PG16 [46097363213](https://github.com/HKcode22/ReplitTranvr/actions/runs/46097363213) passed 11/11. I136/T130 fetches exact c4408c62 historical commit only if missing and verifies pinned blob bytes; all actual release protections unchanged. [Checkpoint](../checkpoints/2026-11-27_1820_PST_EXACT_CI_SHALLOW_FIXTURE_AND_P0_PERSISTENCE.md). No production PRE/Packet B or commissioning inferred.
+
+## Nov27 worker release and witnessed P7 candidate
+
+I134/T128 worker-only callback refusal passed [46096949061](https://github.com/HKcode22/ReplitTranvr/actions/runs/46096949061), preserving existing callback publication refusal. I135/T129 combined conditional V0091 and P7 real PG16 passed 9/9 [46096949015](https://github.com/HKcode22/ReplitTranvr/actions/runs/46096949015) under CI-only standalone scope. Witnessed-only test extension corrected signed registry receipt binding after exact refusal. Final exact CI and guarded release pending; no actual positive PRE or Packet B. [Checkpoint](../checkpoints/2026-11-27_WORKER_SUCCESSOR_AND_WITNESSED_P7.md).
+
+## Historical P0 readout — Nov27 17:49 PST
+
+Production remains `24df876fc612c0e4fdfb6f69585ed90bcc56f9b8`; relay remains `2d96b22345908aa4334335aa899aec71b2fec2cb`. [#981](https://github.com/HKcode22/ReplitTranvr/pull/981) is a draft repair candidate at `2ebc2c532fdfdb82437da993bcb7e06dbcf55f90`; [#982](https://github.com/HKcode22/ReplitTranvr/pull/982) is unmerged and was selectively reconciled. The current candidate keeps numerical gate-out and signed conditional schedule matches uncertified until the actual authority and committed PRE/Packet B readback exist. It counts near-expiry pre-screen candidates from individual originals, excluding uncertain and committed records. Conditional T24 protocol projection and custody parity are candidate code only. Exact #981 head triggered 18 workflows: 17 passed, and the callback-only reviewed-source workflow correctly held after 30 passing tests. No production deployment followed.
+
+The latest **study-specific** owner census remains 134 timely originals, 82 live and 52 expired metadata-only at 13:58Z Nov27, with 8,307 historical member observations, zero linked/cutoff-safe PRE, and zero global Packet B fragments/bundles/links. Day4's 1,053 observations have overlapping native canonical/core/operating-leg rejections; this is not 1,053 distinct flights or proof of an optional-feature cause. The latest inspected **global** retention run [46093783910](https://github.com/HKcode22/ReplitTranvr/actions/runs/46093783910) at 01:35Z Nov28 cleared two originals and 104 population rows with independent readback; eight other live originals were in its next-hour deadline window. Its aggregate does not identify the study originals. A current owner per-original read-only census is needed before calling any of them prospectively preservable.
+
+The signed Day5 plan schedules 96 T24 requests from 15:45–21:30Z Nov29, 96 T6 requests from 09:45–15:30Z Nov30, and 96 T90 requests from 14:15–20:00Z Nov30; each horizon has 24 requests in each of HUB, MID_A, MID_B and REGIONAL. These are planned queries, not independent flights or admitted attempts. The previously established Day5 preparation opening is 03:45Z Nov29 (Nov28 19:45 Pacific); the next eligible unsigned day and effective interval must be checked against fresh protected custody before commissioning. Day5 conditional fields were ABSENT and metadata disabled in protected run `46065789071`; no prospective approval, policy install, PRE or Packet B has been observed. The active funnel remains acquired originals → **zero demonstrated committed PRE** → **zero demonstrated durable Packet B** → zero validated POST outcomes. By-day/stratum/identity-tier eligible distinct-member denominators remain unavailable without a new owner readback.
+
+No scientific methodology change or prospective amendment was made. SOURCE and retention remain enabled. The only process simplification in this candidate is direct per-original reconciliation and removal of misleading aggregate intersection claims; the callback reviewed-source guard remains intact. See the [dated candidate checkpoint](../checkpoints/2026-11-27_1730_PST_P0_CANDIDATE_RECONCILIATION.md) for code/test/release limits.
+
+For canonical protocol navigation and the latest near-expiry F026 evidence, see the [plan directory](../../plans/README.md) and [Nov27 16:11 PST checkpoint](../../phase6/checkpoints/2026-11-27_1611_PST_PLANS_INDEX_AND_NEAR_EXPIRY_P0.md). The checkpoint records the 16:05 PST due-only retention readback and the 16:09 PST no-due preparation/PRE results; this report's original counts below remain timestamped historical snapshots.
+
+**Engineering reliability and evidence visibility improved; scientific output remains unproven.** The guarded #980 release is now on production main. The latest owner source/storage census (13:58Z, before cutover) showed 134 timely bindings, zero linked/cutoff-safe PRE and zero global Packet B fragments/bundles/links. The later protected Day5 read-only custody check also found zero prepared queries and no conditional policy installation. We have no positive PRE, Packet B, POST or physical-label evidence.
+
+**59 permanent failure families:16 narrowly CLOSED,43 NOT_CLOSED.** F040 now closes only for the exact guarded #980 cutover; F058/F059 remain narrow reporting/test corrections. The other 43 open families were not closed or reopened. All six scientific P0 families and all ten complete component objectives remain outstanding. These are registered causes and gaps, not 43 newly active incidents.
+
+## Evidence of difference
+
+| Measure | Earlier evidence | Latest evidence | What it establishes |
+|---|---|---|---|
+| Timely original bindings |100 at09:07Z |134 at13:58Z |Acquisition count rose; these snapshots do not establish which repair caused it |
+| Source-linked/cutoff-safe PRE |0 |0 at13:58Z; Day5 custody prepared count0 at20:46Z |No demonstrated improvement in usable PRE |
+| Global Packet B fragments/bundles/links |0/0/0 at13:58Z |No later positive receipt observed |No durable derived output demonstrated |
+| Same60 GitHub job logs |60 incorrectly unavailable |30 timely-original and30 no-content receipts classified |Visibility repair demonstrated; no billing/PRE proof |
+| Guarded release |#980 frozen c4408c62 |Main24df876f; exact merge and both expiry jobs passed run46061597861 |Release and retention workflow ran; not a science outcome |
+| Day5 conditional custody |No protected readback |Run46065789071 passed; conditional fields ABSENT, metadata disabled |Confirms missing commissioning rather than a failed policy install |
+| Exact candidate validation |4,616 full-suite tests passed,259 skipped |#981 workflow headfd9d029f passed offline-safety run46070328901 in4m07s; prior duplicate workflow head34f51732 took8m44s; callback-only build held on exact pin drift |Software acceptance; callback build not verified; no production PRE or causal accuracy proof |
+
+[Owner storage inventory](2026-11-27_owner_storage_inventory.json) · [Day4 shape census](2026-11-27_owner_day4_native_shape.json) · [same-run log comparison](2026-11-27_log_visibility_comparison.json) · [exact hosted CI](2026-11-27_exact_ci_a115.json) · [post-cutover workflow snapshot](2026-11-27_post_cutover_workflow_evidence.json) · [all59 families and priorities](2026-11-27_RECOVERY_PROGRESS.md) · [post-cutover checkpoint](../checkpoints/2026-11-27_PHASE5B_POST980_DEPLOYMENT_AND_CUSTODY_READBACK.md) · [P0 bottleneck/current CI checkpoint](../checkpoints/2026-11-27_P0_SCIENTIFIC_BOTTLENECK_AND_EXACT_CI.md) · [post-cutover register/report test](2026-11-27_POST980_FOCUSED_TESTS.txt) · [P0 focused tests](2026-11-27_P0_FOCUSED_TESTS.txt) · [Phase0 CI de-dup evidence](2026-11-27_CI_DEDUP_REPAIR.txt).
+
+## Scientific status
+
+The Day4 native census at13:58:28Z found18 live T24 originals with1,053 member observations across the reported HUB/MID_A cells. Every observation failed canonical match, confirmed-core scope and confirmed-operating-leg checks; other reported shape checks passed. Counts overlap and are not1,053 distinct flights. This updates F005/F027, but does not identify which provider field is missing or certify all-flight identity/timing.
+
+At13:58:30Z storage readback found134 timely bindings,82 live originals,52 expired metadata-only,8,307 historical member observations,0 linked/cutoff-safe PRE and0 global P7 fragments/bundles/links. Day2 loss remains historical and cannot be reconstructed. Do not relabel signed Day4, relax native admission, change the 16-field Packet B policy, or substitute scheduled time for actual gate-out.
+
+At20:46:08Z protected read-only custody verified the existing base policy digests,31 reviewed plan pins, canonical native predecessor, native policy, remaining interval and public actors for the next unsigned Day5. It returned `conditionalPolicyFieldState=ABSENT`, `conditionalMetadataEnabled=false`, no installed conditional policy, no conditional precommit, and zero provider calls/database writes/GitHub writes/signatures. Day5 first request is Nov29 15:45Z; prep opens03:45Z. This is an identified commissioning gap under F027, not a new family. The first attempted diagnostic omitted required `run_day_index=5` and stopped at the pre-DB admission guard; corrected run46065789071 succeeded. Do not count that invocation error as a system failure.
+
+## Completed engineering work
+
+- F040/I132/T126: bounded drain wait plus one immutable #980 helper invocation passed its exact fresh guards; owner merged #980, updated reviewed pins and confirmed primary FIDS/Phase7 expiry jobs. F040 is closed narrowly for this cutover only; future overlaps still use the same guard.
+- F058/I129/T123: private GitHub log capture now permits terminal escapes while the fixed classifier remains the only output boundary. Same60 comparison changed from60 unknown to30 timely-original/30 no-content. Closed for visibility only.
+- F059/I131/T125: callback regression now checks reviewed executable input equivalence as well as ancestry. Production wrapper correctly holds changed inputs; historical460 blobs remain byte-identical. Closed for the obsolete test expectation only.
+- I130/T124: canonical P0-first report refuses ID/count/closure contradictions and never treats CI/SOURCE/ACK as PRE or causal science.
+- I124/T118 native census reused; no duplicate census. I125–I128 conditional T24 censoring/native POST separation remain exact-#981 changes. Do not infer deployment from their CI.
+
+## Next work
+
+1. Obtain/use the already governed independent review decision for Day5 conditional scope; create the exact commitment metadata from that decision and validate it in the protected preview. This readback supplies the hidden digest binding needed for review without disclosing policy bytes.
+2. Only after that exact preview and the separately approved existing commissioning path: install/enable the future-only conditional reader under its review and read it back. Never enable paid source/POST or rewrite signed Days1–4 to make the preview pass.
+3. Run the existing nonpaid conditional issuer/queue/Stage14 path for a future unsigned day and independently read committed PRE/Packet B. Treat a green job without that durable readback as incomplete.
+4. Keep collecting F/I/T/C evidence in the register and dated checkpoint; maintain the fixed draw, rights, budget/STOP, original expiry, same-flight grouping and20/5/6 split.
+
+No Replit AI Agent, owner database shell, provider, secret export, policy installation or paid replay was used in this session. The only production mutation was the owner-authorized, exact guarded #980 merge/pin/retention cutover shown in the pasted output.

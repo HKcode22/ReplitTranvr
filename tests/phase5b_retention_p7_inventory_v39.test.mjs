@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import {project,readInventory,projectScientificYieldReconciliation} from "../scripts/v39_phase5b_retention_p7_inventory_owner.mjs";
+import {project,projectNearExpiryRows,readInventory} from "../scripts/v39_phase5b_retention_p7_inventory_owner.mjs";
 const row={"run_day_index":2,"horizon":"T-6h","bindings":44,"timely_bindings":44,"live_payloads":0,"expired_metadata_only":44,"other_custody":0,"historical_members":500,"linked_pre_rows":0,"cutoff_safe_pre_rows":0},b={"rows":0,"unexpired":0,"links":0,"policies":1},at="2026-11-27T08:41:46.236Z";
 test("T114 expired original metadata remains an acquisition, not a retained PRE",()=>{
  const x=project([row],[],b,at);
@@ -25,20 +25,61 @@ test("T114 read-only owner transaction emits no successful receipt on rollback f
  assert.ok(calls.every(x=>!/^(INSERT|UPDATE|DELETE|COMMIT|ALTER|CREATE)\b/i.test(x)));
 });
 
-test("P0-A/P0-G scientific yield reconciliation projects day x horizon x stratum and escalates zero yield or approaching expiry",()=>{
- const cell={run_day_index:4,horizon:"T-24h",slot_id:"HUB",airport_icao:"WSSS",signed_queries:16,prearmed_queries:16,reservations:16,bindings:16,timely_bindings:16,live_originals:16,expired_originals:0,other_custody_originals:0,live_approaching_expiry_1h:4,live_approaching_expiry_2h:8,live_open_opportunity:2,live_past_cutoff_unrecoverable:14,live_with_conditional_marker:0,live_without_conditional_marker:16,historical_members:800,distinct_native_eligible_flights:0,distinct_conditional_eligible_flights:0,ineligible_members:800,linked_pre_rows:0,cutoff_safe_pre_rows:0,native_pre_rows:0,conditional_pre_rows:0,t24_witness_rows:0,p7_fragments:0,p7_live_links:0,p7_fragments_surviving_raw_expiry:0,matched_t6_t90_pairs:0};
- const storage={p7_total_fragments:0,p7_unexpired_fragments:0,p7_total_bundles:0,p7_unexpired_bundles:0,p7_live_links:0,p7_policies:1,post_outcome_reservations:0};
- const zero=projectScientificYieldReconciliation([cell],storage,at);
- assert.equal(zero.alerts.zeroScientificYield,true);
- assert.equal(zero.alerts.escalationStatus,"CRITICAL_ZERO_SCIENTIFIC_YIELD");
- assert.equal(zero.alerts.approachingExpiryWithPendingEligible,2);
- assert.equal(zero.byStratum.find(s=>s.slot_id==="HUB").live_originals,16);
- assert.equal(zero.bySplit.find(s=>s.split==="train").signed_queries,16);
- const positive=projectScientificYieldReconciliation([{...cell,run_day_index:5,live_approaching_expiry_1h:0,live_approaching_expiry_2h:0,live_open_opportunity:16,live_past_cutoff_unrecoverable:0,live_with_conditional_marker:16,live_without_conditional_marker:0,distinct_conditional_eligible_flights:120,ineligible_members:680,linked_pre_rows:100,cutoff_safe_pre_rows:100,conditional_pre_rows:100,t24_witness_rows:100,p7_fragments:100,p7_live_links:100}],{...storage,p7_total_fragments:100,p7_unexpired_fragments:100,p7_live_links:100},at);
- assert.equal(positive.alerts.zeroScientificYield,false);
- assert.equal(positive.alerts.escalationStatus,"NOMINAL_OR_PARTIAL_YIELD_VERIFY_COVERAGE");
- assert.equal(positive.totals.conditional_pre_rows,100);
- assert.throws(()=>projectScientificYieldReconciliation([{...cell,live_open_opportunity:10}],storage,at),/COUNT_CONTRADICTION/);
- assert.throws(()=>projectScientificYieldReconciliation([{...cell,live_approaching_expiry_1h:9}],storage,at),/COUNT_CONTRADICTION/);
- assert.throws(()=>projectScientificYieldReconciliation([cell],{...storage,p7_unexpired_fragments:1},at),/STORAGE_CONTRADICTION/);
+const near={candidate_ordinal:1,global_count:1,study_scope_status:"ACTIVE_STUDY_SCOPE",
+ run_day_index:4,slot_id:"HUB",horizon:"T-24h",query_state:"ACTIVE",
+ source_available_at_utc:"2026-11-27T20:00:00.000Z",raw_persisted_at_utc:"2026-11-27T19:59:00.000Z",
+ access_deadline_utc:"2026-11-28T01:00:00.000Z",expected_members:18,observed_members:18,
+ native_shape_pass_members:0,cutoff_lead_prescreen_members:0,task_count:0,
+ task_ready:0,task_claimed:0,task_write_started_unknown:0,task_verified_on_time:0,
+ task_missed:0,task_quarantined:0,source_linked_pre_rows:0,cutoff_safe_pre_rows:0,
+ day_private_packet_rows:0,day_t24_pre_packet_rows:0};
+test("T127 reconciles each next-hour original to study scope and existing work without certifying eligibility",()=>{
+ const x=projectNearExpiryRows([near],"2026-11-28T00:30:00.000Z",1);
+ assert.equal(x.candidates[0].runDayIndex,4);
+ assert.equal(x.candidates[0].airportStratum,"HUB");
+ assert.equal(x.candidates[0].horizon,"T-24h");
+ assert.equal(x.candidates[0].reconciliation,"NO_NATIVE_SHAPE_PASS_MEMBER");
+ assert.equal(x.candidates[0].existingV0087Tasks.total,0);
+ assert.equal(x.candidates[0].sourceLinkedPreRows,0);
+ assert.equal(x.candidates[0].privatePacketsForStudyDay.sourceLinkedToThisOriginal,false);
+ assert.equal(x.finalScientificEligibilityCertified,false);
+ assert.equal(x.stage14PermitIssued,false);
+ assert.equal(x.approachingExpiryWithNativePreScreenOriginals,0);
+ assert.equal(x.databaseWrites,0);
+ assert.equal("population_query_id" in x.candidates[0],false);
+});
+test("T127 no scoped open prescreen member cannot become a pending near-expiry original",()=>{
+ const first={...near,global_count:2,access_deadline_utc:"2026-11-28T00:40:00.000Z"};
+ const second={...near,candidate_ordinal:2,global_count:2,study_scope_status:"OTHER_MANIFEST",
+  run_day_index:null,slot_id:null,horizon:null,query_state:null,expected_members:null,
+  observed_members:0,native_shape_pass_members:0,cutoff_lead_prescreen_members:0,
+  access_deadline_utc:"2026-11-28T01:20:00.000Z"};
+ const x=projectNearExpiryRows([first,second],"2026-11-28T00:30:00.000Z",2);
+ assert.equal(x.approachingExpiryWithNativePreScreenOriginals,0);
+ assert.equal(x.nativeCutoffLeadPreScreenMembers,0);
+});
+test("T127 separates prospective prescreen, uncertain write, committed PRE, and clock failure",()=>{
+ const at="2026-11-28T00:30:00.000Z";
+ const projectOne=change=>projectNearExpiryRows([{...near,...change}],at,1);
+ const pending=projectOne({native_shape_pass_members:1,cutoff_lead_prescreen_members:1});
+ assert.equal(pending.approachingExpiryWithNativePreScreenOriginals,1);
+ assert.equal(pending.finalScientificEligibilityCertified,false);
+ const unknown=projectOne({native_shape_pass_members:1,cutoff_lead_prescreen_members:1,
+  task_count:1,task_write_started_unknown:1});
+ assert.equal(unknown.approachingExpiryWithNativePreScreenOriginals,0);
+ assert.equal(unknown.uncertainOriginalsRequiringReconciliation,1);
+ assert.match(unknown.candidates[0].reconciliation,/NO_REPLAY/);
+ const committed=projectOne({native_shape_pass_members:1,cutoff_lead_prescreen_members:1,
+  source_linked_pre_rows:1,cutoff_safe_pre_rows:1});
+ assert.equal(committed.candidates[0].reconciliation,"CUTOFF_SAFE_PRE_PRESENT_PACKET_B_LINK_UNVERIFIED");
+ assert.equal(committed.approachingExpiryWithNativePreScreenOriginals,0);
+ const clockFailed=projectOne({native_shape_pass_members:1,cutoff_lead_prescreen_members:0});
+ assert.equal(clockFailed.candidates[0].reconciliation,"NATIVE_SHAPE_PRESENT_BUT_CUTOFF_LEAD_PRESCREEN_FAILED");
+});
+test("T127 rejects a denominator mismatch, expired candidate, malformed scope, and unsafe row identity",()=>{
+ assert.throws(()=>projectNearExpiryRows([near],"2026-11-28T00:30:00.000Z",2),/COUNT_OR_CLOCK/);
+ assert.throws(()=>projectNearExpiryRows([{...near,access_deadline_utc:"2026-11-28T00:29:59.000Z"}],"2026-11-28T00:30:00.000Z",1),/ROW_SHAPE/);
+ assert.throws(()=>projectNearExpiryRows([{...near,slot_id:"UNKNOWN"}],"2026-11-28T00:30:00.000Z",1),/SIGNED_SCOPE/);
+ const redacted=projectNearExpiryRows([{...near,population_query_id:"must-not-leak"}],"2026-11-28T00:30:00.000Z",1);
+ assert.equal(JSON.stringify(redacted).includes("must-not-leak"),false);
 });

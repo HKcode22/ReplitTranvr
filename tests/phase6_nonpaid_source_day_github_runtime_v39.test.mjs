@@ -1,6 +1,7 @@
 import {test} from "node:test";
 import assert from "node:assert/strict";
 import {createHash,generateKeyPairSync} from "node:crypto";
+import {readFileSync} from "node:fs";
 import {admitP6NonpaidSourceDayGithub,loadP6ReviewedDayPlans,selectP6NonpaidSourceDay,projectP6ConditionalPolicyCustody,conditionalPreparedRead,readP6ConditionalCommitmentReview}
  from "../scripts/v39_phase6_nonpaid_source_day_github_runtime_v39.mjs";
 const h=b=>createHash("sha256").update(b).digest("hex"),sha=c=>c.repeat(64),code="f".repeat(40);
@@ -273,8 +274,13 @@ test("T105 custody accounts for the nested day-append conditional scope",()=>{
  p.nativeLaterReview.conditionalLaterDayAppendPolicy={conditionalLaterPreScope:marker};
  const all=run();assert.equal(all.conditionalPolicyFieldState,"ALL_FIELDS_PRESENT_NOT_COMMISSIONED_PROOF");
  assert.equal(all.actualConditionalPolicyInstalledVerified,false);
+ assert.equal(all.conditionalProtocolVarMatchesPolicy,false);
  p.nativeLaterReview.dayAppendPolicy.conditionalLaterPreScope=marker;
  assert.equal(run().conditionalPolicyFieldState,"PARTIAL_HOLD");
+});
+test("custody workflow projects the prospective protocol marker only into read-only custody",()=>{
+ const workflow=readFileSync(".github/workflows/phase6-nonpaid-source-day-prepare-publish.yml","utf8");
+ assert.match(workflow,/P6_CONDITIONAL_SERVICE_PROTOCOL_SHA256: \$\{\{ inputs\.confirm == 'VERIFY_FUTURE_CONDITIONAL_POLICY_CUSTODY_NO_PROVIDER' && vars\.P6_CONDITIONAL_SERVICE_PROTOCOL_SHA256 \|\| '' \}\}/);
 });
 
 test("T109 custody native readiness requires rights-bound actual feature review, not approved flag alone",()=>{
@@ -338,4 +344,29 @@ test("T121 exact owner commitment review metadata transport needs no local prede
  const wrong=Buffer.from(review.toString().replace('"firstEligibleRunDayIndex":5','"firstEligibleRunDayIndex":6'));
  assert.throws(()=>readP6ConditionalCommitmentReview({...input,P6_CONDITIONAL_COMMITMENT_REVIEW_SHA256:h(wrong),P6_CONDITIONAL_COMMITMENT_REVIEW_BASE64:wrong.toString("base64")},5),/CONDITIONAL_COMMITMENT_REVIEW_DAY/);
  assert.throws(()=>readP6ConditionalCommitmentReview({...input,P6_CONDITIONAL_COMMITMENT_REVIEW_BASE64:""},5,()=>{throw Error("absent");}),/CONDITIONAL_COMMITMENT_REVIEW_MISSING/);
+});
+
+import {decodeP6PublicPolicyCommitment,encodeP6PublicPolicyCommitment,buildP6ConditionalCommitmentReviewArtifact} from "../scripts/v39_phase5b_conditional_review_metadata_v39.mjs";
+test("T132 public commitment survives numeric log masking without revealing constituent pins",()=>{
+ const f=fixture(),e=custodyEnv({...f.env,GITHUB_EVENT_NAME:"workflow_dispatch",GITHUB_ACTOR:"HKcode22",P6_NONPAID_SOURCE_CONFIRM:"VERIFY_FUTURE_CONDITIONAL_POLICY_CUSTODY_NO_PROVIDER",P6_NONPAID_SOURCE_REQUESTED_DAY:"5"});
+ const ctx=admitP6NonpaidSourceDayGithub(e),plans=loadP6ReviewedDayPlans(ctx,f.read);
+ const receipt=projectP6ConditionalPolicyCustody(ctx,plans,f.calendar,f.indexes,iso(now),0,e);
+ assert.match(receipt.basePolicyPublicCommitmentLetters,/^[a-p]{64}$/);
+ assert.equal(decodeP6PublicPolicyCommitment(receipt.basePolicyPublicCommitmentLetters),receipt.basePolicyCommitmentSha256);
+ assert.equal(encodeP6PublicPolicyCommitment("0123456789abcdef".repeat(4)),"abcdefghijklmnop".repeat(4));
+ assert.throws(()=>decodeP6PublicPolicyCommitment("a".repeat(63)));
+ assert.throws(()=>encodeP6PublicPolicyCommitment("secret-fixture"));
+ for(const field of ["P6_NONPAID_DAILY_POLICY_SHA256","P6_NONPAID_SIGNING_POLICY_SHA256","P6_NONPAID_TRANSPORT_TRUST_SHA256"]){
+  assert(!JSON.stringify(receipt).includes(e[field]));
+  assert(!JSON.stringify(receipt).includes(encodeP6PublicPolicyCommitment(e[field])));
+ }
+ const reviewedPlanBytes=Array.from({length:31},(_,i)=>readFileSync("data-collection/phase5/planning/phase6-source-day-"+String(i+1).padStart(2,"0")+".json"));
+ const args={ownerDelegatedTechnicalScopeReviewed:true,protocolSha256:sha("a"),externalContentUseReviewSha256:sha("b"),manifestSha256:sha("c"),rightsSha256:sha("d"),basePolicyCommitmentSha256:sha("e"),firstEligibleRunDayIndex:5,effectiveUtc:"2026-11-29T03:00:00.000Z",validUntilUtc:"2026-12-27T04:01:00.000Z",maximumPreparationLookaheadMinutes:720,reviewedPlanBytes};
+ const x=buildP6ConditionalCommitmentReviewArtifact(args);
+ assert.equal(x.preparationOpensUtc,"2026-11-29T03:45:00.000Z");assert.equal(x.independentApprovalGrantedHere,false);
+ assert.equal(x.review.standaloneNoT24ProtocolSha256,null);
+ assert.equal(h(Buffer.from(x.reviewBase64,"base64")),x.reviewSha256);
+ assert.throws(()=>buildP6ConditionalCommitmentReviewArtifact({...args,ownerDelegatedTechnicalScopeReviewed:undefined}),/SCOPE/);
+ assert.throws(()=>buildP6ConditionalCommitmentReviewArtifact({...args,effectiveUtc:x.preparationOpensUtc}),/WINDOW/);
+ assert.throws(()=>buildP6ConditionalCommitmentReviewArtifact({...args,validUntilUtc:x.remainingServiceEndUtc}),/WINDOW/);
 });

@@ -1,0 +1,5 @@
+# Scientific commissioning prerequisite — Nov27
+
+I124/T118 exact 96be5584 run 46002504853, both fixed metadata and real PG16 passed. I125/T119 exact corrected e1046a78 run 46005309221 both passed; superseded 3566bf81 failed Vitest (malformed synthetic missing-member key, corrected). No production promotion.
+
+I126/T120 reuses historical finalizer output format from issue #413 comment 7073928717 and exact corrected helper blob 3b039908026814238290b7fcb230bc3e3b75bbb0. Bounded owner-local read verifies secure private files, original receipt and all 31 static/six policy bindings, active manifest/rights and native-only scope; returns one composite base commitment only. No secret output, provider, DB, GitHub mutation or signing. Need actual owner result and protected custody match; no install or new approval. Exact CI pending. Existing conditional POST is a separate unresolved boundary: native POST anchor and actual PRE query require native scope; do not pass conditional identity as confirmed core or physical gate-out. Separate later-only protocol still default off and not silently approved. No change to #980.

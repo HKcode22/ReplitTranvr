@@ -12,6 +12,10 @@
  * separate scheduled-runway vs actual-wheels-off endpoint.
  */
 const SHA=/^[0-9a-f]{64}$/;
+// Validate runtime JSON before distinct-digest comparisons: RegExp.test
+// coerces arrays and numbers to strings, which can defeat strict equality.
+const isSha256=(value:unknown):value is string=>
+ typeof value==="string"&&SHA.exec(value)?.[0]===value;
 const ISO=/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/;
 const HORIZONS={"T-24h":86_400_000,"T-6h":21_600_000,"T-90m":5_400_000} as const;
 type Horizon=keyof typeof HORIZONS;
@@ -71,7 +75,7 @@ export function assessP5AmendmentEGateOutDelayCandidate(
 ){
  if(!input||input.schema!==
       "v39.phase5.amendment-e-gateout-first-cycle-candidate.v1"||
-    !SHA.test(input.frozenSourceOriginalSha256??"")||
+    !isSha256(input.frozenSourceOriginalSha256)||
     typeof input.flightInstanceId!=="string"||
     !/^[A-Za-z0-9_.:|-]{5,200}$/.test(input.flightInstanceId)||
     !Object.hasOwn(HORIZONS,input.horizon)||
@@ -87,9 +91,9 @@ export function assessP5AmendmentEGateOutDelayCandidate(
       "ESTIMATED_RUNWAY_OR_REVISED_SCHEDULE","NO_EVENT"]
       .includes(input.outcome.event)||
     (input.scheduled.evidenceSha256!==null&&
-      !SHA.test(input.scheduled.evidenceSha256??""))||
+      !isSha256(input.scheduled.evidenceSha256))||
     (input.outcome.evidenceSha256!==null&&
-      !SHA.test(input.outcome.evidenceSha256??"")))
+      !isSha256(input.outcome.evidenceSha256)))
   refuse("INVALID_SOURCE_OR_LABEL_EVIDENCE_CONTRACT");
  const native=clock(input.selectedNativeTUtc),
   issued=clock(input.preIssuedAtUtc),

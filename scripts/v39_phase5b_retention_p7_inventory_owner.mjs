@@ -28,6 +28,102 @@ export function project(rows,fragments,bundles,observedAtUtc){
   phase7Storage:{scope:"GLOBAL_PRIVATE_STORAGE_NOT_EXACT_STUDY_OR_DAY_ATTRIBUTION",fragmentCounts,bundles:{rows:bundles.rows,unexpired:bundles.unexpired,links:bundles.links,policies:bundles.policies}},
   historicalMembersNotRetainedContent:true,cutoffSafeCreatedAtNotIndependentCommit:true,storagePresenceNotTrainingEligibility:true,providerCalls:0,databaseWrites:0};
 }
+const NEAR_EXPIRY_TASK_STATES=["READY","CLAIMED","WRITE_STARTED_UNKNOWN","VERIFIED_ON_TIME","MISSED","QUARANTINED"];
+const NEAR_EXPIRY_SLOTS=["HUB","MID_A","MID_B","REGIONAL"];
+const NEAR_EXPIRY_HORIZONS=["T-24h","T-6h","T-90m"];
+const MAX_NEAR_EXPIRY_CANDIDATES=512;
+function safeCount(v){const n=Number(v);return Number.isSafeInteger(n)&&n>=0?n:null;}
+function safeIso(v){const s=v instanceof Date?v.toISOString():v;return typeof s==="string"&&Number.isFinite(Date.parse(s))&&new Date(s).toISOString()===s?s:null;}
+/**
+ * Reconcile the exact V0107 global primary-FIDS next-hour denominator to the
+ * currently authorized study manifest, without emitting population/query or
+ * flight identifiers. The native cutoff/lead count is a necessary-condition
+ * pre-screen only: signed staleness, retained cross-original identity, rights,
+ * external review, conditional commissioning and a Stage14 permit remain
+ * separate checks.
+ */
+export function projectNearExpiryRows(rows,observedAtUtc,globalNextHourCount){
+ const observed=safeIso(observedAtUtc),global=safeCount(globalNextHourCount);
+ if(!observed||global===null||global>MAX_NEAR_EXPIRY_CANDIDATES||!Array.isArray(rows)||rows.length!==global||rows.length>MAX_NEAR_EXPIRY_CANDIDATES)
+  throw Error("HOLD_P5B_NEAR_EXPIRY_COUNT_OR_CLOCK");
+ const at=Date.parse(observed),seen=new Set();
+ const candidates=rows.map((x,i)=>{
+  const ordinal=safeCount(x.candidate_ordinal),globalRowCount=safeCount(x.global_count),
+   scope=x.study_scope_status,day=x.run_day_index===null?null:safeCount(x.run_day_index),
+   slot=x.slot_id??null,horizon=x.horizon??null,
+   deadline=safeIso(x.access_deadline_utc),sourceAt=safeIso(x.source_available_at_utc),
+   persisted=safeIso(x.raw_persisted_at_utc),
+   expected=x.expected_members===null?null:safeCount(x.expected_members),
+   observedMembers=safeCount(x.observed_members),native=safeCount(x.native_shape_pass_members),
+   timeScreen=safeCount(x.cutoff_lead_prescreen_members),
+   taskCount=safeCount(x.task_count),pre=safeCount(x.source_linked_pre_rows),
+   cutoffSafe=safeCount(x.cutoff_safe_pre_rows),dayPackets=safeCount(x.day_private_packet_rows),
+   dayT24Packets=safeCount(x.day_t24_pre_packet_rows),
+   queryState=x.query_state??null;
+  if(ordinal===null||ordinal!==i+1||seen.has(ordinal)||globalRowCount!==global||
+   !["UNBOUND","OTHER_MANIFEST","ACTIVE_MANIFEST_QUERY_UNMATCHED","ACTIVE_STUDY_SCOPE"].includes(scope)||
+   !deadline||Date.parse(deadline)<=at||Date.parse(deadline)>at+3600_000||
+   !sourceAt||!persisted||Date.parse(persisted)>Date.parse(sourceAt)||Date.parse(sourceAt)>at||
+   observedMembers===null||native===null||timeScreen===null||taskCount===null||pre===null||cutoffSafe===null||
+   dayPackets===null||dayT24Packets===null||native>observedMembers||timeScreen>native||
+   cutoffSafe>pre||dayT24Packets>dayPackets)
+   throw Error("HOLD_P5B_NEAR_EXPIRY_ROW_SHAPE");
+  seen.add(ordinal);
+  if(scope==="ACTIVE_STUDY_SCOPE"){
+   if(day===null||day<1||day>31||!NEAR_EXPIRY_SLOTS.includes(slot)||!NEAR_EXPIRY_HORIZONS.includes(horizon)||
+    expected===null||queryState!=="ACTIVE"&&queryState!=="PREPARED"&&queryState!=="STOPPED")
+    throw Error("HOLD_P5B_NEAR_EXPIRY_SIGNED_SCOPE");
+  }else if(day!==null||slot!==null||horizon!==null||expected!==null||queryState!==null||
+    observedMembers!==0||native!==0||timeScreen!==0||taskCount!==0||pre!==0||cutoffSafe!==0||dayPackets!==0||dayT24Packets!==0){
+   throw Error("HOLD_P5B_NEAR_EXPIRY_UNSCOPED_LEAK");
+  }
+  const taskStates=Object.fromEntries(NEAR_EXPIRY_TASK_STATES.map(k=>{
+   const n=safeCount(x[`task_${k.toLowerCase()}`]);
+   if(n===null||n>taskCount)throw Error("HOLD_P5B_NEAR_EXPIRY_TASK_STATE");
+   return [k,n];
+  }));
+  if(Object.values(taskStates).reduce((a,b)=>a+b,0)>taskCount)
+   throw Error("HOLD_P5B_NEAR_EXPIRY_TASK_TOTAL");
+  let reconciliation;
+  if(scope!=="ACTIVE_STUDY_SCOPE")reconciliation="NOT_IN_ACTIVE_STUDY_SCOPE";
+  else if(expected!==observedMembers)reconciliation="MEMBER_BINDING_COUNT_MISMATCH_HOLD";
+  else if(taskStates.WRITE_STARTED_UNKNOWN>0||taskStates.QUARANTINED>0)
+   reconciliation="UNCERTAIN_WRITE_REQUIRES_INDEPENDENT_RECONCILIATION_NO_REPLAY";
+  else if(cutoffSafe>0)reconciliation="CUTOFF_SAFE_PRE_PRESENT_PACKET_B_LINK_UNVERIFIED";
+  else if(taskStates.VERIFIED_ON_TIME>0||pre>0)
+   reconciliation="COMMIT_RECEIPT_OR_PRE_CLOCK_REQUIRES_INDEPENDENT_RECONCILIATION";
+  else if(timeScreen>0)reconciliation="NATIVE_CUTOFF_LEAD_PRESCREEN_REQUIRES_FULL_REVIEW";
+  else if(native>0)reconciliation="NATIVE_SHAPE_PRESENT_BUT_CUTOFF_LEAD_PRESCREEN_FAILED";
+  else reconciliation="NO_NATIVE_SHAPE_PASS_MEMBER";
+  return {
+   candidateOrdinal:ordinal,studyScope:scope,runDayIndex:day,airportStratum:slot,horizon,
+   sourceAvailableAtUtc:sourceAt,rawPersistedAtUtc:persisted,accessDeadlineUtc:deadline,
+   queryState,expectedMembers:expected,observedMembers,
+   memberBindingCountMatches:expected===null?null:expected===observedMembers,
+   nativeShapePassMembers:native,cutoffLeadPreScreenMembers:timeScreen,
+   existingV0087Tasks:{total:taskCount,byState:taskStates},
+   sourceLinkedPreRows:pre,cutoffSafeSourceLinkedPreRows:cutoffSafe,
+   privatePacketsForStudyDay:{rows:dayPackets,t24PrePackets:dayT24Packets,sourceLinkedToThisOriginal:false},
+   reconciliation
+  };
+ });
+ return {
+  status:"P5B_NEAR_EXPIRY_STUDY_RECONCILIATION_READONLY",
+  observedAtUtc:observed,globalEligibleNextHour:global,
+  candidates,studyScopedCandidates:candidates.filter(x=>x.studyScope==="ACTIVE_STUDY_SCOPE").length,
+  // Same-record intersection only. This is a necessary-condition screen,
+  // never a count of finally eligible originals or approved Packet B links.
+  approachingExpiryWithNativePreScreenOriginals:candidates.filter(x=>
+   x.reconciliation==="NATIVE_CUTOFF_LEAD_PRESCREEN_REQUIRES_FULL_REVIEW").length,
+  uncertainOriginalsRequiringReconciliation:candidates.filter(x=>
+   x.reconciliation==="UNCERTAIN_WRITE_REQUIRES_INDEPENDENT_RECONCILIATION_NO_REPLAY"||
+   x.reconciliation==="COMMIT_RECEIPT_OR_PRE_CLOCK_REQUIRES_INDEPENDENT_RECONCILIATION").length,
+  nativeCutoffLeadPreScreenMembers:candidates.reduce((n,x)=>n+x.cutoffLeadPreScreenMembers,0),
+  finalScientificEligibilityCertified:false,stage14PermitIssued:false,
+  conditionalPolicyStateRead:false,packetBSourceLinkageForCandidates:false,
+  preScreenIsNotAWriteAuthorization:true,providerCalls:0,databaseWrites:0
+ };
+}
 export async function readInventory(c){
  let begun=false;
  try{
@@ -61,11 +157,132 @@ export async function readInventory(c){
    )
    SELECT counts.*,coalesce(pre.linked_pre_rows,0)::int linked_pre_rows,coalesce(pre.cutoff_safe_pre_rows,0)::int cutoff_safe_pre_rows FROM counts LEFT JOIN pre USING(run_day_index,horizon) ORDER BY 1,2
   `,[auth[0].manifest_sha256])).rows;
+  const nearExpiry=(await c.query(`
+   WITH p5b_near_expiry_clock AS MATERIALIZED (
+    SELECT transaction_timestamp() AS observed_at
+   ), p5b_near_expiry_global AS MATERIALIZED (
+    SELECT r.population_query_id,r.available_at AS source_available_at_utc,
+     r.raw_persisted_at_utc,
+     least(r.raw_persisted_at_utc+interval '24 hours',
+       coalesce(b.source_expires_at_utc,r.raw_persisted_at_utc+interval '24 hours')) AS access_deadline_utc,
+     CASE WHEN b.population_query_id IS NULL THEN 'UNBOUND'
+       WHEN b.manifest_sha256<>$1 THEN 'OTHER_MANIFEST'
+       WHEN q.query_digest IS NULL THEN 'ACTIVE_MANIFEST_QUERY_UNMATCHED'
+       ELSE 'ACTIVE_STUDY_SCOPE' END AS study_scope_status,
+     q.run_day_index,q.slot_id,q.horizon,q.airport_icao,q.query_digest,q.state AS query_state,
+     q.service_window_start_utc,q.service_window_end_utc,
+     b.manifest_sha256,b.response_hash,b.source_expires_at_utc,b.normalized_members_count,
+     clk.observed_at
+    FROM clean.fids_query_response r
+    LEFT JOIN clean.phase5_fids_original_binding_v39 b USING(population_query_id)
+    LEFT JOIN clean.phase5_fids_allowed_query_v39 q
+     ON q.query_digest=b.query_digest AND q.manifest_sha256=$1 AND b.manifest_sha256=$1
+    CROSS JOIN p5b_near_expiry_clock clk
+    WHERE r.raw_payload IS NOT NULL AND r.raw_expired_at_utc IS NULL
+     AND least(r.raw_persisted_at_utc+interval '24 hours',
+       coalesce(b.source_expires_at_utc,r.raw_persisted_at_utc+interval '24 hours'))>clk.observed_at
+     AND least(r.raw_persisted_at_utc+interval '24 hours',
+       coalesce(b.source_expires_at_utc,r.raw_persisted_at_utc+interval '24 hours'))<=clk.observed_at+interval '1 hour'
+   ), p5b_near_expiry_ordered AS MATERIALIZED (
+    SELECT row_number() OVER(ORDER BY access_deadline_utc,population_query_id)::int candidate_ordinal,
+     count(*) OVER()::int global_count,*
+    FROM p5b_near_expiry_global
+   ), p5b_near_expiry_members AS MATERIALIZED (
+    SELECT g.population_query_id,p.id,p.analytic_identity_id,
+     count(p.id) OVER(PARTITION BY g.population_query_id,p.analytic_identity_id) AS identity_count,
+     CASE g.horizon WHEN 'T-24h' THEN interval '24 hours'
+       WHEN 'T-6h' THEN interval '6 hours' WHEN 'T-90m' THEN interval '90 minutes' END AS horizon_offset,
+     p.dep_scheduled_utc,p.available_at AS member_available_at,
+     (p.id IS NOT NULL AND p.analytic_identity_id ~ '^[A-Za-z0-9_.:|-]{5,200}$'
+      AND (p.analytic_identity_id NOT LIKE 'leg:p5v1:%' OR p.analytic_identity_id ~ '^leg:p5v1:[a-f0-9]{64}$')
+      AND count(p.id) OVER(PARTITION BY g.population_query_id,p.analytic_identity_id)=1
+      AND p.canonical_flight_instance_id=p.analytic_identity_id
+      AND p.source_airport_icao=g.airport_icao AND p.dep_airport_icao=g.airport_icao
+      AND p.population_role='requested_airport_primary' AND p.scope_classification='confirmed_core'
+      AND p.codeshare_resolution_status='confirmed_operating_leg' AND p.source_type='fids'
+      AND p.response_hash=g.response_hash AND p.provider_content_expired_at_utc IS NULL
+      AND p.query_direction='Departure' AND length(p.population_member_id::text)>0
+      AND p.dep_scheduled_utc IS NOT NULL) AS native_shape_pass,
+     (p.id IS NOT NULL AND p.analytic_identity_id ~ '^[A-Za-z0-9_.:|-]{5,200}$'
+      AND (p.analytic_identity_id NOT LIKE 'leg:p5v1:%' OR p.analytic_identity_id ~ '^leg:p5v1:[a-f0-9]{64}$')
+      AND count(p.id) OVER(PARTITION BY g.population_query_id,p.analytic_identity_id)=1
+      AND p.canonical_flight_instance_id=p.analytic_identity_id
+      AND p.source_airport_icao=g.airport_icao AND p.dep_airport_icao=g.airport_icao
+      AND p.population_role='requested_airport_primary' AND p.scope_classification='confirmed_core'
+      AND p.codeshare_resolution_status='confirmed_operating_leg' AND p.source_type='fids'
+      AND p.response_hash=g.response_hash AND p.provider_content_expired_at_utc IS NULL
+      AND p.query_direction='Departure' AND length(p.population_member_id::text)>0
+      AND p.dep_scheduled_utc>=g.service_window_start_utc AND p.dep_scheduled_utc<g.service_window_end_utc
+      AND p.available_at>=g.source_available_at_utc AND p.available_at<=g.observed_at
+      AND p.available_at<=p.dep_scheduled_utc-(CASE g.horizon WHEN 'T-24h' THEN interval '24 hours'
+       WHEN 'T-6h' THEN interval '6 hours' WHEN 'T-90m' THEN interval '90 minutes' END)
+      AND g.source_available_at_utc<=p.dep_scheduled_utc-(CASE g.horizon WHEN 'T-24h' THEN interval '24 hours'
+       WHEN 'T-6h' THEN interval '6 hours' WHEN 'T-90m' THEN interval '90 minutes' END)
+      AND g.source_expires_at_utc>p.dep_scheduled_utc-(CASE g.horizon WHEN 'T-24h' THEN interval '24 hours'
+       WHEN 'T-6h' THEN interval '6 hours' WHEN 'T-90m' THEN interval '90 minutes' END)
+      AND g.observed_at<p.dep_scheduled_utc-(CASE g.horizon WHEN 'T-24h' THEN interval '24 hours'
+       WHEN 'T-6h' THEN interval '6 hours' WHEN 'T-90m' THEN interval '90 minutes' END)-interval '15 minutes')
+      AS cutoff_lead_prescreen_pass
+    FROM p5b_near_expiry_ordered g
+    LEFT JOIN clean.flight_population p ON p.population_query_id=g.population_query_id
+     AND g.study_scope_status='ACTIVE_STUDY_SCOPE'
+    WHERE g.candidate_ordinal<=513
+   ), p5b_near_expiry_member_summary AS (
+    SELECT population_query_id,count(id)::int observed_members,
+     count(id) FILTER(WHERE native_shape_pass)::int native_shape_pass_members,
+     count(id) FILTER(WHERE cutoff_lead_prescreen_pass)::int cutoff_lead_prescreen_members
+    FROM p5b_near_expiry_members GROUP BY population_query_id
+   )
+   SELECT g.candidate_ordinal,g.global_count,g.study_scope_status,g.run_day_index,g.slot_id,g.horizon,
+    g.query_state,g.source_available_at_utc,g.raw_persisted_at_utc,g.access_deadline_utc,
+    CASE WHEN g.study_scope_status='ACTIVE_STUDY_SCOPE' THEN g.normalized_members_count END expected_members,
+    CASE WHEN g.study_scope_status='ACTIVE_STUDY_SCOPE' THEN coalesce(m.observed_members,0) ELSE 0 END observed_members,
+    CASE WHEN g.study_scope_status='ACTIVE_STUDY_SCOPE' THEN coalesce(m.native_shape_pass_members,0) ELSE 0 END native_shape_pass_members,
+    CASE WHEN g.study_scope_status='ACTIVE_STUDY_SCOPE' THEN coalesce(m.cutoff_lead_prescreen_members,0) ELSE 0 END cutoff_lead_prescreen_members,
+    coalesce(t.task_count,0)::int task_count,coalesce(t.task_ready,0)::int task_ready,
+    coalesce(t.task_claimed,0)::int task_claimed,
+    coalesce(t.task_write_started_unknown,0)::int task_write_started_unknown,
+    coalesce(t.task_verified_on_time,0)::int task_verified_on_time,
+    coalesce(t.task_missed,0)::int task_missed,coalesce(t.task_quarantined,0)::int task_quarantined,
+    coalesce(s.source_linked_pre_rows,0)::int source_linked_pre_rows,
+    coalesce(s.cutoff_safe_pre_rows,0)::int cutoff_safe_pre_rows,
+    coalesce(p.day_private_packet_rows,0)::int day_private_packet_rows,
+    coalesce(p.day_t24_pre_packet_rows,0)::int day_t24_pre_packet_rows
+   FROM (SELECT * FROM p5b_near_expiry_ordered WHERE candidate_ordinal<=513) g
+   LEFT JOIN p5b_near_expiry_member_summary m USING(population_query_id)
+   LEFT JOIN LATERAL (
+    SELECT count(*)::int task_count,count(*) FILTER(WHERE state='READY')::int task_ready,
+     count(*) FILTER(WHERE state='CLAIMED')::int task_claimed,
+     count(*) FILTER(WHERE state='WRITE_STARTED_UNKNOWN')::int task_write_started_unknown,
+     count(*) FILTER(WHERE state='VERIFIED_ON_TIME')::int task_verified_on_time,
+     count(*) FILTER(WHERE state='MISSED')::int task_missed,
+     count(*) FILTER(WHERE state='QUARANTINED')::int task_quarantined
+    FROM clean.phase5_cd_pre_task_v39 qtask
+    WHERE qtask.manifest_sha256=$1 AND qtask.source_population_query_id=g.population_query_id::text
+     AND qtask.source_response_sha256=g.response_hash AND qtask.horizon=g.horizon
+   ) t ON true
+   LEFT JOIN LATERAL (
+    SELECT count(*)::int source_linked_pre_rows,
+     count(*) FILTER(WHERE snap.created_at<=snap.prediction_cutoff_utc)::int cutoff_safe_pre_rows
+    FROM clean.flight_snapshots snap
+    WHERE snap.population_query_id=g.population_query_id::text AND snap.fids_response_hash=g.response_hash
+     AND snap.horizon=g.horizon AND snap.prediction_state='PRE_DEPARTURE'
+   ) s ON true
+   LEFT JOIN LATERAL (
+    SELECT count(*)::int day_private_packet_rows,
+     count(*) FILTER(WHERE packet.kind='T24_PRE_PACKET')::int day_t24_pre_packet_rows
+    FROM phase6_private.frozen_native_packet_v39 packet
+    WHERE packet.manifest_sha256=$1 AND packet.run_day_index=g.run_day_index
+   ) p ON true
+   ORDER BY g.candidate_ordinal`,[auth[0].manifest_sha256])).rows;
+  const nearExpiryGlobal=nearExpiry.length?safeCount(nearExpiry[0].global_count):0;
+  const nearExpiryObserved=nearExpiry.filter(x=>x.candidate_ordinal!==null);
+  const nearExpiryReport=projectNearExpiryRows(nearExpiryObserved,new Date(id.at).toISOString(),nearExpiryGlobal);
   const fragments=(await c.query("SELECT split,horizon,count(*)::int rows,count(*) FILTER(WHERE research_expiry_utc>transaction_timestamp())::int unexpired FROM phase7_private.pre_fragment_v39 GROUP BY 1,2 ORDER BY 1,2")).rows;
   const bundles=(await c.query("SELECT count(*)::int rows,count(*) FILTER(WHERE research_expiry_utc>transaction_timestamp())::int unexpired,(SELECT count(*)::int FROM phase7_private.pre_source_link_v39) links,(SELECT count(*)::int FROM phase7_private.pre_preservation_policy_v39) policies FROM phase7_private.derived_release_bundle_v39")).rows[0];
   const result=project(rows,fragments,bundles,new Date(id.at).toISOString());
   begun=false;await c.query("ROLLBACK");
-  return result;
+  return {...result,nearExpiry:nearExpiryReport};
  }finally{if(begun)await c.query("ROLLBACK");}
 }
 /** I124/T118: count-only current native shape diagnostics. Mirrors the
@@ -167,211 +384,14 @@ export async function readNativeShapeInventory(c,day){
  }finally{if(begun)await c.query("ROLLBACK");}
 }
 
-/** P0-A / P0-G: Read-only deadline-aware scientific yield & live-original
- * opportunity reconciliation by study day × horizon × airport stratum.
- * Aggregate count/clock/enum metadata only: zero raw flight payloads,
- * identifiers, credentials, or mutations. */
-export function projectScientificYieldReconciliation(cells,storage,observedAtUtc){
- const fail=why=>{throw Error("HOLD_P5B_SCIENTIFIC_YIELD_"+why);};
- const n=v=>Number.isSafeInteger(v)&&v>=0;
- const hs=["T-24h","T-6h","T-90m"],slots=["HUB","MID_A","MID_B","REGIONAL"],splits=["train","validation","test"];
- if(!Array.isArray(cells)||cells.length>372||!storage||!Number.isFinite(Date.parse(observedAtUtc)))fail("SCOPE");
- const fields=[
-  "signed_queries","prearmed_queries","reservations","bindings","timely_bindings",
-  "live_originals","expired_originals","other_custody_originals",
-  "live_approaching_expiry_1h","live_approaching_expiry_2h",
-  "live_open_opportunity","live_past_cutoff_unrecoverable",
-  "live_with_conditional_marker","live_without_conditional_marker",
-  "historical_members","distinct_native_eligible_flights","distinct_conditional_eligible_flights","ineligible_members",
-  "linked_pre_rows","cutoff_safe_pre_rows","native_pre_rows","conditional_pre_rows","t24_witness_rows",
-  "p7_fragments","p7_live_links","p7_fragments_surviving_raw_expiry","matched_t6_t90_pairs"
- ];
- const seen=new Set();
- const normalized=cells.map(x=>{
-  const k=x.run_day_index+"|"+x.horizon+"|"+x.slot_id;
-  if(!Number.isInteger(x.run_day_index)||x.run_day_index<1||x.run_day_index>31||!hs.includes(x.horizon)||!slots.includes(x.slot_id)||
-     !/^[A-Z]{4}$/.test(x.airport_icao??"")||seen.has(k)||!fields.every(f=>n(x[f]))||
-     x.signed_queries<1||x.prearmed_queries>x.signed_queries||x.reservations>x.signed_queries||
-     x.bindings>x.reservations||x.timely_bindings>x.bindings||
-     x.live_originals+x.expired_originals+x.other_custody_originals!==x.bindings||
-     x.live_approaching_expiry_1h>x.live_approaching_expiry_2h||x.live_approaching_expiry_2h>x.live_originals||
-     x.live_open_opportunity+x.live_past_cutoff_unrecoverable!==x.live_originals||
-     x.live_with_conditional_marker+x.live_without_conditional_marker!==x.live_originals||
-     x.cutoff_safe_pre_rows>x.linked_pre_rows||
-     x.native_pre_rows+x.conditional_pre_rows>x.linked_pre_rows||
-     x.p7_fragments_surviving_raw_expiry>x.p7_fragments)
-   fail("COUNT_CONTRADICTION");
-  seen.add(k);
-  const split=x.run_day_index<=20?"train":x.run_day_index<=25?"validation":"test";
-  return Object.fromEntries([["run_day_index",x.run_day_index],["split",split],["horizon",x.horizon],["slot_id",x.slot_id],["airport_icao",x.airport_icao],...fields.map(f=>[f,x[f]])]);
- });
- const totals=Object.fromEntries(fields.map(f=>[f,normalized.reduce((s,x)=>s+x[f],0)]));
- const byHorizon=hs.map(h=>{
-  const rs=normalized.filter(x=>x.horizon===h);
-  return {horizon:h,...Object.fromEntries(fields.map(f=>[f,rs.reduce((s,x)=>s+x[f],0)]))};
- });
- const byStratum=slots.map(slot=>{
-  const rs=normalized.filter(x=>x.slot_id===slot);
-  return {slot_id:slot,...Object.fromEntries(fields.map(f=>[f,rs.reduce((s,x)=>s+x[f],0)]))};
- });
- const bySplit=splits.map(sp=>{
-  const rs=normalized.filter(x=>x.split===sp);
-  return {split:sp,...Object.fromEntries(fields.map(f=>[f,rs.reduce((s,x)=>s+x[f],0)]))};
- });
- if(!["p7_total_fragments","p7_unexpired_fragments","p7_total_bundles","p7_unexpired_bundles","p7_live_links","p7_policies","post_outcome_reservations"].every(k=>n(storage[k]))||
-    storage.p7_unexpired_fragments>storage.p7_total_fragments||storage.p7_unexpired_bundles>storage.p7_total_bundles)
-  fail("STORAGE_CONTRADICTION");
- const pendingApproachingExpiry=normalized.filter(x=>x.live_approaching_expiry_2h>0&&x.live_open_opportunity>0&&x.cutoff_safe_pre_rows===0);
- const alerts={
-  zeroScientificYield:totals.timely_bindings>0&&totals.cutoff_safe_pre_rows===0,
-  approachingExpiryWithPendingEligible:pendingApproachingExpiry.reduce((s,x)=>s+Math.min(x.live_approaching_expiry_2h,x.live_open_opportunity),0),
-  approachingExpiry1hTotal:totals.live_approaching_expiry_1h,
-  unrecoverableExpiredOriginalsWithoutPre:normalized.filter(x=>x.expired_originals>0&&x.p7_fragments_surviving_raw_expiry===0).reduce((s,x)=>s+x.expired_originals,0),
-  liveOriginalsAuditSummary:{
-   totalLive:totals.live_originals,
-   openLawfulOpportunity:totals.live_open_opportunity,
-   cutoffElapsedUnrecoverable:totals.live_past_cutoff_unrecoverable,
-   withConditionalMarker:totals.live_with_conditional_marker,
-   withoutConditionalMarker:totals.live_without_conditional_marker,
-   approachingExpiry1h:totals.live_approaching_expiry_1h,
-   approachingExpiry2h:totals.live_approaching_expiry_2h
-  },
-  escalationStatus:(totals.timely_bindings>0&&totals.cutoff_safe_pre_rows===0)
-   ?"CRITICAL_ZERO_SCIENTIFIC_YIELD"
-   :(pendingApproachingExpiry.length>0?"URGENT_APPROACHING_EXPIRY_PENDING_ELIGIBLE":"NOMINAL_OR_PARTIAL_YIELD_VERIFY_COVERAGE")
- };
- return {
-  status:"P5B_SCIENTIFIC_YIELD_AND_DEADLINE_RECONCILIATION_READONLY",
-  observedAtUtc,totals,byHorizon,byStratum,bySplit,cells:normalized,
-  globalPhase7AndPostStorage:storage,alerts,
-  trainingEligibilityCertified:false,physicalGateOutCertified:false,providerCalls:0,databaseWrites:0
- };
-}
-
-export async function readScientificYieldReconciliation(c){
- let begun=false;
- try{
-  await c.query("BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY");begun=true;
-  await c.query("SET LOCAL statement_timeout='25000ms'");
-  await c.query("SET LOCAL lock_timeout='2000ms'");
-  const id=(await c.query("SELECT current_database()='neondb' db,current_user='neondb_owner' owner,session_user='neondb_owner' login,NOT pg_is_in_recovery() primary,current_setting('transaction_read_only')='on' ro,transaction_timestamp() at")).rows[0];
-  if(!id?.db||!id.owner||!id.login||!id.primary||!id.ro)throw Error("OWNER_CONTEXT");
-  const auth=(await c.query("SELECT manifest_sha256 FROM clean.adb_phase6_authorization WHERE enabled AND revoked_at_utc IS NULL")).rows;
-  if(auth.length!==1||!/^[a-f0-9]{64}$/.test(auth[0].manifest_sha256??""))throw Error("MANIFEST");
-  const m=auth[0].manifest_sha256;
-  const cells=(await c.query(`
-   WITH qbase AS MATERIALIZED (
-    SELECT q.query_digest,q.run_day_index,q.horizon,q.slot_id,q.airport_icao,q.prediction_cutoff_utc,q.service_window_end_utc,
-     pr.query_digest IS NOT NULL AS prearmed,
-     a.reservation_sha256 IS NOT NULL AS reserved,
-     b.population_query_id,b.response_hash,b.bound_at_utc,b.source_expires_at_utc,b.normalized_members_count,
-     CASE WHEN b.population_query_id IS NULL THEN 'unbound'
-      WHEN r.raw_expired_at_utc IS NOT NULL AND r.response_hash IS NULL AND r.raw_payload IS NULL THEN 'expired'
-      WHEN r.raw_expired_at_utc IS NULL AND r.response_hash=b.response_hash AND r.raw_payload IS NOT NULL AND b.source_expires_at_utc>transaction_timestamp() THEN 'live'
-      ELSE 'other' END AS custody,
-     coalesce(r.raw_payload#>>'{fidsRequestContract,phase5ConditionalService,protocolSha256}' ~ '^[a-f0-9]{64}$',false) AS has_conditional_marker
-    FROM clean.phase5_fids_allowed_query_v39 q
-    LEFT JOIN clean.phase5_fids_github_prearm_v39 pr ON pr.manifest_sha256=q.manifest_sha256 AND pr.query_digest=q.query_digest
-    LEFT JOIN clean.phase5_fids_physical_attempt_v39 a ON a.manifest_sha256=q.manifest_sha256 AND a.query_digest=q.query_digest
-    LEFT JOIN clean.phase5_fids_original_binding_v39 b ON b.manifest_sha256=q.manifest_sha256 AND b.query_digest=q.query_digest AND b.reservation_sha256=a.reservation_sha256
-    LEFT JOIN clean.fids_query_response r ON r.population_query_id=b.population_query_id
-    WHERE q.manifest_sha256=$1
-   ), live_elig AS (
-    SELECT q.run_day_index,q.horizon,q.slot_id,q.airport_icao,
-     count(DISTINCT p.analytic_identity_id) FILTER(WHERE p.scope_classification='confirmed_core' AND p.codeshare_resolution_status='confirmed_operating_leg' AND p.canonical_flight_instance_id=p.analytic_identity_id AND p.provider_content_expired_at_utc IS NULL)::int AS distinct_native_eligible_flights,
-     count(DISTINCT p.analytic_identity_id) FILTER(WHERE p.scope_classification='unknown' AND p.codeshare_resolution_status='g5a_conditional_operator_composite_no_native_id' AND p.canonical_flight_instance_id=p.analytic_identity_id AND p.analytic_identity_id ~ '^leg:g5a:[a-f0-9]{64}$' AND p.provider_content_expired_at_utc IS NULL)::int AS distinct_conditional_eligible_flights,
-     count(p.id) FILTER(WHERE NOT ((p.scope_classification='confirmed_core' AND p.codeshare_resolution_status='confirmed_operating_leg') OR (p.scope_classification='unknown' AND p.codeshare_resolution_status='g5a_conditional_operator_composite_no_native_id' AND p.analytic_identity_id ~ '^leg:g5a:[a-f0-9]{64}$')))::int AS ineligible_members
-    FROM qbase q JOIN clean.flight_population p ON p.population_query_id=q.population_query_id
-    WHERE q.custody='live'
-    GROUP BY 1,2,3,4
-   ), pre_agg AS (
-    SELECT q.run_day_index,q.horizon,q.slot_id,q.airport_icao,
-     count(DISTINCT s.id)::int AS linked_pre_rows,
-     count(DISTINCT s.id) FILTER(WHERE s.created_at<=s.prediction_cutoff_utc)::int AS cutoff_safe_pre_rows,
-     count(DISTINCT s.id) FILTER(WHERE s.flight_instance_id !~ '^leg:g5a:')::int AS native_pre_rows,
-     count(DISTINCT s.id) FILTER(WHERE s.flight_instance_id ~ '^leg:g5a:[a-f0-9]{64}$')::int AS conditional_pre_rows,
-     count(DISTINCT w.snapshot_id)::int AS t24_witness_rows,
-     count(DISTINCT f.row_id)::int AS p7_fragments,
-     count(DISTINCT l.snapshot_id) FILTER(WHERE l.expires_at_utc>transaction_timestamp())::int AS p7_live_links,
-     count(DISTINCT f.row_id) FILTER(WHERE q.custody='expired' AND f.research_expiry_utc>transaction_timestamp())::int AS p7_fragments_surviving_raw_expiry
-    FROM qbase q
-    JOIN clean.flight_snapshots s ON s.population_query_id=q.population_query_id::text AND s.fids_response_hash=q.response_hash AND s.horizon=q.horizon AND s.prediction_state='PRE_DEPARTURE'
-    LEFT JOIN clean.phase5_t24_postcommit_witness_v39 w ON w.snapshot_id=s.id
-    LEFT JOIN phase7_private.pre_source_link_v39 l ON l.snapshot_id=s.id
-    LEFT JOIN phase7_private.pre_fragment_v39 f ON f.row_id=l.row_id
-    WHERE q.population_query_id IS NOT NULL
-    GROUP BY 1,2,3,4
-   ), paired AS (
-    SELECT q.run_day_index,q.slot_id,q.airport_icao,count(DISTINCT s6.flight_instance_id)::int AS matched_t6_t90_pairs
-    FROM qbase q
-    JOIN clean.flight_snapshots s6 ON s6.population_query_id=q.population_query_id::text AND s6.fids_response_hash=q.response_hash AND s6.horizon='T-6h' AND s6.prediction_state='PRE_DEPARTURE'
-    JOIN clean.flight_snapshots s90 ON s90.flight_instance_id=s6.flight_instance_id AND s90.horizon='T-90m' AND s90.prediction_state='PRE_DEPARTURE'
-    WHERE q.horizon='T-6h' AND q.population_query_id IS NOT NULL
-    GROUP BY 1,2,3
-   )
-   SELECT q.run_day_index,q.horizon,q.slot_id,q.airport_icao,
-    count(*)::int AS signed_queries,
-    count(*) FILTER(WHERE q.prearmed)::int AS prearmed_queries,
-    count(*) FILTER(WHERE q.reserved)::int AS reservations,
-    count(*) FILTER(WHERE q.population_query_id IS NOT NULL)::int AS bindings,
-    count(*) FILTER(WHERE q.population_query_id IS NOT NULL AND q.bound_at_utc<=q.prediction_cutoff_utc)::int AS timely_bindings,
-    count(*) FILTER(WHERE q.custody='live')::int AS live_originals,
-    count(*) FILTER(WHERE q.custody='expired')::int AS expired_originals,
-    count(*) FILTER(WHERE q.custody='other')::int AS other_custody_originals,
-    count(*) FILTER(WHERE q.custody='live' AND q.source_expires_at_utc<=transaction_timestamp()+interval '1 hour')::int AS live_approaching_expiry_1h,
-    count(*) FILTER(WHERE q.custody='live' AND q.source_expires_at_utc<=transaction_timestamp()+interval '2 hours')::int AS live_approaching_expiry_2h,
-    count(*) FILTER(WHERE q.custody='live' AND q.service_window_end_utc - (CASE q.horizon WHEN 'T-24h' THEN interval '24 hours' WHEN 'T-6h' THEN interval '6 hours' ELSE interval '90 minutes' END) > transaction_timestamp())::int AS live_open_opportunity,
-    count(*) FILTER(WHERE q.custody='live' AND q.service_window_end_utc - (CASE q.horizon WHEN 'T-24h' THEN interval '24 hours' WHEN 'T-6h' THEN interval '6 hours' ELSE interval '90 minutes' END) <= transaction_timestamp())::int AS live_past_cutoff_unrecoverable,
-    count(*) FILTER(WHERE q.custody='live' AND q.has_conditional_marker)::int AS live_with_conditional_marker,
-    count(*) FILTER(WHERE q.custody='live' AND NOT q.has_conditional_marker)::int AS live_without_conditional_marker,
-    coalesce(sum(q.normalized_members_count) FILTER(WHERE q.population_query_id IS NOT NULL),0)::int AS historical_members,
-    coalesce(le.distinct_native_eligible_flights,0)::int AS distinct_native_eligible_flights,
-    coalesce(le.distinct_conditional_eligible_flights,0)::int AS distinct_conditional_eligible_flights,
-    coalesce(le.ineligible_members,0)::int AS ineligible_members,
-    coalesce(pa.linked_pre_rows,0)::int AS linked_pre_rows,
-    coalesce(pa.cutoff_safe_pre_rows,0)::int AS cutoff_safe_pre_rows,
-    coalesce(pa.native_pre_rows,0)::int AS native_pre_rows,
-    coalesce(pa.conditional_pre_rows,0)::int AS conditional_pre_rows,
-    coalesce(pa.t24_witness_rows,0)::int AS t24_witness_rows,
-    coalesce(pa.p7_fragments,0)::int AS p7_fragments,
-    coalesce(pa.p7_live_links,0)::int AS p7_live_links,
-    coalesce(pa.p7_fragments_surviving_raw_expiry,0)::int AS p7_fragments_surviving_raw_expiry,
-    CASE WHEN q.horizon='T-6h' THEN coalesce(pr.matched_t6_t90_pairs,0)::int ELSE 0 END AS matched_t6_t90_pairs
-   FROM qbase q
-   LEFT JOIN live_elig le ON le.run_day_index=q.run_day_index AND le.horizon=q.horizon AND le.slot_id=q.slot_id AND le.airport_icao=q.airport_icao
-   LEFT JOIN pre_agg pa ON pa.run_day_index=q.run_day_index AND pa.horizon=q.horizon AND pa.slot_id=q.slot_id AND pa.airport_icao=q.airport_icao
-   LEFT JOIN paired pr ON pr.run_day_index=q.run_day_index AND pr.slot_id=q.slot_id AND pr.airport_icao=q.airport_icao
-   GROUP BY q.run_day_index,q.horizon,q.slot_id,q.airport_icao,
-    le.distinct_native_eligible_flights,le.distinct_conditional_eligible_flights,le.ineligible_members,
-    pa.linked_pre_rows,pa.cutoff_safe_pre_rows,pa.native_pre_rows,pa.conditional_pre_rows,pa.t24_witness_rows,
-    pa.p7_fragments,pa.p7_live_links,pa.p7_fragments_surviving_raw_expiry,pr.matched_t6_t90_pairs
-   ORDER BY q.run_day_index,q.horizon,q.slot_id
-  `,[m])).rows;
-  const storage=(await c.query(`
-   SELECT
-    (SELECT count(*)::int FROM phase7_private.pre_fragment_v39) AS p7_total_fragments,
-    (SELECT count(*)::int FROM phase7_private.pre_fragment_v39 WHERE research_expiry_utc>transaction_timestamp()) AS p7_unexpired_fragments,
-    (SELECT count(*)::int FROM phase7_private.derived_release_bundle_v39) AS p7_total_bundles,
-    (SELECT count(*)::int FROM phase7_private.derived_release_bundle_v39 WHERE research_expiry_utc>transaction_timestamp()) AS p7_unexpired_bundles,
-    (SELECT count(*)::int FROM phase7_private.pre_source_link_v39 WHERE expires_at_utc>transaction_timestamp()) AS p7_live_links,
-    (SELECT count(*)::int FROM phase7_private.pre_preservation_policy_v39) AS p7_policies,
-    (SELECT count(*)::int FROM clean.phase5_other_rest_physical_reservation_v39 WHERE manifest_sha256=$1 AND rest_category='OUTCOME_REST_UNIT_BUDGET') AS post_outcome_reservations
-  `,[m])).rows[0];
-  const result=projectScientificYieldReconciliation(cells,storage,new Date(id.at).toISOString());
-  begun=false;await c.query("ROLLBACK");
-  return result;
- }finally{if(begun)await c.query("ROLLBACK");}
-}
-
 if(process.argv[1]&&resolve(process.argv[1])===fileURLToPath(import.meta.url)){
  let c;
  try{
   const arg=process.argv[2],match=typeof arg==="string"?/^--native-shape-day=([1-9]|[12][0-9]|3[01])$/.exec(arg):null;
-  const yieldMode=arg==="--scientific-yield";
-  if((process.argv.length!==2&&!(process.argv.length===3&&(match||yieldMode)))||!process.env.DATABASE_URL||process.env.NODE_TLS_REJECT_UNAUTHORIZED==="0")throw Error("OWNER_CONTEXT");
+  if((process.argv.length!==2&&!(process.argv.length===3&&match))||!process.env.DATABASE_URL||process.env.NODE_TLS_REJECT_UNAUTHORIZED==="0")throw Error("OWNER_CONTEXT");
   const {Client}=createRequire(resolve(process.cwd(),"package.json"))("pg");
   c=new Client({connectionString:process.env.DATABASE_URL,connectionTimeoutMillis:8000});
-  await c.connect();const result=yieldMode?await readScientificYieldReconciliation(c):match?await readNativeShapeInventory(c,Number(match[1])):await readInventory(c);await c.end();c=null;console.log(JSON.stringify(result));
+  await c.connect();const result=match?await readNativeShapeInventory(c,Number(match[1])):await readInventory(c);await c.end();c=null;console.log(JSON.stringify(result));
  }catch(e){console.error(JSON.stringify({status:"P5B_RETENTION_AND_P7_STORAGE_METADATA_HOLD",sqlstate:/^[0-9A-Z]{5}$/.test(e?.code??"")?e.code:null,providerCalls:0,databaseWrites:0}));process.exitCode=2;}
  finally{if(c)await c.end().catch(()=>{});}
 }

@@ -39,7 +39,7 @@ describe("P0-E (F029/F042) separated native physical gate-out and conditional sc
    {flightInstanceId:nativeId,identityTier:"PROVIDER_NATIVE_OPERATING_LEG",runDayIndex:5,slot:"HUB",horizon:"T-24h",preSnapshotId:"1001",phase7FragmentRowId:"11111111-1111-4111-8111-111111111101",phase7GroupId:"aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa1",preIssuedAtUtc:"2026-11-29T15:58:00.000Z",predictionCutoffUtc:"2026-11-29T16:00:00.000Z"},
    {flightInstanceId:nativeId,identityTier:"PROVIDER_NATIVE_OPERATING_LEG",runDayIndex:5,slot:"HUB",horizon:"T-6h",preSnapshotId:"1002",phase7FragmentRowId:"11111111-1111-4111-8111-111111111102",phase7GroupId:"aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa1",preIssuedAtUtc:"2026-11-30T09:58:00.000Z",predictionCutoffUtc:"2026-11-30T10:00:00.000Z"},
    {flightInstanceId:nativeId,identityTier:"PROVIDER_NATIVE_OPERATING_LEG",runDayIndex:5,slot:"HUB",horizon:"T-90m",preSnapshotId:"1003",phase7FragmentRowId:"11111111-1111-4111-8111-111111111103",phase7GroupId:"aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa1",preIssuedAtUtc:"2026-11-30T14:28:00.000Z",predictionCutoffUtc:"2026-11-30T14:30:00.000Z"},
-   {flightInstanceId:condId,identityTier:"CONDITIONAL_QUERY_FILTERED_SERVICE",runDayIndex:5,slot:"MID_A",horizon:"T-6h",preSnapshotId:"2001",phase7FragmentRowId:"22222222-2222-4222-8222-222222222201",phase7GroupId:"bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbb1",preIssuedAtUtc:"2026-11-30T09:58:00.000Z",predictionCutoffUtc:"2026-11-30T10:00:00.000Z"},
+   {flightInstanceId:condId,identityTier:"CONDITIONAL_QUERY_FILTERED_SERVICE",runDayIndex:5,slot:"MID_A",horizon:"T-6h",preSnapshotId:"2001",phase7FragmentRowId:"22222222-2222-4222-8222-222222222201",phase7GroupId:"bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbb1",preIssuedAtUtc:"2026-11-30T09:58:00.000Z",predictionCutoffUtc:"2026-11-30T10:00:00.000Z",manifestSha256:manifest,preIssueReceiptSha256:sha("pre-issue-receipt"),originalSourceQueryId:"33333333-3333-4333-8333-333333333301",originalSourceResponseSha256:sha("pre-resp"),selectedScheduledDepartureUtc:"2026-11-30T16:00:00.000Z"},
    {flightInstanceId:condId,identityTier:"CONDITIONAL_QUERY_FILTERED_SERVICE",runDayIndex:5,slot:"MID_A",horizon:"T-90m",preSnapshotId:"2002",phase7FragmentRowId:"22222222-2222-4222-8222-222222222202",phase7GroupId:"bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbb1",preIssuedAtUtc:"2026-11-30T14:28:00.000Z",predictionCutoffUtc:"2026-11-30T14:30:00.000Z"}
   ];
   const preIssueSha=sha("pre-issue-receipt");
@@ -57,17 +57,31 @@ describe("P0-E (F029/F042) separated native physical gate-out and conditional sc
   expect(res.nativeAndConditionalOutcomesStrictlySeparated).toBe(true);
   expect(res.scheduleRevisionNeverSubstitutedForPhysicalGateOut).toBe(true);
   expect(res.coverage.totalDistinctLegs).toBe(2);
-  expect(res.coverage.observedNativePhysicalGateOut).toBe(1);
-  expect(res.coverage.observedConditionalScheduleRevisionOnly).toBe(1);
+  expect(res.coverage.observedNativePhysicalGateOut).toBe(0);
+  expect(res.coverage.nativePhysicalCandidatesUncertified).toBe(1);
+  expect(res.coverage.signedConditionalRevisionCandidatesUnverifiedAnchor).toBe(1);
+  expect(res.productionAnchorReadbackVerified).toBe(false);
   expect(res.coverage.pairedT6T90).toBe(2);
   expect(res.coverage.fullT24T6T90Triple).toBe(1);
   const nativeLeg=res.matchedLegs.find(x=>x.flightInstanceId===nativeId)!;
-  expect(nativeLeg.physicalGateOutCertified).toBe(true);
+  expect(nativeLeg.physicalGateOutCertified).toBe(false);
+  expect(nativeLeg.classification).toBe("NATIVE_PHYSICAL_GATE_OUT_CANDIDATE_UNCERTIFIED");
   expect(nativeLeg.candidatePhysicalDelayMinutes).toBe(22);
   const condLeg=res.matchedLegs.find(x=>x.flightInstanceId===condId)!;
   expect(condLeg.physicalGateOutCertified).toBe(false);
   expect(condLeg.conditionalScheduleRevisionOnly).toBe(true);
   expect(condLeg.candidatePhysicalDelayMinutes).toBeNull();
+  for(const change of [
+   {flightInstanceId:"leg:g5a:"+sha("another-service")},
+   {runDayIndex:6}, {preIssueReceiptSha256:sha("wrong-receipt")},
+   {originalSourceResponseSha256:sha("wrong-source")},
+   {selectedScheduledDepartureUtc:"2026-11-30T16:05:00.000Z"},
+   {predictionCutoffUtc:"2026-11-30T10:01:00.000Z"},
+   {phase7GroupId:"aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa1"}
+  ]){
+   const changed=anchors.map(a=>a.preSnapshotId==="2001"?{...a,...change}:a);
+   expect(()=>matchP5PreservedPreToSeparatedPostOutcomes(changed,outcomes)).toThrow();
+  }
  });
 
  it("censors estimated/revised departure instead of substituting for actual physical gate-out and refuses cross-split or cross-tier leakage",()=>{
@@ -85,11 +99,17 @@ describe("P0-E (F029/F042) separated native physical gate-out and conditional sc
   // Cross-split leakage refused: same leg across day 20 (train) and day 21 (validation).
   expect(()=>matchP5PreservedPreToSeparatedPostOutcomes([
    {...nativeAnchor,runDayIndex:20,horizon:"T-24h"},
-   {...nativeAnchor,runDayIndex:21,horizon:"T-6h"}
+   {...nativeAnchor,runDayIndex:21,horizon:"T-6h",preSnapshotId:"1005",phase7FragmentRowId:"11111111-1111-4111-8111-111111111105"}
   ],[])).toThrow(/CROSS_DAY_SPLIT_TIER_OR_GROUP_LEAKAGE/);
   // Tier namespace mismatch refused.
   expect(()=>matchP5PreservedPreToSeparatedPostOutcomes([
    {...nativeAnchor,flightInstanceId:condId}
   ],[])).toThrow(/IDENTITY_TIER_NAMESPACE_MISMATCH/);
+  expect(()=>matchP5PreservedPreToSeparatedPostOutcomes([
+   nativeAnchor,{...nativeAnchor,flightInstanceId:"leg:p5v1:"+sha("another-leg"),horizon:"T-90m",preSnapshotId:"1004",phase7FragmentRowId:"11111111-1111-4111-8111-111111111104"}
+  ],[])).toThrow(/GROUP_REUSED_ACROSS_FLIGHTS/);
+  expect(()=>matchP5PreservedPreToSeparatedPostOutcomes([
+   nativeAnchor,{...nativeAnchor,horizon:"T-90m"}
+  ],[])).toThrow(/REUSED_PRE_OR_FRAGMENT_IDENTIFIER/);
  });
 });

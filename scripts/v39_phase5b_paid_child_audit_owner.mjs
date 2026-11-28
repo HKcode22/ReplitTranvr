@@ -26,7 +26,9 @@ try{
    jobs=j.jobs;
    const job=jobs.find(x=>x.name==="exact-private-source-existing-one-get-child");
    if(int(job?.id)&&job.steps?.some(x=>isP6PaidSourceStep(x)&&x.conclusion!=="skipped")){
-    try{log=gh("api","repos/"+R+"/actions/jobs/"+job.id+"/logs");}catch{/* unknown log, no replay */}
+    // Capture escape-bearing logs privately. Only fixed allowlisted diagnostics
+    // leave the classifier; never render terminal control bytes or raw contents.
+    try{log=gh("api","--allow-escape-sequences","repos/"+R+"/actions/jobs/"+job.id+"/logs");}catch{/* unknown log, no replay */}
    }
   }catch{/* unverified metadata, no collection claim */}
   receipts.push(classifyP6PaidChildReceipt(run,jobs,log));

@@ -22,6 +22,7 @@ import {commitP6Day1LateFixedRegistration} from "../server/lib/disruption/phase5
 import {verifyP6Day1CommittedLateScope} from "../server/lib/disruption/phase6Day1LateRegistrationScope_v39.mjs";
 import {verifyP5EarlyDrawReadonlyAcl} from "./v39_phase5_github_six_slot_early_draw_owner_v39.ts";
 import {previewP6ConditionalCandidateFromCommitment} from "./v39_phase5b_conditional_policy_candidate_v39.mjs";
+import {encodeP6PublicPolicyCommitment} from "./v39_phase5b_conditional_review_metadata_v39.mjs";
 const SHA=/^[a-f0-9]{64}$/,CODE=/^[a-f0-9]{40}$/;
 const PREPARE_LOGIN="phase5_p30_prepare_login_20261107";
 const CONFIRM="ONE_APPROVED_PROSPECTIVE_SOURCE_DAY_NONPAID_PREPARE_PUBLISH";
@@ -318,36 +319,30 @@ export function projectP6ConditionalPolicyCustody(ctx,plans,calendar,indexRows,o
    keys.every(k=>SHA.test(k??""))&&new Set(keys).size===5&&keys[0]===env.P6_PHASE7_PRE_LANE_EVIDENCE_AUTHORITY_FINGERPRINT_SHA256&&keys[1]===env.P6_PHASE7_PRE_PROOF_REVIEWER_FINGERPRINT_SHA256;
  }catch{/* explicitly false; never expose invalid key bytes */}
  const fieldState=unexpectedNativeMarker?"PARTIAL_HOLD":present===0?"ABSENT":present===fields.length?"ALL_FIELDS_PRESENT_NOT_COMMISSIONED_PROOF":"PARTIAL_HOLD";
- const protocolVar=env.P6_CONDITIONAL_SERVICE_PROTOCOL_SHA256??"";
- const protocolMatches=Boolean(SHA.test(protocolVar)&&fieldState==="ALL_FIELDS_PRESENT_NOT_COMMISSIONED_PROOF"&&
-  p.conditionalPreFeatureReview?.protocolSha256===protocolVar&&
-  p.conditionalT24PermitReview?.protocolSha256===protocolVar&&
-  p.conditionalLaterPermitReview?.protocolSha256===protocolVar&&
-  q.conditionalServicePolicy?.protocolSha256===protocolVar&&
-  v?.conditionalT24Scope?.protocolSha256===protocolVar&&
-  v?.conditionalLaterDayAppendPolicy?.conditionalLaterPreScope?.protocolSha256===protocolVar);
- const installedCandidateCommitmentSha256=fieldState==="ALL_FIELDS_PRESENT_NOT_COMMISSIONED_PROOF"
-  ?h(JSON.stringify({schema:"v39.phase5b.custody-candidate-commitment.v1",
-    daily:env.P6_NONPAID_DAILY_POLICY_SHA256,signing:env.P6_NONPAID_SIGNING_POLICY_SHA256,transport:env.P6_NONPAID_TRANSPORT_TRUST_SHA256}))
-  :null;
+ const protocol=env.P6_CONDITIONAL_SERVICE_PROTOCOL_SHA256??"";
+ const conditionalProtocolVarMatchesPolicy=Boolean(SHA.test(protocol)&&fieldState==="ALL_FIELDS_PRESENT_NOT_COMMISSIONED_PROOF"&&
+  Buffer.from(JSON.stringify(p)).equals(ctx.policyBytes)&&
+  p.conditionalPreFeatureReview?.protocolSha256===protocol&&p.conditionalT24PermitReview?.protocolSha256===protocol&&
+  p.conditionalLaterPermitReview?.protocolSha256===protocol&&q.conditionalServicePolicy?.protocolSha256===protocol&&
+  v?.conditionalT24Scope?.protocolSha256===protocol&&
+  v?.conditionalLaterDayAppendPolicy?.conditionalLaterPreScope?.protocolSha256===protocol);
+ const baseCommitment=h(JSON.stringify({schema:"v39.phase5b.custody-base-commitment.v1",
+  daily:env.P6_NONPAID_DAILY_POLICY_SHA256,signing:env.P6_NONPAID_SIGNING_POLICY_SHA256,transport:env.P6_NONPAID_TRANSPORT_TRUST_SHA256}));
  return Object.freeze({status:"P6_ACTUAL_PROTECTED_CONDITIONAL_POLICY_CUSTODY_READONLY",
   prospective:{runDayIndex:day.runDayIndex,firstRequestUtc:day.firstRequestUtc,preparationOpensUtc:day.preparationOpensUtc,genesisAbsent:true,preparedQueryCount:0},
   observedDbClockUtc:observedUtc,exactThreePolicyDigestsValidated:true,exact31PlanPinsValidated:true,
   // Commitment to exact admitted policy digests (not the secret digest
   // values themselves). Recompute inside the protected context when
   // reviewing a candidate; never use as a substitute for the individual pins.
-  basePolicyCommitmentSha256:h(JSON.stringify({schema:"v39.phase5b.custody-base-commitment.v1",
-   daily:env.P6_NONPAID_DAILY_POLICY_SHA256,signing:env.P6_NONPAID_SIGNING_POLICY_SHA256,transport:env.P6_NONPAID_TRANSPORT_TRUST_SHA256})),
-  installedCandidateCommitmentSha256,
+  basePolicyCommitmentSha256:baseCommitment,
+  basePolicyPublicCommitmentLetters:encodeP6PublicPolicyCommitment(baseCommitment),
   signingPrivateKeysVerified:false,publisherEndpointVerified:false,
   signingOrPublishingCapabilityPresent:false,
   canonicalNativePredecessorBytes:Buffer.from(JSON.stringify(p)).equals(ctx.policyBytes),
   nativePolicyPresent,baseIntervalCoversRemainingStudy,remainingServiceEndUtc:new Date(last).toISOString(),
-  conditionalPolicyFieldState:fieldState,
+  conditionalPolicyFieldState:fieldState,conditionalProtocolVarMatchesPolicy,
   publicActorsVerified,conditionalMetadataEnabled:env.P6_CONDITIONAL_LATER_METADATA_READ_ENABLED==="1",
-  conditionalProtocolVarMatchesPolicy:protocolMatches,
-  actualConditionalPolicyInstalledVerified:Boolean(fieldState==="ALL_FIELDS_PRESENT_NOT_COMMISSIONED_PROOF"&&protocolMatches&&env.P6_CONDITIONAL_LATER_METADATA_READ_ENABLED==="1"&&publicActorsVerified&&nativePolicyPresent&&baseIntervalCoversRemainingStudy),
-  actualConditionalPreCommitVerified:false,
+  actualConditionalPolicyInstalledVerified:false,actualConditionalPreCommitVerified:false,
   providerCalls:0,databaseWrites:0,githubWrites:0,signaturesIssued:0,phase6PaidGo:false});
 }
 export async function conditionalPreparedRead(restricted,ctx){
@@ -442,7 +437,7 @@ export async function runP6NonpaidSourceDayGithub(env){
     publicPins:{laneFingerprintSha256:env.P6_PHASE7_PRE_LANE_EVIDENCE_AUTHORITY_FINGERPRINT_SHA256,proofFingerprintSha256:env.P6_PHASE7_PRE_PROOF_REVIEWER_FINGERPRINT_SHA256,
      lanePublicKeyBase64:env.P6_PHASE7_PRE_LANE_EVIDENCE_AUTHORITY_PUBLIC_KEY_BASE64,proofPublicKeyBase64:env.P6_PHASE7_PRE_PROOF_REVIEWER_PUBLIC_KEY_BASE64},
     custody:receipt,reviewedPlanBytes:plans.map(p=>p.bytes)});
-   return Object.freeze({...receipt,candidatePreview});
+   return Object.freeze({...receipt,candidatePreview:{...candidatePreview,candidatePublicCommitmentLetters:encodeP6PublicPolicyCommitment(candidatePreview.candidateCommitmentSha256)}});
   }
   let selection,lateScope;
   if(ctx.mode==="day1_recovery"){

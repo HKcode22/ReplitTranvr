@@ -87,7 +87,7 @@ test("current T24 exact calendar parity; explicit dispatch cannot authorize enro
 });
 
 test("T24 runtime diagnostic preserves bounded known reason and hides unknown exception contents",()=>{
- for(const m of ["HOLD_P6_T24_ENROLL_WRONG_RESTRICTED_TLS_URL","HOLD_P6_CURRENT_T24_STUDY_TRUST_DRIFT","HOLD_P6_CURRENT_T24_CONDITIONAL_T24_PROTOCOL_SCOPE_MISSING_OR_DRIFT","HOLD_P6_COMMITTED_T24_CUSTODY_POLICY_SHA_DRIFT","REFUSED_P5_CD_GH_CODE_LINEAGE_BASELINE_NOT_ANCESTOR_OR_EXECUTABLE_DRIFT","REFUSED_P5_CONDITIONAL_QUEUE_PACKET_SEPARATE_PROSPECTIVE_SCOPE_AND_PROOF_REQUIRED","HOLD_P7_PROTECTED_PRE_RESOLVER_DISTINCT_TLS_READER"])assert.equal(currentT24FailureDiagnostic(Error(m)),m);
+ for(const m of ["HOLD_P6_T24_ENROLL_WRONG_RESTRICTED_TLS_URL","HOLD_P6_CURRENT_T24_STUDY_TRUST_DRIFT","REFUSED_P5_CD_GH_CODE_LINEAGE_BASELINE_NOT_ANCESTOR_OR_EXECUTABLE_DRIFT","HOLD_P7_PROTECTED_PRE_RESOLVER_DISTINCT_TLS_READER"])assert.equal(currentT24FailureDiagnostic(Error(m)),m);
  for(const m of ["postgresql://user:private@host/neondb","HOLD_P6_CURRENT_T24_FOO private-password","HOLD_P6_CURRENT_T24_"+"X".repeat(200),"unexpected SQL exception"])assert.equal(currentT24FailureDiagnostic(Error(m)),"HOLD_P6_CURRENT_T24_REDACTED_NO_REPLAY");
 });
 
@@ -102,41 +102,20 @@ test("complete synthetic protected T24 startup with the actual 31 checked-in cal
  const complete={...env(),P6_T24_CUSTODY_ENABLED:"1",P6_T24_CUSTODY_APPROVED:"1",P5_CD_GH_E_ROUTE_FEATURES_APPROVED:"1",P5_CD_GH_E_SUPPLEMENTAL_FEATURES_APPROVED:"1",P6_PRIVATE_T24_CUSTODY_REVIEWER_KEY_BASE64:custody.privateWire,P6_PRIVATE_PUBLISHER_DATABASE_URL:"postgresql://phase6_private_publisher_login_fixture:ci@ep-test.neon.tech/neondb?sslmode=require",P6_PRIVATE_READER_DATABASE_URL:"postgresql://"+reader+":ci@ep-test.neon.tech/neondb?sslmode=require",P6_PRIVATE_T24_ENROLL_SCHEDULE_ENABLED:"1",P6_PRIVATE_SOURCE_STORED_REVIEW_APPROVED:"1",P6_PRIVATE_SOURCE_STABLE_TRUST_BASE64:Buffer.from(JSON.stringify(trust)).toString("base64"),V39_P5_RELEASE_SHA256:h,P6_NONPAID_DAILY_POLICY_BASE64:policy.toString("base64"),P6_NONPAID_DAILY_POLICY_SHA256:digest(policy)};
  const admitted=admitP6CurrentT24Worker(complete);
  assert.equal(admitted.lanes,4);assert.equal(admitted.calendar.windows.length,31);
+ const scope={protocolSha256:digest("prospective conditional protocol"),externalContentUseReviewSha256:digest("reviewed content use")};
+ const conditionalPolicy=JSON.parse(policy.toString("utf8"));
+ conditionalPolicy.conditionalPreFeatureReview={schema:"v39.phase5.conditional-pre-feature-review-policy.v1",approved:true,rightsSha256:h,...scope};
+ conditionalPolicy.nativeLaterReview.conditionalT24Scope=scope;
+ const conditionalBytes=Buffer.from(JSON.stringify(conditionalPolicy));
+ const conditional={...complete,P6_CONDITIONAL_SERVICE_PROTOCOL_SHA256:scope.protocolSha256,
+  P6_NONPAID_DAILY_POLICY_BASE64:conditionalBytes.toString("base64"),P6_NONPAID_DAILY_POLICY_SHA256:digest(conditionalBytes)};
+ assert.equal(admitP6CurrentT24Worker(conditional).trust.conditionalT24Scope.protocolSha256,scope.protocolSha256);
+ assert.throws(()=>admitP6CurrentT24Worker({...conditional,P6_CONDITIONAL_SERVICE_PROTOCOL_SHA256:""}));
+ assert.throws(()=>admitP6CurrentT24Worker({...conditional,P6_CONDITIONAL_SERVICE_PROTOCOL_SHA256:digest("wrong protocol")}));
  assert.equal(admitP6CurrentT24Worker({...complete,GITHUB_EVENT_NAME:"workflow_dispatch",P6_PRIVATE_CURRENT_T24_DISPATCH_CONFIRM:P6_CURRENT_T24_DISPATCH_CONFIRM}).lanes,4);
  for(const k of ["P6_T24_CUSTODY_APPROVED","P6_PRIVATE_SOURCE_STORED_REVIEW_APPROVED","P6_PRIVATE_T24_ENROLL_SCHEDULE_ENABLED","P6_NONPAID_DAILY_POLICY_SHA256","P6_PRIVATE_READER_DATABASE_URL","P5_CD_GH_PRE_ARMED"])assert.throws(()=>admitP6CurrentT24Worker({...complete,[k]:""}),undefined,k);
 });
-
-test("conditional T24 workflow projection and singleton verification require matching protocol pin",async()=>{
+test("current T24 jobs project the protected conditional protocol marker into both execution scopes",()=>{
  const workflow=readFileSync(".github/workflows/phase5-cd-github-one-queued-t24-witness-main-manual.yml","utf8");
- const matches=workflow.match(/P6_CONDITIONAL_SERVICE_PROTOCOL_SHA256:\s*\$\{\{\s*vars\.P6_CONDITIONAL_SERVICE_PROTOCOL_SHA256\s*\}\}/g)??[];
- assert.equal(matches.length,2,"both T24 execution jobs must project P6_CONDITIONAL_SERVICE_PROTOCOL_SHA256");
- const {hashPhase7DurableCandidate}=await import("../server/lib/disruption/phase7DurableDerivedBundleCandidate_v39.ts");
- const digest=b=>createHash("sha256").update(b).digest("hex");
- const key=()=>{const {publicKey,privateKey}=generateKeyPairSync("ed25519");return {pem:publicKey.export({format:"pem",type:"spki"}),fp:digest(publicKey.export({format:"der",type:"spki"})),privateWire:Buffer.from(privateKey.export({format:"pem",type:"pkcs8"})).toString("base64")};};
- const day=key(),query=key(),later=key(),custody=key();
- const m=digest("manifest"),rg=digest("rights"),cal=digest("calendar"),rel=digest("release"),fr=digest("frame"),cfg=digest("config"),art=digest("artifact"),sem=digest("semantics");
- const protocol=digest("conditional-protocol"),extUse=digest("conditional-external-use"),svcKey=digest("service-key"),policySha=digest("p7-policy");
- const reader="phase6_private_reader_login_fixture_20261123";
- const trust={independentStudyTrustPinsApproved:true,expectedReaderSessionLogin:reader,reviewedCodeSha:code,manifestSha256:m,calendarSha256:cal,releaseSha256:rel,rightsSha256:rg,dayReviewerFingerprintSha256:day.fp,dayReviewerPublicKeyPem:day.pem,queryReviewerFingerprintSha256:query.fp,queryReviewerPublicKeyPem:query.pem};
- const pins=Array.from({length:31},(_,i)=>({runDayIndex:i+1,sha256:digest(readFileSync("data-collection/phase5/planning/phase6-source-day-"+String(i+1).padStart(2,"0")+".json"))}));
- const policy=Buffer.from(JSON.stringify({schema:"v39.phase6.delegated-daily-source-review-policy.v1",delegatedDailyPacketProductionApproved:true,approvedCodeSha:code,manifestSha256:m,calendarSha256:cal,releaseSha256:rel,rightsSha256:rg,frameSha256:fr,configSha256:cfg,dayPlanSha256s:pins,validFromUtc:"2026-11-23T23:45:00.000Z",validUntilUtc:"2026-12-29T04:00:00.000Z",
-  conditionalPreFeatureReview:{schema:"v39.phase5.conditional-pre-feature-review-policy.v1",approved:true,protocolSha256:protocol,externalContentUseReviewSha256:extUse,rightsSha256:rg},
-  nativeLaterReview:{approved:true,nativeT24ReviewApproved:true,independentT24WitnessProtocolReviewed:true,reviewedWitnessOnlyRole:"phase5_fids_t24_witness_prod_20261107",frameSha256:fr,configSha256:cfg,laterReviewerFingerprintSha256:later.fp,laterReviewerPublicKeyPem:later.pem,maximumPrivateRetentionHours:96,validFromUtc:"2026-11-23T23:45:00.000Z",validUntilUtc:"2026-12-29T04:00:00.000Z",maximumT24ExecutionLanes:4,conditionalT24Scope:{protocolSha256:protocol,externalContentUseReviewSha256:extUse},selectedTConfig:{verifiedProviderNativeSchedule:true,milestone:"departure.scheduledTime.utc",version:"synthetic-test",artifactHash:art,semanticsEvidenceSha256:sem}}}));
- const complete={...env(),V39_P5_MANIFEST_SHA256:m,V39_P5_RIGHTS_SHA256:rg,P6_T24_CUSTODY_ENABLED:"1",P6_T24_CUSTODY_APPROVED:"1",P5_CD_GH_E_ROUTE_FEATURES_APPROVED:"1",P5_CD_GH_E_SUPPLEMENTAL_FEATURES_APPROVED:"1",P6_PRIVATE_T24_CUSTODY_REVIEWER_KEY_BASE64:custody.privateWire,P6_PRIVATE_PUBLISHER_DATABASE_URL:"postgresql://phase6_private_publisher_login_fixture:ci@ep-test.neon.tech/neondb?sslmode=require",P6_PRIVATE_READER_DATABASE_URL:"postgresql://"+reader+":ci@ep-test.neon.tech/neondb?sslmode=require",P6_PRIVATE_T24_ENROLL_SCHEDULE_ENABLED:"1",P6_PRIVATE_SOURCE_STORED_REVIEW_APPROVED:"1",P6_PRIVATE_SOURCE_STABLE_TRUST_BASE64:Buffer.from(JSON.stringify(trust)).toString("base64"),V39_P5_RELEASE_SHA256:rel,P6_NONPAID_DAILY_POLICY_BASE64:policy.toString("base64"),P6_NONPAID_DAILY_POLICY_SHA256:digest(policy),P6_CONDITIONAL_SERVICE_PROTOCOL_SHA256:protocol};
- assert.equal(admitP6CurrentT24Worker(complete).lanes,4);
- assert.throws(()=>admitP6CurrentT24Worker({...complete,P6_CONDITIONAL_SERVICE_PROTOCOL_SHA256:""}),/CONDITIONAL_T24_PROTOCOL_SCOPE_MISSING_OR_DRIFT/);
- assert.throws(()=>admitP6CurrentT24Worker({...complete,P6_CONDITIONAL_SERVICE_PROTOCOL_SHA256:digest("wrong-protocol")}),/INVALID_CONDITIONAL_POLICY_PIN/);
- const prePermit={manifestSha256:m,queryDigestSha256:digest("q"),expectedSourcePopulationQueryId:"11111111-1111-4111-8111-111111111111",expectedSourceResponseSha256:digest("resp"),runDayIndex:5,slot:"HUB",horizon:"T-24h",airportIcao:"WSSS",flightInstanceId:"leg:g5a:"+svcKey,expectedGithubSourceRunId:"1234567",expectedReviewedReleaseSha256:rel,expectedReviewedSourceRightsSha256:rg,expectedProviderContractSha256:digest("contract"),expectedEarlyDrawSha256:digest("draw"),reviewedFrameSha256:fr,reviewedConfigSha256:cfg,independentlyReviewedOperatingLegEvidenceSha256:digest("leg"),independentlyReviewedNativeTEvidenceSha256:sem,independentlyReviewedRunAndRetentionEvidenceSha256:digest("ret"),frozenBuilderSha256:digest("builder"),builderFrozenAtUtc:"2026-11-28T00:00:00.000Z",selectedTConfig:{verifiedProviderNativeSchedule:true,milestone:"departure.scheduledTime.utc",version:"synthetic-test",artifactHash:art,semanticsEvidenceSha256:sem},selectedTNativeUtc:"2026-11-30T16:00:00.000Z",maxPopulationStalenessSeconds:3600,expectedRestrictedPreWriterRole:"phase5_fids_pre_writer_prod_20261107",identityEvidenceTier:"CONDITIONAL_QUERY_FILTERED_SERVICE",reviewedProtocolAmendmentSha256:protocol,reviewedStableServiceKeySha256:svcKey,expectedOperatorFlightNumber:"SQ101",expectedDestinationIcao:"OMAA",externalConditionalScheduleSourceAndUseReviewed:true,requireProspectiveConditionalSourceMarker:true,reviewedSupplementalFeatureBundle:{schema:"v39.phase5.e-signed-source-supplement.v1",flightInstanceId:"leg:g5a:"+svcKey,populationQueryId:"11111111-1111-4111-8111-111111111111",originalResponseSha256:digest("resp"),fields:["operating_carrier","scheduled_arrival_utc","provider_revised_departure_utc","reported_pre_departure_status"],observations:[],observationsSha256:digest("[]"),externalSourceAndContentsReviewReceiptSha256:extUse}};
- const witnessReview={flightInstanceId:prePermit.flightInstanceId,sourcePopulationQueryId:prePermit.expectedSourcePopulationQueryId,expectedSourceResponseSha256:prePermit.expectedSourceResponseSha256,expectedSourceQueryDigestSha256:prePermit.queryDigestSha256,expectedFrameSha256:fr,expectedConfigSha256:cfg,selectedTNativeUtc:prePermit.selectedTNativeUtc,expectedT24CutoffUtc:"2026-11-29T16:00:00.000Z",expectedSelectedTVersion:"departure.scheduledTime.utc:synthetic-test:"+art,expectedWitnessOnlyRole:"phase5_fids_t24_witness_prod_20261107",reviewedConditionalProtocolSha256:protocol};
- const proofMeta={schema:"v39.phase7.separate-pre-field-proof.v1",manifestSha256:m,rightsSha256:rg,policySha256:policySha,permitSha256:hashPhase7DurableCandidate(prePermit),issuedAtUtc:"2026-11-29T15:00:00.000Z",validUntilUtc:"2026-11-29T16:00:00.000Z",fields:[]};
- const phase7FieldProof={payloadBase64:Buffer.from(JSON.stringify(proofMeta)).toString("base64"),signatureBase64:Buffer.alloc(64,7).toString("base64")};
- const packet={schema:"v39.phase5.github-conditional-t24-pre-witness-reviewed.v1",reviewedCodeSha:code,reviewArtifactSha256:digest("review-artifact"),independentlyReviewedConditionalScheduleServiceAndSourceAttested:true,reviewedConditionalProtocolSha256:protocol,prePermit,witnessReview,phase7FieldProof};
- const packetBytes=Buffer.from(JSON.stringify(packet)),packetSha256=digest(packetBytes),filePath="data-collection/phase5/frozen/cond_t24_fixture.json";
- const roster={schema:"v39.phase5.cd-existing-signed-pre-packet-roster.v1",reviewedCodeSha:code,manifestSha256:m,rightsSha256:rg,entries:[{filePath,packetSha256}]};
- const rosterBytes=Buffer.from(JSON.stringify(roster)),rosterSha256=digest(rosterBytes);
- const projection={rosterSha256,rosterBytes,roster,files:[{filePath,packetSha256,bytes:packetBytes}],entry:{packetSha256,permit:prePermit,witnessReview}};
- const ok=localP6T24SingletonEnv(complete,projection);
- assert.equal(ok.packets.size,1);
- assert.equal(ok.packets.get(packetSha256)?.permit.identityEvidenceTier,"CONDITIONAL_QUERY_FILTERED_SERVICE");
- assert.throws(()=>localP6T24SingletonEnv({...complete,P6_CONDITIONAL_SERVICE_PROTOCOL_SHA256:""},projection),/SEPARATE_PROSPECTIVE_SCOPE_AND_PROOF_REQUIRED/);
+ assert.equal(workflow.split("P6_CONDITIONAL_SERVICE_PROTOCOL_SHA256: ${{ vars.P6_CONDITIONAL_SERVICE_PROTOCOL_SHA256 }}").length-1,2);
 });

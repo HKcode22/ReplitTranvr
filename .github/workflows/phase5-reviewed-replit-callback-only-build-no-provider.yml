@@ -4,6 +4,19 @@ on:
     branches: [main]
     paths:
       - '.replit'
+      - 'client/**'
+      - 'server/**'
+      - 'shared/**'
+      - 'package.json'
+      - 'package-lock.json'
+      - 'scripts/build.ts'
+      - 'vite.config.ts'
+      - 'tsconfig.json'
+      - 'postcss.config.js'
+      - 'tailwind.config.ts'
+      - 'tailwind.config.js'
+      - 'components.json'
+      - 'drizzle.config.ts'
       - 'scripts/v39_phase5_reviewed_source_build_v39.sh'
       - 'scripts/v39_phase5_callback_release_v2_reviewed_build_v39.sh'
       - 'scripts/v39_phase5_callback_release_v3_reviewed_build_v39.sh'
@@ -15,11 +28,25 @@ on:
       - 'tests/phase3_gate4_reviewed_source_build_v39.test.ts'
       - 'tests/phase2g_p25_replit_callback_published_deploy_contract_v39.test.ts'
       - 'tests/phase2g_owned_callback_isolation_v39.test.ts'
+      - 'scripts/v39_phase5b_callback_worker_only_guard.sh'
       - '.github/workflows/phase5-reviewed-replit-callback-only-build-no-provider.yml'
   push:
     branches: [main]
     paths:
       - '.replit'
+      - 'client/**'
+      - 'server/**'
+      - 'shared/**'
+      - 'package.json'
+      - 'package-lock.json'
+      - 'scripts/build.ts'
+      - 'vite.config.ts'
+      - 'tsconfig.json'
+      - 'postcss.config.js'
+      - 'tailwind.config.ts'
+      - 'tailwind.config.js'
+      - 'components.json'
+      - 'drizzle.config.ts'
       - 'scripts/v39_phase5_reviewed_source_build_v39.sh'
       - 'scripts/v39_phase5_callback_release_v2_reviewed_build_v39.sh'
       - 'scripts/v39_phase5_callback_release_v3_reviewed_build_v39.sh'
@@ -68,8 +95,26 @@ jobs:
             tests/phase2g_p25_replit_callback_published_deploy_contract_v39.test.ts \
             tests/phase2g_owned_callback_isolation_v39.test.ts \
             tests/phase3_gate05_v0075_published_release_v39.test.ts
-          bash scripts/v39_phase5_callback_release_v5_reviewed_build_v39.sh --verify-only
+      - name: Explicit worker-only callback admission or exact reviewed source
+        id: callback-admission
+        shell: bash
+        env:
+          WORKER_ONLY_PR: ${{ github.event_name == 'pull_request' && github.event.pull_request.number == 981 && github.event.pull_request.head.repo.full_name == github.repository }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          EXACT_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: |
+          set -Eeuo pipefail
+          set +x
+          if [[ "$WORKER_ONLY_PR" == true ]];then
+            bash scripts/v39_phase5b_callback_worker_only_guard.sh "$BASE_SHA" "$EXACT_SHA"
+            echo 'publishable=false' >> "$GITHUB_OUTPUT"
+            echo 'Worker-only regression passed; callback publication remains HOLD; no binary built or deployed.' >> "$GITHUB_STEP_SUMMARY"
+          else
+            bash scripts/v39_phase5_callback_release_v5_reviewed_build_v39.sh --verify-only
+            echo 'publishable=true' >> "$GITHUB_OUTPUT"
+          fi
       - name: Build reviewed callback-only binary without provider or production credentials
+        if: steps.callback-admission.outputs.publishable == 'true'
         shell: bash
         run: |
           set -Eeuo pipefail

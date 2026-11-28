@@ -1,0 +1,195 @@
+{
+  "id": 46013072497,
+  "head_sha": "a11538e8a45dc9daee7d5fc9d0efe347e1ecbff0",
+  "status": "completed",
+  "conclusion": "success",
+  "run_attempt": 1,
+  "event": "pull_request",
+  "path": ".github/workflows/phase5b-source-diagnostics-offline.yml",
+  "html_url": "https://github.com/HKcode22/ReplitTranvr/actions/runs/46013072497",
+  "created_at": "2026-11-27T14:07:30Z",
+  "updated_at": "2026-11-27T14:18:11Z",
+  "jobs": [
+    {
+      "id": 140553203789,
+      "name": "conditional-query-owner-real-pg16",
+      "status": "completed",
+      "conclusion": "success",
+      "started_at": "2026-11-27T14:15:56Z",
+      "completed_at": "2026-11-27T14:16:37Z",
+      "counts": {
+        "vitest": [],
+        "nodeTests": [
+          "4"
+        ],
+        "nodePass": [
+          "4"
+        ],
+        "nodeFail": [
+          "0"
+        ]
+      },
+      "steps": [
+        {
+          "name": "Set up job",
+          "status": "completed",
+          "conclusion": "success"
+        },
+        {
+          "name": "Initialize containers",
+          "status": "completed",
+          "conclusion": "success"
+        },
+        {
+          "name": "Run actions/checkout@v4",
+          "status": "completed",
+          "conclusion": "success"
+        },
+        {
+          "name": "Run actions/setup-node@v4",
+          "status": "completed",
+          "conclusion": "success"
+        },
+        {
+          "name": "Run npm ci --include=dev --no-audit --no-fund",
+          "status": "completed",
+          "conclusion": "success"
+        },
+        {
+          "name": "Run npx --no-install tsx --test tests/phase5b_conditional_query_scope_real_pg16_v39.mjs",
+          "status": "completed",
+          "conclusion": "success"
+        },
+        {
+          "name": "Post Run actions/setup-node@v4",
+          "status": "completed",
+          "conclusion": "success"
+        },
+        {
+          "name": "Post Run actions/checkout@v4",
+          "status": "completed",
+          "conclusion": "success"
+        },
+        {
+          "name": "Stop containers",
+          "status": "completed",
+          "conclusion": "success"
+        },
+        {
+          "name": "Complete job",
+          "status": "completed",
+          "conclusion": "success"
+        }
+      ]
+    },
+    {
+      "id": 140553204102,
+      "name": "fixed-metadata-only",
+      "status": "completed",
+      "conclusion": "success",
+      "started_at": "2026-11-27T14:16:07Z",
+      "completed_at": "2026-11-27T14:18:10Z",
+      "counts": {
+        "vitest": [
+          [
+            "4616",
+            "259",
+            "4875"
+          ]
+        ],
+        "nodeTests": [
+          "46",
+          "54",
+          "5"
+        ],
+        "nodePass": [
+          "46",
+          "54",
+          "5"
+        ],
+        "nodeFail": [
+          "0",
+          "0",
+          "0"
+        ]
+      },
+      "steps": [
+        {
+          "name": "Set up job",
+          "status": "completed",
+          "conclusion": "success"
+        },
+        {
+          "name": "Run actions/checkout@v4",
+          "status": "completed",
+          "conclusion": "success"
+        },
+        {
+          "name": "Run actions/setup-node@v4",
+          "status": "completed",
+          "conclusion": "success"
+        },
+        {
+          "name": "Run node --check scripts/v39_phase5b_paid_child_audit_owner.mjs && node --check scripts/v39_phase5b_signed_calendar_coverage_owner.mjs && node --check scripts/v39_phase5b_conditional_query_scope_owner.mjs",
+          "status": "completed",
+          "conclusion": "success"
+        },
+        {
+          "name": "Run node --test tests/phase5b_source_diagnostics_v39.test.mjs tests/phase5b_recovery_register_v39.test.mjs tests/phase5b_retention_p7_inventory_v39.test.mjs tests/phase5b_cutover_quiet_v39.test.mjs tests/phase5b_conditional_query_scope_owner_v39.test.mjs tests/phase5b_maintenance_and_f017_owner_v39.test.mjs tests/phase5b_owner_local_policy_predecessor_v39.test.mjs",
+          "status": "completed",
+          "conclusion": "success"
+        },
+        {
+          "name": "Run npm ci --include=dev --no-audit --no-fund",
+          "status": "completed",
+          "conclusion": "success"
+        },
+        {
+          "name": "Run npm run check",
+          "status": "completed",
+          "conclusion": "success"
+        },
+        {
+          "name": "Full offline suite on exact clean recovery commit",
+          "status": "completed",
+          "conclusion": "success"
+        },
+        {
+          "name": "Run npx vitest run tests/phase3_gate05_free_feed_429_pacing_contract_v39.test.ts tests/phase5b_fids_response_diagnostics_v39.test.ts tests/phase5_no_provider_prearm_clock_v39.test.ts tests/phase5_conditional_fids_service_recovery_v39.test.ts tests/phase5_conditional_bound_source_review_v39.test.ts tests/phase5_signed_later_pre_day_registry_v39.test.ts tests/phase5_amendment_e_real_fids_original_feature_compiler_v39.test.ts tests/phase5_conditional_signed_schedule_pair_v39.test.ts tests/phase5_amendment_e_gateout_label_v39.test.ts tests/phase5_scoped_fids_source_bridge_v39.test.ts tests/phase4_gate5_g5a_native_fids_identity_v39.test.ts tests/phase5b_conditional_source_signer_scope_v39.test.ts tests/phase5_prospective_fids_identity_custody_v39.test.ts tests/phase6_stored_source_native_candidate_audit_v39.test.ts tests/phase7_local_private_pre_handoff_v39.test.ts tests/phase6_native_post_pre_candidates_v39.test.ts",
+          "status": "completed",
+          "conclusion": "success"
+        },
+        {
+          "name": "Run npx --no-install tsx --test tests/phase6_stored_source_postcommit_native_audit_v39.test.mjs tests/phase5b_conditional_policy_candidate_v39.test.mjs tests/phase6_stored_source_child_dispatcher_v39.test.mjs tests/phase6_nonpaid_source_day_github_runtime_v39.test.mjs",
+          "status": "completed",
+          "conclusion": "success"
+        },
+        {
+          "name": "Run node --test tests/phase5b_progress_report_v39.test.mjs tests/phase5b_paid_audit_cli_transport_v39.test.mjs tests/phase5b_owner_wait_once_980_v39.test.mjs",
+          "status": "completed",
+          "conclusion": "success"
+        },
+        {
+          "name": "Run bash -n scripts/v39_phase5b_full_retention_baseline_owner.sh && bash -n scripts/v39_phase5b_full_recovery_owner.sh && bash -n scripts/v39_phase5b_post_cutover_pin_readonly.sh && bash -n scripts/v39_phase5b_coordinated_recovery_cutover_owner.sh && bash -n scripts/v39_phase5b_source_only_successor_owner.sh",
+          "status": "completed",
+          "conclusion": "success"
+        },
+        {
+          "name": "Post Run actions/setup-node@v4",
+          "status": "completed",
+          "conclusion": "success"
+        },
+        {
+          "name": "Post Run actions/checkout@v4",
+          "status": "completed",
+          "conclusion": "success"
+        },
+        {
+          "name": "Complete job",
+          "status": "completed",
+          "conclusion": "success"
+        }
+      ]
+    }
+  ]
+}

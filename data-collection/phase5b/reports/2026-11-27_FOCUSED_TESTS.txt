@@ -1,0 +1,38 @@
+✔ real audit process reads escape-bearing gh logs privately and retains no-proof failures (519.575542ms)
+✔ preserves 13 scoped closures and all 45 open families, with P0 first (10.706167ms)
+✔ rejects duplicate IDs, closure drift, missing evidence and inconsistent run states (1.354333ms)
+✔ does not promote candidate or historical loss from green CI or SOURCE success (0.155583ms)
+✔ consecutive F/I/C/T identifiers, valid reciprocal references and durable operator entrypoint (9.446416ms)
+✔ F032: historical crosswalk repeats IDs without registering them twice (0.161834ms)
+✔ primary duplicate, missing section, malformed row and wrong reference remain fatal (0.857458ms)
+✔ T058 every failure and implementation has a corresponding actual regression mapping (0.250625ms)
+✔ T060 each named failure in a multi-failure T must match its own implementation (0.144166ms)
+✔ T116 actual matrix has binary closure, immutable IDs, evidence and scientific severity (1.346292ms)
+✔ T116 refuses premature closure, duplicates, omissions, count and risk drift (4.33925ms)
+✔ T114 expired original metadata remains an acquisition, not a retained PRE (1.375ms)
+✔ T114 distinguish live, unknown custody and global research fragments (0.167333ms)
+✔ T114 contradicting counts, duplicate cells and invalid storage counts refuse (0.362209ms)
+✔ T114 read-only owner transaction emits no successful receipt on rollback failure (2.230167ms)
+✔ only fixed complete diagnostic lines are returned, never arbitrary captured data (1.085042ms)
+✔ HTTP diagnostic labels distinguish auth, rate, client, server, OK and other without body or URL (0.142083ms)
+✔ native POST error reporting reveals only fixed stages and SQL categories (0.245916ms)
+✔ SOURCE post-reservation and custody diagnostics retain exact fixed causes, never raw errors (0.118042ms)
+✔ fixed body diagnostics survive subprocess filtering without raw provider content (0.089ms)
+✔ T024 fixed outer SOURCE stages preserve SQL category without leaking any error content (0.152333ms)
+✔ T054 frozen 31-day split distinguishes unprepared denominator, source missingness and cross-partition collision (2.37375ms)
+✔ T080 paid child evidence requires exact job/step and complete actual diagnostic, not HTTP/ACK/CI color (0.836542ms)
+✔ T081 real GitHub masked step name and second-precision interval retain timely SOURCE while independently labeling failed PRE (0.196333ms)
+✔ T091 full prearm cannot hide terminal SOURCE failures from the bounded audit (0.447792ms)
+✔ T091 exact observed no-content remains unobserved and no replay; generic and contradictory results are not relabeled (0.51875ms)
+✔ T092 slot denominator retains missing reservations and reconciles all 93 horizon cells (0.451459ms)
+✔ T093 exact run-level custody corroboration detects missing, duplicate and contradictory ledger evidence (0.364625ms)
+✔ T111 exact response status diagnostics cannot conflate 206 or unexpected 2xx with 200 (0.053667ms)
+✔ T112 fixed transport failure categories never echo arbitrary error details (0.22025ms)
+ℹ tests 30
+ℹ suites 0
+ℹ pass 30
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 572.835916

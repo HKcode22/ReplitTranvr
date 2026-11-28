@@ -47,7 +47,10 @@ const STEPS: Step[] = [
 
 function run(cmd: string): boolean {
   try {
-    execSync(cmd, { stdio: "ignore", timeout: 300000 });
+    // Preserve the same checks but expose their real output in CI. This
+    // aggregate is now the single runner for the offline suites, so a failed
+    // prerequisite must include its diagnostic instead of only a red label.
+    execSync(cmd, { stdio: "inherit", timeout: 300000 });
     return true;
   } catch {
     return false;

@@ -8,7 +8,8 @@
  *  - T-24h is the comparator horizon.
  *  - Actual physical gate-out is strictly distinct from schedule revisions,
  *    estimates, wheels-off proxies and arrival ETA.
- *  - Chronological 20/5/6 split and same-flight group isolation are enforced.
+ *  - Split and group consistency are checked against supplied anchors; a
+ *    production authenticated readback must establish their provenance.
  *
  * Pure in-memory reconciliation: zero provider calls, zero DB writes, zero
  * synthetic labels, zero approval fabrication.
@@ -42,6 +43,12 @@ export interface P5PreservedPreOutcomeAnchor{
  phase7GroupId:string;
  preIssuedAtUtc:string;
  predictionCutoffUtc:string;
+ /** Authenticated committed PRE fields; required for conditional attribution. */
+ manifestSha256?:string;
+ preIssueReceiptSha256?:string;
+ originalSourceQueryId?:string;
+ originalSourceResponseSha256?:string;
+ selectedScheduledDepartureUtc?:string;
 }
 
 export interface P5NativePhysicalOutcomeEvidence{
@@ -64,8 +71,8 @@ export interface P5ConditionalScheduleOutcomeEvidence{
 export type P5OutcomeEvidence=P5NativePhysicalOutcomeEvidence|P5ConditionalScheduleOutcomeEvidence;
 
 export type P5MatchedOutcomeClassification=
- |"OBSERVED_NATIVE_PHYSICAL_GATE_OUT"
- |"OBSERVED_CONDITIONAL_SCHEDULE_REVISION_ONLY"
+ |"NATIVE_PHYSICAL_GATE_OUT_CANDIDATE_UNCERTIFIED"
+ |"SIGNED_CONDITIONAL_REVISION_CANDIDATE_UNVERIFIED_ANCHOR"
  |"CANCELLED_SEPARATE_OUTCOME"
  |"PENDING_OUTCOME_EVIDENCE"
  |"CENSORED_PHYSICAL_GATE_OUT_MISSING"
@@ -97,6 +104,8 @@ export function matchP5PreservedPreToSeparatedPostOutcomes(
  if(!Array.isArray(anchors)||anchors.length>10000||!Array.isArray(outcomes)||outcomes.length>10000)
   hold("BOUNDED_INPUT_REQUIRED");
  const seenAnchor=new Set<string>();
+ const usedSnapshots=new Set<string>(),usedFragments=new Set<string>();
+ const groupOwners=new Map<string,string>();
  const legs=new Map<string,{
   flightInstanceId:string;identityTier:P5PostIdentityTier;runDayIndex:number;
   split:P5PostSplit;slot:P5PostSlot;phase7GroupId:string;
@@ -120,6 +129,12 @@ export function matchP5PreservedPreToSeparatedPostOutcomes(
   const anchorKey=a.flightInstanceId+"|"+a.horizon;
   if(seenAnchor.has(anchorKey))hold("DUPLICATE_FLIGHT_HORIZON_ANCHOR");
   seenAnchor.add(anchorKey);
+  if(usedSnapshots.has(a.preSnapshotId)||usedFragments.has(a.phase7FragmentRowId))
+   hold("REUSED_PRE_OR_FRAGMENT_IDENTIFIER");
+  usedSnapshots.add(a.preSnapshotId);usedFragments.add(a.phase7FragmentRowId);
+  const groupOwner=groupOwners.get(a.phase7GroupId);
+  if(groupOwner&&groupOwner!==a.flightInstanceId)hold("GROUP_REUSED_ACROSS_FLIGHTS");
+  groupOwners.set(a.phase7GroupId,a.flightInstanceId);
   const split=splitForDay(a.runDayIndex);
   const existing=legs.get(a.flightInstanceId);
   if(existing){
@@ -154,7 +169,8 @@ export function matchP5PreservedPreToSeparatedPostOutcomes(
   pairedT6T90:0,
   fullT24T6T90Triple:0,
   observedNativePhysicalGateOut:0,
-  observedConditionalScheduleRevisionOnly:0,
+  nativePhysicalCandidatesUncertified:0,
+  signedConditionalRevisionCandidatesUnverifiedAnchor:0,
   cancelledSeparateOutcome:0,
   pendingOutcomeEvidence:0,
   censoredPhysicalGateOutMissing:0,
@@ -183,8 +199,8 @@ export function matchP5PreservedPreToSeparatedPostOutcomes(
      hold("NATIVE_OUTCOME_PRE_ISSUED_CLOCK_DRIFT");
     const assessed=assessP5AmendmentEGateOutDelayCandidate(out.gateOutInput);
     if(assessed.status==="MATCHED_ACTUAL_GATE_OUT_CANDIDATE"&&assessed.hasNumericalCandidate){
-     classification="OBSERVED_NATIVE_PHYSICAL_GATE_OUT";
-     physicalGateOutCertified=true;
+     // The candidate evaluator does not authenticate physical truth or rights.
+     classification="NATIVE_PHYSICAL_GATE_OUT_CANDIDATE_UNCERTIFIED";
      candidatePhysicalDelayMinutes=assessed.candidateDelayMinutes;
     }else if(assessed.status==="CANCELLATION_SEPARATE_OUTCOME"){
      classification="CANCELLED_SEPARATE_OUTCOME";
@@ -195,13 +211,32 @@ export function matchP5PreservedPreToSeparatedPostOutcomes(
     }
    }else{
     if(!hasT6Primary)hold("CONDITIONAL_OUTCOME_REQUIRES_SAME_LEG_T6_PRIMARY");
+    const t6=leg.horizons.get("T-6h")!;
+    // The signed pair is internally consistent, but must also identify this
+    // committed PRE. The anchor fields must come from authenticated storage.
+    let signedPre:Record<string,unknown>;
+    try{signedPre=JSON.parse(Buffer.from(out.preWire.bodyBase64,"base64").toString("utf8"));}
+    catch{hold("CONDITIONAL_PRE_WIRE_INVALID");}
+    if(!SHA.test(t6.manifestSha256??"")||!SHA.test(t6.preIssueReceiptSha256??"")||
+       !/^[0-9a-f-]{36}$/.test(t6.originalSourceQueryId??"")||
+       !SHA.test(t6.originalSourceResponseSha256??"")||
+       !t6.selectedScheduledDepartureUtc||
+       signedPre!.serviceKey!==t6.flightInstanceId||signedPre!.runDayIndex!==t6.runDayIndex||
+       signedPre!.horizon!==t6.horizon||signedPre!.manifestSha256!==t6.manifestSha256||
+       signedPre!.preIssueReceiptSha256!==t6.preIssueReceiptSha256||
+       signedPre!.sourceQueryId!==t6.originalSourceQueryId||
+       signedPre!.sourceResponseSha256!==t6.originalSourceResponseSha256||
+       signedPre!.firstScheduledDepartureUtc!==t6.selectedScheduledDepartureUtc||
+       signedPre!.preIssuedUtc!==t6.preIssuedAtUtc||
+       Date.parse(t6.predictionCutoffUtc)!==Date.parse(t6.selectedScheduledDepartureUtc)-21600000)
+      hold("CONDITIONAL_PAIR_NOT_BOUND_TO_COMMITTED_PRE");
     const measured=measureP5ConditionalSignedSchedulePair(out.trust,out.preWire,out.postWire,out.dbObservedUtc);
     if(measured.conditionalTierOnly!==true||measured.physicalGateOutCertified!==false)
      hold("CONDITIONAL_PAIR_CANNOT_CERTIFY_PHYSICAL_GATE_OUT");
     conditionalScheduleRevisionOnly=true;
     conditionalRevisionStatus=measured.status;
     if(measured.status==="OBSERVED_REVISION_GE_15_MIN"||measured.status==="OBSERVED_REVISION_LT_15_MIN")
-     classification="OBSERVED_CONDITIONAL_SCHEDULE_REVISION_ONLY";
+     classification="SIGNED_CONDITIONAL_REVISION_CANDIDATE_UNVERIFIED_ANCHOR";
     else
      classification="CENSORED_CONDITIONAL_REVISION_UNOBSERVED";
    }
@@ -212,8 +247,8 @@ export function matchP5PreservedPreToSeparatedPostOutcomes(
   if(hasT6Primary)coverage.withT6Primary++;
   if(hasPairedT6T90)coverage.pairedT6T90++;
   if(hasFullT24T6T90Triple)coverage.fullT24T6T90Triple++;
-  if(classification==="OBSERVED_NATIVE_PHYSICAL_GATE_OUT")coverage.observedNativePhysicalGateOut++;
-  else if(classification==="OBSERVED_CONDITIONAL_SCHEDULE_REVISION_ONLY")coverage.observedConditionalScheduleRevisionOnly++;
+  if(classification==="SIGNED_CONDITIONAL_REVISION_CANDIDATE_UNVERIFIED_ANCHOR")coverage.signedConditionalRevisionCandidatesUnverifiedAnchor++;
+  else if(classification==="NATIVE_PHYSICAL_GATE_OUT_CANDIDATE_UNCERTIFIED")coverage.nativePhysicalCandidatesUncertified++;
   else if(classification==="CANCELLED_SEPARATE_OUTCOME")coverage.cancelledSeparateOutcome++;
   else if(classification==="PENDING_OUTCOME_EVIDENCE")coverage.pendingOutcomeEvidence++;
   else if(classification==="CENSORED_PHYSICAL_GATE_OUT_MISSING")coverage.censoredPhysicalGateOutMissing++;
@@ -233,6 +268,7 @@ export function matchP5PreservedPreToSeparatedPostOutcomes(
   matchedLegs:Object.freeze(matched),
   nativeAndConditionalOutcomesStrictlySeparated:true,
   scheduleRevisionNeverSubstitutedForPhysicalGateOut:true,
+  productionAnchorReadbackVerified:false,
   providerCalls:0,databaseWrites:0,phase6PaidGo:false
  });
 }

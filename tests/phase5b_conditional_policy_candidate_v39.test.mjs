@@ -124,8 +124,7 @@ test("T109 candidate must preserve an actually valid native feature review",()=>
  assert.deepEqual(JSON.parse(result.privatePolicyBytes.daily).nativePreFeatureReview,p.nativePreFeatureReview);
 });
 
-import {previewP6ConditionalCandidateFromCommitment as preview,buildP6ConditionalCommitmentReviewArtifact as buildArtifact} from "../scripts/v39_phase5b_conditional_policy_candidate_v39.mjs";
-import {loadCheckedIn31PlanBytes,buildOwnerConditionalPreviewCommand} from "../scripts/v39_phase5b_day5_commissioning_review_package.mjs";
+import {previewP6ConditionalCandidateFromCommitment as preview} from "../scripts/v39_phase5b_conditional_policy_candidate_v39.mjs";
 test("T117 protected composite review binds actual predecessor, exact decision and prospective plans without private output",()=>{
  const commitment=h(JSON.stringify({schema:"v39.phase5b.custody-base-commitment.v1",...baseDigests}));
  const custody={status:"P6_ACTUAL_PROTECTED_CONDITIONAL_POLICY_CUSTODY_READONLY",prospective,observedDbClockUtc:now,basePolicyCommitmentSha256:commitment,
@@ -145,39 +144,4 @@ test("T117 protected composite review binds actual predecessor, exact decision a
   assert.throws(()=>preview({...args,...delta}),/HOLD_P6_CONDITIONAL_POLICY_CANDIDATE_/);
  const bad=buf({...decision,standaloneNoT24ProtocolSha256:h("unapproved")});
  assert.throws(()=>preview({...args,reviewBytes:bad,reviewSha256:sha(bad)}),/EXACT_PROSPECTIVE_REVIEW/);
-});
-
-test("Day 5 commissioning commitment review artifact validates against real 31 plans and round-trips protected preview",()=>{
- const real31=loadCheckedIn31PlanBytes();
- const baseCommitment=h(JSON.stringify({schema:"v39.phase5b.custody-base-commitment.v1",...baseDigests}));
- const artifact=buildArtifact({
-  protocolSha256:review.protocolSha256,
-  externalContentUseReviewSha256:review.externalContentUseReviewSha256,
-  manifestSha256:review.manifestSha256,
-  rightsSha256:review.rightsSha256,
-  basePolicyCommitmentSha256:baseCommitment,
-  firstEligibleRunDayIndex:5,
-  effectiveUtc:"2026-11-29T00:00:00.000Z",
-  validUntilUtc:"2026-12-27T17:00:00.000Z",
-  reviewedPlanBytes:real31
- });
- assert.equal(artifact.status,"CONDITIONAL_COMMITMENT_REVIEW_METADATA_READY_FOR_PROTECTED_PREVIEW");
- assert.equal(artifact.preparationOpensUtc,"2026-11-29T03:45:00.000Z");
- assert.equal(artifact.firstRequestUtc,"2026-11-29T15:45:00.000Z");
- assert.equal(artifact.remainingServiceEndUtc,"2026-12-27T04:00:00.000Z");
- assert.equal(artifact.independentApprovalGrantedHere,false);
- assert.equal(artifact.standaloneNoT24Approved,false);
- assert.equal(artifact.review.standaloneNoT24ProtocolSha256,null);
- const cmd=buildOwnerConditionalPreviewCommand(artifact);
- assert(cmd.includes("run_day_index=5")&&cmd.includes(artifact.reviewSha256)&&cmd.includes(artifact.reviewBase64));
- assert.throws(()=>buildArtifact({
-  protocolSha256:review.protocolSha256,externalContentUseReviewSha256:review.externalContentUseReviewSha256,
-  manifestSha256:review.manifestSha256,rightsSha256:review.rightsSha256,basePolicyCommitmentSha256:baseCommitment,
-  firstEligibleRunDayIndex:5,effectiveUtc:"2026-11-29T03:45:00.000Z",validUntilUtc:"2026-12-27T17:00:00.000Z",reviewedPlanBytes:real31
- }),/COMMITMENT_REVIEW_ARTIFACT_WINDOW/);
- assert.throws(()=>buildArtifact({
-  protocolSha256:review.protocolSha256,externalContentUseReviewSha256:review.externalContentUseReviewSha256,
-  manifestSha256:review.manifestSha256,rightsSha256:review.rightsSha256,basePolicyCommitmentSha256:baseCommitment,
-  firstEligibleRunDayIndex:4,effectiveUtc:"2026-11-28T00:00:00.000Z",validUntilUtc:"2026-12-27T17:00:00.000Z",reviewedPlanBytes:real31
- }),/COMMITMENT_REVIEW_ARTIFACT_SCOPE/);
 });

@@ -1,0 +1,15 @@
+{
+  "beforeObservedAtUtc": "2026-11-27T13:44:40.430Z",
+  "afterObservedAtUtc": "2026-11-27T13:47:59.226Z",
+  "sameRunIdsCompared": 60,
+  "beforeStatus": "PAID_STEP_LOG_UNAVAILABLE_OR_NO_DIAGNOSTIC",
+  "afterMatchedStatuses": {
+    "TIMELY_ORIGINAL_REPORTED_BY_CHILD": 30,
+    "HTTP_NO_CONTENT_UNOBSERVED_NO_ORIGINAL_PROOF": 30
+  },
+  "afterTerminalSelected": 64,
+  "afterTerminalOmitted": 4,
+  "collectionImprovementClaimed": false,
+  "actualPreCommitVerified": false,
+  "providerBillingVerified": false
+}
