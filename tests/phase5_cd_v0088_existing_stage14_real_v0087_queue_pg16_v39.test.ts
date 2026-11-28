@@ -17,7 +17,8 @@ import {makeP5CdV0091RegisterArgs,makeP5CdReviewedSourceRegistrationCall} from "
  * This test differs by applying REAL staged V0087 + V0088, not p5_cd_stage14_ci.
  */
 import {beforeAll,afterAll,describe,it,expect} from "vitest";
-import {Pool} from "pg";
+import {Pool,Client} from "pg";
+import {inspectV0115,installV0115Once,V0115_PATH,NATIVE_PATH} from "../scripts/v39_phase5b_v0115_owner_once_v39.mjs";
 import {createHash,generateKeyPairSync,sign} from "node:crypto";
 import {URL as NodeURL} from "node:url";
 import {readFileSync} from "node:fs";
@@ -30,7 +31,7 @@ import {hashPhase7DurableCandidate} from "../server/lib/disruption/phase7Durable
 const sha=(s:string)=>createHash("sha256").update(s).digest("hex");
 const P7=process.env.V39_P7_STAGE14_PRESERVATION_DISPOSABLE==="1";
 const P7READER="phase7_pre_fragment_ci_reader";
-const P7SCOPED="phase7_post_group_ci_reader";
+const P7SCOPED=process.env.V39_P5B_CONDITIONAL_POST_WITNESS_CI==="1"?"phase7_post_scoped_prod20261120":"phase7_post_group_ci_reader";
 import {readPhase7PostScopedGroup,readPhase7ConditionalT6ScopedGroup} from "../server/lib/disruption/phase7PostScopedGroup_v39";
 import {
  persistP5V0079SingleBoundFlightPre,
@@ -229,8 +230,29 @@ active("Phase5 C+D actual Stage14 source-bound parallel PRE on disposable PG16",
    p7Reader=new Pool({connectionString:LOGIN_URL.replace(ROLE,P7READER),max:2});
    await admin.query("CREATE ROLE "+P7SCOPED+" LOGIN PASSWORD 'ci-only' NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOINHERIT; GRANT USAGE ON SCHEMA phase7_private TO "+P7SCOPED+"; GRANT EXECUTE ON FUNCTION phase7_private.read_bound_pre_group_v39(text,bigint,text,text,integer,text,text) TO "+P7SCOPED);
    if(process.env.V39_P5B_CONDITIONAL_POST_T6_CI==="1"){
-    await admin.query(readFileSync("migrations/staged/V0115__phase5b_conditional_t6_scoped_packet_b_read_v39.sql","utf8"));
-    await admin.query("GRANT EXECUTE ON FUNCTION phase7_private.read_bound_conditional_t6_group_v39(text,bigint,text,text,integer,text,text,text) TO "+P7SCOPED);
+    if(process.env.V39_P5B_CONDITIONAL_POST_WITNESS_CI==="1"){
+     // Authentic NONSUPERUSER owner and the existing exact production role
+     // name, with disposable credentials and original native body.
+     await admin.query("ALTER SCHEMA phase7_private OWNER TO neondb_owner");
+     await admin.query("ALTER FUNCTION phase7_private.read_bound_pre_group_v39(text,bigint,text,text,integer,text,text) OWNER TO neondb_owner");
+     await admin.query("GRANT SELECT ON ALL TABLES IN SCHEMA phase7_private TO neondb_owner");
+     await admin.query("GRANT SELECT ON clean.flight_snapshots,clean.flight_population,clean.fids_query_response,clean.phase5_fids_original_binding_v39,clean.phase5_fids_allowed_query_v39 TO neondb_owner");
+     const open=async()=>{const c=new Client({connectionString:"postgresql://neondb_owner:ci-only-day-real@localhost:5432/neondb?sslmode=disable"});await c.connect();return c;};
+     const bytes=readFileSync(V0115_PATH),nativeBytes=readFileSync(NATIVE_PATH),args={open,bytes,nativeBytes};
+     expect((await inspectV0115(args)).status).toBe("V0115_ABSENT_EXACT_NATIVE_AND_READER_NO_GO");
+     await expect(installV0115Once({...args,bytes:Buffer.from("not reviewed SQL")})).rejects.toThrow("EXACT_SQL_BLOBS");
+     const installed=await installV0115Once(args);
+     expect(installed).toMatchObject({status:"V0115_INSTALLED_EXACT_NO_GO",schemaInstalled:true,studyDataWrites:0,phase6PaidGo:false});
+     expect(await installV0115Once(args)).toMatchObject({schemaInstalled:false,alreadyInstalledNoReplay:true});
+     await admin.query("GRANT EXECUTE ON FUNCTION phase7_private.read_bound_conditional_t6_group_v39(text,bigint,text,text,integer,text,text,text) TO PUBLIC");
+     await expect(inspectV0115(args)).rejects.toThrow("EXACT_FUNCTION_ACL");
+     await admin.query("REVOKE EXECUTE ON FUNCTION phase7_private.read_bound_conditional_t6_group_v39(text,bigint,text,text,integer,text,text,text) FROM PUBLIC");
+     expect((await inspectV0115(args)).status).toBe("V0115_INSTALLED_EXACT_NO_GO");
+     console.log("S010_V0115_ACTUAL_NONSUPERUSER_OWNER_INSTALL_EXACT_ACL_NO_REPLAY_PASS");
+    }else{
+     await admin.query(readFileSync(V0115_PATH,"utf8"));
+     await admin.query("GRANT EXECUTE ON FUNCTION phase7_private.read_bound_conditional_t6_group_v39(text,bigint,text,text,integer,text,text,text) TO "+P7SCOPED);
+    }
    }
    p7Scoped=new Pool({connectionString:LOGIN_URL.replace(ROLE,P7SCOPED),max:1});
    const shared={version:"v01",featureDictionarySha256:sha("synthetic dictionary"),termsReviewSha256:sha("synthetic terms"),derivedWorkReviewSha256:sha("synthetic derived review")};

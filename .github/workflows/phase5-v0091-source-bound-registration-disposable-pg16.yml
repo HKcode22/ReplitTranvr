@@ -19,6 +19,7 @@ on:
       - 'migrations/staged/V0100__phase6_restartable_exact_v0091_enrollment_v39.sql'
       - 'scripts/v39_phase6_conditional_post_preservation_read_v39.ts'
       - 'migrations/staged/V0115__phase5b_conditional_t6_scoped_packet_b_read_v39.sql'
+      - 'scripts/v39_phase5b_v0115_owner_once_v39.mjs'
       - 'server/lib/disruption/phase7PostScopedGroup_v39.ts'
       - 'server/lib/disruption/phase6LaterT24EvidenceBatchReadOnly_v39.ts'
       - 'server/lib/disruption/phase6PostNativePreCandidateReadOnce_v39.mjs'
