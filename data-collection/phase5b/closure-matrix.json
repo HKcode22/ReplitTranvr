@@ -727,7 +727,7 @@
       "closureStatus": "CLOSED",
       "scientificRisk": "OPERATIONAL",
       "workstream": "release_reliability",
-      "closureEvidence": "After #979 merge ancestry reconciliation, exact #980 head 0f1cfca4 triggered only 10 of 23 mandatory offline workflows because 13 pull_request path filters did not match the new release helper. No production failure."
+      "closureEvidence": "After #979 merge ancestry reconciliation, exact #980 head 0f1cfca4 triggered only 10 of 23 mandatory offline workflows because 13 pull_request path filters did not match the new release helper. No production failure. #982 f1b8a49d launched 29 paths but missed three mandatory scientific siblings (V0088, V0091, Amendment E endpoint); explicit existing helper triggers added under I139/T135, exact CI pending."
     },
     {
       "id": "F053",
