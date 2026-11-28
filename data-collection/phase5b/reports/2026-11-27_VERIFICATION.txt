@@ -1,0 +1,84 @@
+Candidate integration update: remote fb346f15 integrated; redundant local native census removed in favor of existing I124/T118 exact PG16 CI46002504853. Candidate includes I129/T123 actual log transport fix and I130/T124 report, registry58F/130I/124T/10C. Current Node suite30/30 passed; exact committed CI pending. Historical exploratory PG14 tests below are not an additional published census.
+
+Local verification, Node 26.8.1 / PostgreSQL 14.20 (not CI PG16):
+New reporting and actual disposable SQL tests: 6 passed, 0 failed, 0 skipped.
+Additional real audit CLI subprocess regression: 1 passed.
+Combined focused suite: 32 passed, 1 skipped (PG fixture requires explicit disposable URL; separately executed above).
+Existing recovery register + inventory + diagnostics: 26 passed.
+TypeScript npm run check: exit 0.
+Focused ESLint: exit 0.
+Workflow YAML parsed; new tests wired into existing offline and PG16 jobs, not executed remotely for this patch.
+
+Full npm test output follows. Do not label suite green.
+
+
+> rest-express@1.0.1 test
+> vitest run
+
+
+ RUN  v4.1.11 /Users/hk/Documents/ChatGPT/travnr/ReplitTranvr-phase5b
+
+ ❯ tests/phase5_actual_nov22_budget_proposal_v39.test.ts (20 tests | 2 failed) 11924ms
+     × builds actual content-bound release identity candidates and all 31 plan digests, but no runnable authorization 154ms
+     × regenerates all unsigned source plan digests from the real compiler with no authorization 120ms
+ ❯ tests/phase5_callback_release_v5_reviewed_build_v39.test.ts (3 tests | 1 failed) 177ms
+     × actual source-equivalence when the pinned ancestry is present; otherwise fails closed 139ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 3 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/phase5_actual_nov22_budget_proposal_v39.test.ts > actual first seed to original B0062 and 31-day plan compilers > builds actual content-bound release identity candidates and all 31 plan digests, but no runnable authorization
+Error: HOLD_P6_ACTUAL_RELEASE_EXPORT_REVIEW_CHECKOUT_NOT_EXACT_CLEAN_TRACKED_CODE
+ ❯ hold scripts/v39_phase6_actual_release_candidate_export_v39.ts:18:37
+     16| const hash=(b:Buffer|string)=>createHash("sha256").update(b).digest("h…
+     17| const H=/^[a-f0-9]{64}$/;
+     18| const hold=(s:string):never=>{throw Error("HOLD_P6_ACTUAL_RELEASE_EXPO…
+       |                                     ^
+     19| type AssemblyInput=Parameters<typeof assembleP6ActualFirstSeedReleaseC…
+     20| /** Preserve the one actual first seed, used for both review and expor…
+ ❯ inspectP6ExactReviewCheckout scripts/v39_phase6_actual_release_candidate_export_v39.ts:410:3
+ ❯ prepareP6ActualReleaseIdentityReview scripts/v39_phase6_actual_release_candidate_export_v39.ts:447:17
+ ❯ tests/phase5_actual_nov22_budget_proposal_v39.test.ts:454:11
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/3]⎯
+
+ FAIL  tests/phase5_actual_nov22_budget_proposal_v39.test.ts > Monday prospective release candidate compiler (unsigned, no GO) > regenerates all unsigned source plan digests from the real compiler with no authorization
+Error: HOLD_P6_ACTUAL_RELEASE_EXPORT_REVIEW_CHECKOUT_NOT_EXACT_CLEAN_TRACKED_CODE
+ ❯ hold scripts/v39_phase6_actual_release_candidate_export_v39.ts:18:37
+     16| const hash=(b:Buffer|string)=>createHash("sha256").update(b).digest("h…
+     17| const H=/^[a-f0-9]{64}$/;
+     18| const hold=(s:string):never=>{throw Error("HOLD_P6_ACTUAL_RELEASE_EXPO…
+       |                                     ^
+     19| type AssemblyInput=Parameters<typeof assembleP6ActualFirstSeedReleaseC…
+     20| /** Preserve the one actual first seed, used for both review and expor…
+ ❯ inspectP6ExactReviewCheckout scripts/v39_phase6_actual_release_candidate_export_v39.ts:410:3
+ ❯ prepareP6ActualReleaseIdentityReview scripts/v39_phase6_actual_release_candidate_export_v39.ts:447:17
+ ❯ tests/phase5_actual_nov22_budget_proposal_v39.test.ts:559:11
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/3]⎯
+
+ FAIL  tests/phase5_callback_release_v5_reviewed_build_v39.test.ts > Phase5 V5 reviewed callback receiver / mode-separated expiry release > actual source-equivalence when the pinned ancestry is present; otherwise fails closed
+AssertionError: expected 2 to be +0 // Object.is equality
+
+- Expected
++ Received
+
+- 0
++ 2
+
+ ❯ tests/phase5_callback_release_v5_reviewed_build_v39.test.ts:36:26
+     34|    expect(result.status).not.toBe(0);
+     35|   }else{
+     36|    expect(result.status).toBe(0);
+       |                          ^
+     37|    expect(result.stdout.trim()).toBe("PHASE5_V5_CALLBACK_SOURCE_EQUIVA…
+     38|   }
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/3]⎯
+
+
+ Test Files  2 failed | 651 passed | 51 skipped (704)
+      Tests  3 failed | 4608 passed | 259 skipped (4870)
+   Start at  05:42:09
+   Duration  26.25s (transform 17.52s, setup 0ms, import 51.55s, tests 42.19s, environment 74ms)
+
+Exact clean successor f85f71cef401730a960fb56a519099f4c99ca487 full local Vitest:653files passed,51skipped;4616tests passed,259skipped,0failed. Prior failures in this file are superseded by source restoration and corrected test expectation; no guard bypass. New I132/T126 owner wait runs nine shell scenarios, no actual deployment. Exact latest-head GitHub checks still required.

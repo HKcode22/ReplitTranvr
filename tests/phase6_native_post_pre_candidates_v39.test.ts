@@ -106,6 +106,23 @@ describe("native POST candidate pages require exact signed SOURCE and later PRE 
   expect(()=>selectP6PostNativePreCandidatePage({...args,sourceScope:{...args.sourceScope,expectedServiceWindowEndUtc:"2027-02-10T11:05:00.000Z"}})).toThrow("NATIVE_T_OUTSIDE_SIGNED_SOURCE");
   expect(()=>selectP6PostNativePreCandidatePage({...args,selector:{...f.selector,queryDigestSha256:H("9")}})).toThrow("SOURCE_QUERY_NOT_UNIQUE");
  });
+ it("isolates conditional later PRE from native anchor selection without losing valid peers",()=>{
+  const f=pendingFixture(),old=f.index.privateParsedIndex.entries[1],later=JSON.parse(f.index.getFrozen(old.filePath).toString());
+  const original=later.entries[0],conditional="leg:g5a:"+H("4");
+  function run(id:string){
+   const bytes=Buffer.from(JSON.stringify({...later,entries:[original,{...original,expectedFlightInstanceId:id,expectedPacketSha256:H("9")}]}));
+   const parsed={...f.index.privateParsedIndex,entries:[f.index.privateParsedIndex.entries[0],{...old,fileSha256:h(bytes)}]};
+   const raw=Buffer.from(JSON.stringify(parsed)),selector={...f.selector,indexSha256:h(raw)};
+   const index:any={redactedSummary:{...f.index.redactedSummary,indexSha256:h(raw)}};
+   Object.defineProperties(index,{privateParsedIndex:{value:parsed},privateCurrentIndexBytes:{value:raw},
+    getFrozen:{value:(path:string)=>path===old.filePath?bytes:f.index.getFrozen(path)}});
+   return selectP6PostNativePreCandidatePage({index,selector,trust:f.trust,sourceScope:f.a.privateSourceScope});
+  }
+  const out=run(conditional);expect(out.conditionalCandidatesExcludedFromNativeCount).toBe(1);
+  expect(out.privateCandidates.map((c:any)=>c.flightInstanceId)).toEqual(["flight_existing"]);
+  expect(JSON.stringify(out)).not.toContain(conditional);
+  expect(()=>run("leg:g5a:malformed")).toThrow("CONDITIONAL_IDENTITY_NAMESPACE_DRIFT");
+ });
  it("refuses unapproved runtime before a restricted SQL read",async()=>{
   const f=pendingFixture();let calls=0;
   await expect(readP6ActualNativePostPreCandidatePage({
@@ -157,6 +174,10 @@ describe("prospective native POST physical request drafts",()=>{
   expect(JSON.stringify(x)).not.toContain("flight_synthetic_anchor");
   expect(proposeP6NativePostPhysicalWindow({...b,existingRequestSha256s:[x.requestSha256]})).toMatchObject({
    status:"POST_PHYSICAL_REQUEST_ALREADY_INDEXED_NO_REPLAY",postPacketsIssued:0});
+ });
+ it("refuses conditional identity as a native POST anchor even from a forged candidate page",()=>{
+  const f=draftFixture("T-6h","leg:g5a:"+H("a"));
+  expect(()=>proposeP6NativePostPhysicalWindow(f)).toThrow("CONDITIONAL_SERVICE_NOT_NATIVE_POST_ANCHOR");
  });
  it("no draft if original PRE expiry cannot cover the prospective actual POST window",()=>{
   const f=draftFixture();f.page.privateDecisions[0].boundPreRetentionNotAfterUtc="2027-02-10T12:45:00.000Z";
@@ -242,6 +263,31 @@ describe("prospective native POST physical request drafts",()=>{
 
 
 describe("T24-only native POST selection",()=>{
+ it("preserves native peer when a separately authenticated conditional T24 registry exists",()=>{
+  const f=fixture(),src=f.index.privateParsedIndex.entries[0],scope={...deriveP6CommittedNativeQueryScope(f.receipt,
+   selectP6CommittedNativeSourceQuery(f.index,f.selector,f.trust),f.selector,f.trust,f.policy),horizon:"T-24h"};
+  const common={manifestSha256:f.trust.manifestSha256,runDayIndex:1,sourceRegistryPath:src.filePath,sourceRegistrySha256:src.fileSha256};
+  const entry={queryDigestSha256:f.selector.queryDigestSha256,selectedTNativeUtc:"2027-02-10T11:20:00.000Z",cutoffUtc:"2027-02-09T11:20:00.000Z"};
+  const conditionalT24Scope={protocolSha256:H("3"),externalContentUseReviewSha256:H("4")};
+  const native={...common,schema:"v39.phase6.native-t24-private-registry.v1",entries:[{...entry,flightInstanceId:"leg:test:synthetic_t24"}]};
+  const conditional={...common,schema:"v39.phase6.conditional-t24-private-registry.v1",conditionalT24Scope,
+   sourceExpiresAtUtc:"2027-02-10T10:00:00.000Z",entries:[{...entry,flightInstanceId:"leg:g5a:"+H("5")}]};
+  function run(regs:any[],scopeDrift=false){
+   const list=regs.map(reg=>{const registryBytes=Buffer.from(JSON.stringify(reg));return {reg,registryBytes,review:{registrySha256:h(registryBytes),
+    ...(reg.conditionalT24Scope?{conditionalT24Scope:scopeDrift?{...conditionalT24Scope,protocolSha256:H("6")}:conditionalT24Scope}:{})}};});
+   const set:any={status:"CURRENT_PRIVATE_T24_REGISTRY_SET_NO_GO",runDayIndex:1,providerCalls:0,databaseWrites:0,phase6PaidGo:false,registryCount:list.length};
+   Object.defineProperties(set,{privateIndex:{value:f.index},privateRegistries:{value:list}});
+   return selectP6PostNativePreCandidatePage({index:f.index,selector:f.selector,trust:f.trust,sourceScope:scope,t24Current:set});
+  }
+  const page=run([conditional,native]);expect(page.conditionalCandidatesExcludedFromNativeCount).toBe(1);
+  expect(page.privateCandidates.map((c:any)=>c.flightInstanceId)).toEqual(["leg:test:synthetic_t24"]);
+  expect(run([conditional]).privateCandidates).toHaveLength(0);
+  expect(()=>run([conditional,native],true)).toThrow("T24_REGISTRY_TIER_DRIFT");
+  expect(()=>run([{...native,entries:conditional.entries}])).toThrow("T24_REGISTRY_TIER_DRIFT");
+  expect(()=>run([{...conditional,entries:native.entries}])).toThrow("T24_REGISTRY_TIER_DRIFT");
+  expect(()=>run([conditional,conditional])).toThrow("DUPLICATE_CONDITIONAL_T24_CANDIDATE");
+ });
+
  it("uses verified current T24 registry candidate metadata without inventing actual PRE",()=>{
   const f=fixture(),src=f.index.privateParsedIndex.entries[0],scope={...deriveP6CommittedNativeQueryScope(f.receipt,
    selectP6CommittedNativeSourceQuery(f.index,f.selector,f.trust),f.selector,f.trust,f.policy),horizon:"T-24h"};
@@ -285,7 +331,7 @@ describe("bounded actual PRE metadata scheduler",()=>{
    calls.push(sql);
    if(sql.startsWith("SELECT current_user"))return {rowCount:1,rows:[{role:"phase5_fids_source_prod_20261107",login:"phase5_p5_source_login_20261108",
     db:"neondb",ro:"on",version:160016,replica:false,now:at}]};
-   if(sql.startsWith("SELECT q.query_digest")){expect(args).toContain(queryDigests);return {rowCount:1,rows:[row]};}
+   if(sql.startsWith("SELECT q.query_digest")){expect(sql).toContain("s.flight_instance_id NOT LIKE 'leg:g5a:%'");expect(args).toContain(queryDigests);return {rowCount:1,rows:[row]};}
    return {rowCount:0,rows:[]};},release:()=>calls.push("RELEASE")})};
   const args={sourcePool:pool,trust:f.trust,runDayIndex:1,queryDigests,frameSha256:H("a")};
   expect(await readP6PostSourceQueryHints(args)).toMatchObject({hintCount:1,providerCalls:0,databaseWrites:0});
@@ -318,4 +364,9 @@ describe("nonpaid POST producer explicit handoff",()=>{
    {P5_POST_AUTO_DISPATCH_ENABLED:"true"}])
    expect(()=>admitP6NativePostProducer({...released,...delta})).toThrow("SEPARATE_NONPAID_PRODUCER_APPROVAL_REQUIRED");
  });
+});
+
+import {P5_FUTURE_POST_ACTUAL_PRE_SQL,P5_FUTURE_POST_ACTUAL_PRE_BATCH_SQL} from "../server/lib/disruption/phase5V0083FuturePostOriginalDb_v39";
+it("native single and batched POST lineage SQL exclude conditional service namespace",()=>{
+ for(const sql of [P5_FUTURE_POST_ACTUAL_PRE_SQL,P5_FUTURE_POST_ACTUAL_PRE_BATCH_SQL])expect(sql).toContain("s.flight_instance_id NOT LIKE 'leg:g5a:%'");
 });

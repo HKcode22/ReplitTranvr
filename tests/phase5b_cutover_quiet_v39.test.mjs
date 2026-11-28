@@ -209,3 +209,25 @@ test("T110 final 980 merge retains the full 130-minute margin and fresh database
  assert.match(merge,/gh pr ready[\s\S]*?all_main_quiet[\s\S]*?fresh_980_gap[\s\S]*?gh pr merge/);
  assert.match(merge,/FINAL_MERGE_EVIDENCE_STALE_OR_GAP/);
 });
+
+
+test("T128 #981 exact worker CI requires all scientific paths and verified skipped callback binary",()=>{
+ const h="a".repeat(40);
+ const existing=[...sourceGuards.matchAll(/"\.github\/workflows\/([^"]+\.yml)"/g)].map(x=>x[1]);
+ const rows=[...new Set(existing)].map(path=>({path:".github/workflows/"+path,head_sha:h,status:"completed",conclusion:"success",run_attempt:1}));
+ const call=rs=>runSourceGuards("target_981_ci_ok '"+JSON.stringify({total_count:rs.length,workflow_runs:rs})+"' "+h+" && echo PASS");
+ assert.equal(rows.length,29);assert.equal(call(rows).status,0);
+ for(let i=0;i<rows.length;i++)assert.notEqual(call(rows.filter((_,j)=>j!==i)).status,0);
+ assert.notEqual(call([{...rows[0],conclusion:"failure"},...rows.slice(1)]).status,0);
+ assert.notEqual(call([{...rows[0],run_attempt:2},...rows.slice(1)]).status,0);
+ const job={head_sha:h,name:"verify-offline-reviewed-receiver-build",status:"completed",conclusion:"success",steps:[
+ {name:"Prove source-equivalent callback-only build and historical constraints",conclusion:"success"},
+ {name:"Explicit worker-only callback admission or exact reviewed source",conclusion:"success"},
+ {name:"Build reviewed callback-only binary without provider or production credentials",conclusion:"skipped"}]};
+ const check=j=>runSourceGuards("target_981_callback_jobs_ok '"+JSON.stringify({total_count:1,jobs:[j]})+"' "+h+" && echo PASS");
+ assert.equal(check(job).status,0);
+ for(const bad of [{...job,head_sha:"b".repeat(40)},{...job,conclusion:"failure"},{...job,steps:job.steps.slice(0,2)},{...job,steps:job.steps.map(x=>({...x,conclusion:"success"}))}])
+  assert.notEqual(check(bad).status,0);
+ assert.match(sourceCutover,/DEPLOY_EXACT_REVIEWED_SOURCE_ONLY_TARGET_981/);
+ assert.match(sourceCutover,/RECOVER_EXACT_MERGED_SOURCE_ONLY_TARGET_981/);
+});

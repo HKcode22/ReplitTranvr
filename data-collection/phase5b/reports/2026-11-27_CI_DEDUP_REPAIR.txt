@@ -1,0 +1,22 @@
+Nov27 Phase 0 offline-safety duplicate-orchestration repair
+
+Exact post-repair source head: fd9d029f5aa7e21bed3df7d7be7c804700c59422
+Hosted exact-head run: 46070328901
+Result: offline-safety PASS, 4m07s.
+
+Previous adjacent docs-only head: 34f51732a63c082cfbad25a8e7753c2d2ee38684
+Hosted run: 46068955639
+Result: offline-safety PASS, 8m44s, with the full Phase0 checks repeated in the individual steps and aggregate.
+
+The workflow now invokes the aggregate Phase0 preflight once for typecheck, offline/full tests, lint, registry, traceability, contradiction scan and build. The aggregate now inherits child output to make failures diagnosable. Fresh/restart/no-op migration checks, staged V0065 on disposable PG16, and the separate disposable-PG16 behavior tests remain in the workflow.
+
+Observed time reduction between these two hosted runs: 4m37s (about53%). This is a small operational timing comparison, not a scientific or acquisition improvement claim. Other exact-head matrix checks passed or were explicitly skipped by protected/provider gates.
+
+Separate unresolved release check: run46070328722 / job140745459788 ran eight files/30 callback build test cases successfully, then correctly stopped at PHASE5_CALLBACK_REVIEWED_SOURCE_BUILD_HOLD because executable source differs from the immutable reviewed build pin. No callback build or deployment is claimed.
+
+Local verification on the post-repair source tree: workflow and Phase0 tests24/24; npm run v39:typecheck passed; git diff --check passed.
+
+Current PR head report-only commit: 8970f5169ab774f93d6562fafdd3a0ec6b0220c8.
+Exact-head offline-safety run: 46070993652 — PASS. Fresh B0062 bootstrap, durable history, restart no-op, pending-migration check, Drizzle reconciliation, schema/trigger verification, staged V0065 on disposable PG16, aggregate Phase0 preflight, and separate disposable-PG16 Gate3 behavior all passed.
+Current exact-head matrix non-source-build jobs passed or skipped by protected/provider gates. Callback reviewed-source check run 46070993556 remains held after all eight test files/30 cases pass because guarded executable source differs from immutable pin c3c3050e12c4e327f9c82c35c95f856f3c1cbd20. This is a deliberate release hold, not a science result.
+PR #981 remains draft and is not mergeable/deployed. The only measured repair benefit is shorter CI turnaround. Scientific PRE and Packet B output remain zero in the last reconciled production inventory.

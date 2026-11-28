@@ -174,6 +174,8 @@ test("T050 selects still-live unindexed conditional T24 independently of native 
   privateFeatureDrafts:ids.map(flightInstanceId=>({flightInstanceId})),memberReview:{privateReviewProposals:ids.map((flightInstanceId,i)=>({flightInstanceId,predictionCutoffUtc:["2035-11-25T05:25:00.000Z","2035-11-25T05:15:00.000Z","2035-11-25T05:30:00.000Z","2035-11-25T08:01:00.000Z"][i]}))}}};
  const current={status:"CURRENT_PRIVATE_T24_REGISTRY_SET_NO_GO",runDayIndex:2,observedDbClockUtc:now,privateExistingFlightIds:new Set([ids[2]])};
  assert.deepEqual(selectP6ConditionalT24ReviewPage(actual,current),[ids[0]]);
+ assert.deepEqual(selectP6ConditionalT24ReviewPage(actual,current,new Set([ids[0]])),[]);
+ assert.throws(()=>selectP6ConditionalT24ReviewPage(actual,current,[]),/CONDITIONAL_T24_PAGE_SCOPE/);
  assert.deepEqual(selectP6ConditionalT24ReviewPage(actual,{...current,privateExistingFlightIds:new Set([ids[0],ids[2]])}),[]);
  assert.throws(()=>selectP6ConditionalT24ReviewPage(actual,{...current,runDayIndex:3}),/CONDITIONAL_T24_PAGE_SCOPE/);
  assert.throws(()=>selectP6ConditionalT24ReviewPage({...actual,privateConditionalSourceReview:{...actual.privateConditionalSourceReview,privateFeatureDrafts:[{flightInstanceId:ids[0]},{flightInstanceId:ids[0]}]}},current),/CONDITIONAL_T24_PAGE_SCOPE/);

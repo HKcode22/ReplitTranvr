@@ -288,20 +288,20 @@ export function p6NativeLaterReadbackDiagnostics(actual,handoff,features,t24Appr
 }
 /** Select only still-live actual conditional draft members, separately from
  * native candidates. Never regenerate a previously issued member page. */
-export function selectP6ConditionalT24ReviewPage(actual,current){
+export function selectP6ConditionalT24ReviewPage(actual,current,attempted=new Set()){
  const review=actual?.privateConditionalSourceReview,scope=actual?.privateConditionalSourceScope,now=Date.parse(current?.observedDbClockUtc);
  if(!scope||scope.source.horizon!=="T-24h"||scope.source.runDayIndex!==current?.runDayIndex||
   !Number.isFinite(now)||current?.status!=="CURRENT_PRIVATE_T24_REGISTRY_SET_NO_GO"||
-  !(current.privateExistingFlightIds instanceof Set)||!Array.isArray(review?.privateFeatureDrafts)||
+  !(current.privateExistingFlightIds instanceof Set)||!(attempted instanceof Set)||!Array.isArray(review?.privateFeatureDrafts)||
   !Array.isArray(review?.memberReview?.privateReviewProposals))hold("CONDITIONAL_T24_PAGE_SCOPE");
  const drafts=new Set(review.privateFeatureDrafts.map(d=>d.flightInstanceId)),seen=new Set();
  if(drafts.size!==review.privateFeatureDrafts.length)hold("CONDITIONAL_T24_PAGE_SCOPE");
  const ids=[];
  for(const m of review.memberReview.privateReviewProposals){
-  if(seen.has(m.flightInstanceId)||!/^leg:g5a:[a-f0-9]{64}$/.test(m.flightInstanceId))hold("CONDITIONAL_T24_PAGE_SCOPE");
+  if(seen.has(m.flightInstanceId)||!/^leg:g5a:[a-f0-9]{64}$/.test(m.flightInstanceId)||!iso(m.predictionCutoffUtc))hold("CONDITIONAL_T24_PAGE_SCOPE");
   seen.add(m.flightInstanceId);
   const cutoff=Date.parse(m.predictionCutoffUtc);
-  if(drafts.has(m.flightInstanceId)&&!current.privateExistingFlightIds.has(m.flightInstanceId)&&cutoff>now+900000&&cutoff<=now+10800000)
+  if(drafts.has(m.flightInstanceId)&&!attempted.has(m.flightInstanceId)&&!current.privateExistingFlightIds.has(m.flightInstanceId)&&cutoff>now+900000&&cutoff<=now+10800000)
    ids.push({id:m.flightInstanceId,cutoff});
  }
  if([...drafts].some(id=>!seen.has(id)))hold("CONDITIONAL_T24_PAGE_SCOPE");
@@ -427,16 +427,23 @@ export async function runP6NativeLaterRuntime(env,phase7ProofPort){
     const raw=new pg.Pool({connectionString:x.c.sourceUrl,max:1,connectionTimeoutMillis:8000,query_timeout:25000,application_name:"p6_conditional_t24_exact_review_read"});
     const pool=makeP5Stage28DedicatedRolePool(raw,{group:"source",reviewedDedicatedLogin:"phase5_p5_source_login_20261108",forbiddenApplicationLogin:"phase5_runtime_application_login"});
     const anchor={sourceGithubRunId:scope.source.expectedSourceGithubRunId,populationQueryId:scope.expectedPopulationQueryId,responseSha256:scope.expectedResponseSha256};
-    report.conditionalReviewedCount=0;report.conditionalCommittedShardCount=0;
+    report.conditionalReviewedCount=0;report.conditionalCommittedShardCount=0;report.conditionalHeldCount=0;
+    const attempted=new Set();
     try{
      const pages=Math.ceil(actual.privateConditionalSourceReview.privateFeatureDrafts.length/96);
      for(let i=0;i<pages;i++){
       const current=await readP6T24CurrentRegistrySet({client:reader,trust,runDayIndex:handoff.runDayIndex});
-      const ids=selectP6ConditionalT24ReviewPage(actual,current);
+      const ids=selectP6ConditionalT24ReviewPage(actual,current,attempted);
       if(!ids.length)break;
+      for(const id of ids)attempted.add(id);
       report.nativeReadback.conditionalRegistryPublicationAttempted=true;
       const reviewWire=await phase7ProofPort.readConditionalT24Review({anchor,flightInstanceIds:ids});
-      const attached=await resolveP7ConditionalPublicationPage({pool,scope,requestedFlightIds:ids,reviewWire,
+      if(reviewWire===null){report.conditionalHeldCount+=ids.length;continue;}
+      const reviewedIds=reviewWire.page.reviews.map(e=>e.flightInstanceId);
+      if(!reviewedIds.length||new Set(reviewedIds).size!==reviewedIds.length||
+       reviewedIds.some((id,i)=>!ids.includes(id)||(i>0&&ids.indexOf(reviewedIds[i-1])>=ids.indexOf(id))))hold("CONDITIONAL_T24_REVIEW_SUBSET");
+      report.conditionalHeldCount+=ids.length-reviewedIds.length;
+      const attached=await resolveP7ConditionalPublicationPage({pool,scope,requestedFlightIds:reviewedIds,reviewWire,
        reviewAuthority:{expectedReviewerFingerprintSha256:fp,reviewerPublicKeyPem:publicKeyPem,expectedReviewedCodeSha:t.reviewedCodeSha,forbiddenSignerFingerprints:forbidden},
        env,port:phase7ProofPort,readClock:async()=>new Date((await reader.query("SELECT clock_timestamp() AS at")).rows[0].at).toISOString(),forbiddenSignerFingerprints:forbidden});
       const fresh=await readP6T24CurrentRegistrySet({client:reader,trust,runDayIndex:handoff.runDayIndex});

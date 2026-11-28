@@ -1,7 +1,8 @@
 import {test} from "node:test";
 import assert from "node:assert/strict";
 import {createHash,generateKeyPairSync} from "node:crypto";
-import {admitP6NonpaidSourceDayGithub,loadP6ReviewedDayPlans,selectP6NonpaidSourceDay,projectP6ConditionalPolicyCustody,conditionalPreparedRead}
+import {readFileSync} from "node:fs";
+import {admitP6NonpaidSourceDayGithub,loadP6ReviewedDayPlans,selectP6NonpaidSourceDay,projectP6ConditionalPolicyCustody,conditionalPreparedRead,readP6ConditionalCommitmentReview}
  from "../scripts/v39_phase6_nonpaid_source_day_github_runtime_v39.mjs";
 const h=b=>createHash("sha256").update(b).digest("hex"),sha=c=>c.repeat(64),code="f".repeat(40);
 const fp=k=>h(k.export({format:"der",type:"spki"}));
@@ -178,9 +179,15 @@ test("T055 reports nearest future preparation opening/deadline and exact draw/ge
  assert.equal(a.selected.runDayIndex,2);
 });
 
+
+// The actual custody workflow supplies no signer or publisher credential.
+// Other modes keep the exact original key/endpoint admission.
+const custodyEnv=e=>({...e,P6_NONPAID_DAILY_REVIEWER_PRIVATE_KEY_BASE64:"",
+ P6_NONPAID_QUERY_REVIEWER_PRIVATE_KEY_BASE64:"",P6_NONPAID_REGISTRY_REVIEWER_PRIVATE_KEY_BASE64:"",
+ P6_PRIVATE_PUBLISHER_DATABASE_URL:""});
 test("T102 protected future conditional custody is explicit owner-only, no publication or secret serialization",()=>{
- const f=fixture(),e={...f.env,GITHUB_EVENT_NAME:"workflow_dispatch",GITHUB_ACTOR:"HKcode22",
-  P6_NONPAID_SOURCE_CONFIRM:"VERIFY_FUTURE_CONDITIONAL_POLICY_CUSTODY_NO_PROVIDER",P6_NONPAID_SOURCE_REQUESTED_DAY:"5"};
+ const f=fixture(),e=custodyEnv({...f.env,GITHUB_EVENT_NAME:"workflow_dispatch",GITHUB_ACTOR:"HKcode22",
+  P6_NONPAID_SOURCE_CONFIRM:"VERIFY_FUTURE_CONDITIONAL_POLICY_CUSTODY_NO_PROVIDER",P6_NONPAID_SOURCE_REQUESTED_DAY:"5"});
  const ctx=admitP6NonpaidSourceDayGithub(e),plans=loadP6ReviewedDayPlans(ctx,f.read);
  assert.equal(ctx.mode,"conditional_custody");assert.equal(ctx.requestedDay,5);
  const r=projectP6ConditionalPolicyCustody(ctx,plans,f.calendar,f.indexes,iso(now),0,e);
@@ -234,8 +241,8 @@ test("T103 conditional custody refuses uncertain transaction cleanup and discard
 });
 
 test("T104 custody cannot skip an earlier unsigned prospective conditional day",()=>{
- const f=fixture(),e={...f.env,GITHUB_EVENT_NAME:"workflow_dispatch",GITHUB_ACTOR:"HKcode22",
-  P6_NONPAID_SOURCE_CONFIRM:"VERIFY_FUTURE_CONDITIONAL_POLICY_CUSTODY_NO_PROVIDER",P6_NONPAID_SOURCE_REQUESTED_DAY:"6"};
+ const f=fixture(),e=custodyEnv({...f.env,GITHUB_EVENT_NAME:"workflow_dispatch",GITHUB_ACTOR:"HKcode22",
+  P6_NONPAID_SOURCE_CONFIRM:"VERIFY_FUTURE_CONDITIONAL_POLICY_CUSTODY_NO_PROVIDER",P6_NONPAID_SOURCE_REQUESTED_DAY:"6"});
  const ctx=admitP6NonpaidSourceDayGithub(e),plans=loadP6ReviewedDayPlans(ctx,f.read);
  const run=()=>projectP6ConditionalPolicyCustody(ctx,plans,f.calendar,f.indexes,iso(now),0,e);
  assert.throws(run,/CONDITIONAL_CUSTODY_EARLIER_UNSIGNED_PROSPECTIVE_DAY/);
@@ -250,8 +257,8 @@ test("T104 custody cannot skip an earlier unsigned prospective conditional day",
  assert.equal(run().prospective.runDayIndex,6);
 });
 test("T105 custody accounts for the nested day-append conditional scope",()=>{
- const f=fixture(),e={...f.env,GITHUB_EVENT_NAME:"workflow_dispatch",GITHUB_ACTOR:"HKcode22",
-  P6_NONPAID_SOURCE_CONFIRM:"VERIFY_FUTURE_CONDITIONAL_POLICY_CUSTODY_NO_PROVIDER",P6_NONPAID_SOURCE_REQUESTED_DAY:"5"};
+ const f=fixture(),e=custodyEnv({...f.env,GITHUB_EVENT_NAME:"workflow_dispatch",GITHUB_ACTOR:"HKcode22",
+  P6_NONPAID_SOURCE_CONFIRM:"VERIFY_FUTURE_CONDITIONAL_POLICY_CUSTODY_NO_PROVIDER",P6_NONPAID_SOURCE_REQUESTED_DAY:"5"});
  const ctx=admitP6NonpaidSourceDayGithub(e),plans=loadP6ReviewedDayPlans(ctx,f.read);
  const marker={};
  const p={...ctx.p,nativeLaterReview:{dayAppendPolicy:{conditionalLaterPreScope:marker}}};
@@ -267,13 +274,18 @@ test("T105 custody accounts for the nested day-append conditional scope",()=>{
  p.nativeLaterReview.conditionalLaterDayAppendPolicy={conditionalLaterPreScope:marker};
  const all=run();assert.equal(all.conditionalPolicyFieldState,"ALL_FIELDS_PRESENT_NOT_COMMISSIONED_PROOF");
  assert.equal(all.actualConditionalPolicyInstalledVerified,false);
+ assert.equal(all.conditionalProtocolVarMatchesPolicy,false);
  p.nativeLaterReview.dayAppendPolicy.conditionalLaterPreScope=marker;
  assert.equal(run().conditionalPolicyFieldState,"PARTIAL_HOLD");
 });
+test("custody workflow projects the prospective protocol marker only into read-only custody",()=>{
+ const workflow=readFileSync(".github/workflows/phase6-nonpaid-source-day-prepare-publish.yml","utf8");
+ assert.match(workflow,/P6_CONDITIONAL_SERVICE_PROTOCOL_SHA256: \$\{\{ inputs\.confirm == 'VERIFY_FUTURE_CONDITIONAL_POLICY_CUSTODY_NO_PROVIDER' && vars\.P6_CONDITIONAL_SERVICE_PROTOCOL_SHA256 \|\| '' \}\}/);
+});
 
 test("T109 custody native readiness requires rights-bound actual feature review, not approved flag alone",()=>{
- const f=fixture(),e={...f.env,GITHUB_EVENT_NAME:"workflow_dispatch",GITHUB_ACTOR:"HKcode22",
-  P6_NONPAID_SOURCE_CONFIRM:"VERIFY_FUTURE_CONDITIONAL_POLICY_CUSTODY_NO_PROVIDER",P6_NONPAID_SOURCE_REQUESTED_DAY:"5"};
+ const f=fixture(),e=custodyEnv({...f.env,GITHUB_EVENT_NAME:"workflow_dispatch",GITHUB_ACTOR:"HKcode22",
+  P6_NONPAID_SOURCE_CONFIRM:"VERIFY_FUTURE_CONDITIONAL_POLICY_CUSTODY_NO_PROVIDER",P6_NONPAID_SOURCE_REQUESTED_DAY:"5"});
  const ctx=admitP6NonpaidSourceDayGithub(e),plans=loadP6ReviewedDayPlans(ctx,f.read);
  const v={approved:true,nativeT24ReviewApproved:true,independentT24WitnessProtocolReviewed:true,
   validFromUtc:ctx.p.validFromUtc,validUntilUtc:ctx.p.validUntilUtc,
@@ -287,4 +299,49 @@ test("T109 custody native readiness requires rights-bound actual feature review,
  const good=run({approved:true,rightsSha256:ctx.trust.rightsSha256,externalContentUseReviewSha256:sha("e")});
  assert.equal(good.nativePolicyPresent,true);
  assert.equal(good.actualConditionalPolicyInstalledVerified,false);
+});
+
+test("T115 custody uses no signer/publisher authority and emits only a binding commitment",()=>{
+ const f=fixture(),e=custodyEnv({...f.env,GITHUB_EVENT_NAME:"workflow_dispatch",GITHUB_ACTOR:"HKcode22",
+  P6_NONPAID_SOURCE_CONFIRM:"VERIFY_FUTURE_CONDITIONAL_POLICY_CUSTODY_NO_PROVIDER",P6_NONPAID_SOURCE_REQUESTED_DAY:"5"});
+ const ctx=admitP6NonpaidSourceDayGithub(e),plans=loadP6ReviewedDayPlans(ctx,f.read);
+ assert.equal(ctx.dailyKey,undefined);assert.equal(ctx.queryKey,undefined);assert.equal(ctx.registryKey,undefined);assert.equal(ctx.publisherUrl,undefined);
+ const a=projectP6ConditionalPolicyCustody(ctx,plans,f.calendar,f.indexes,iso(now),0,e);
+ assert.match(a.basePolicyCommitmentSha256,/^[a-f0-9]{64}$/);
+ assert.equal(a.basePolicyCommitmentSha256,h(JSON.stringify({schema:"v39.phase5b.custody-base-commitment.v1",daily:e.P6_NONPAID_DAILY_POLICY_SHA256,signing:e.P6_NONPAID_SIGNING_POLICY_SHA256,transport:e.P6_NONPAID_TRANSPORT_TRUST_SHA256})));
+ assert.equal(a.signingPrivateKeysVerified,false);assert.equal(a.publisherEndpointVerified,false);
+ assert.equal(a.signingOrPublishingCapabilityPresent,false);
+ for(const name of ["P6_NONPAID_DAILY_REVIEWER_PRIVATE_KEY_BASE64","P6_NONPAID_QUERY_REVIEWER_PRIVATE_KEY_BASE64","P6_NONPAID_REGISTRY_REVIEWER_PRIVATE_KEY_BASE64","P6_PRIVATE_PUBLISHER_DATABASE_URL"])
+  assert.throws(()=>admitP6NonpaidSourceDayGithub({...e,[name]:f.env[name]}),/CONDITIONAL_CUSTODY_WRITE_CAPABILITY_FORBIDDEN/);
+ for(const key of ["P6_NONPAID_DAILY_POLICY_SHA256","P6_NONPAID_SIGNING_POLICY_SHA256","P6_NONPAID_TRANSPORT_TRUST_SHA256"])
+  assert(!JSON.stringify(a).includes(e[key]));
+ // Ordinary runtime still rejects missing write-capability inputs.
+ assert.throws(()=>admitP6NonpaidSourceDayGithub(custodyEnv(f.env)),/WRONG_REVIEWER_PRIVATE_KEY/);
+});
+
+test("T117 optional commitment review is admitted only for owner protected custody",()=>{
+ const f=fixture(),e=custodyEnv({...f.env,GITHUB_EVENT_NAME:"workflow_dispatch",GITHUB_ACTOR:"HKcode22",P6_NONPAID_SOURCE_CONFIRM:"VERIFY_FUTURE_CONDITIONAL_POLICY_CUSTODY_NO_PROVIDER",P6_NONPAID_SOURCE_REQUESTED_DAY:"5"});
+ assert.equal(admitP6NonpaidSourceDayGithub({...e,P6_CONDITIONAL_COMMITMENT_REVIEW_SHA256:sha("a")}).mode,"conditional_custody");
+ assert.throws(()=>admitP6NonpaidSourceDayGithub({...e,P6_CONDITIONAL_COMMITMENT_REVIEW_SHA256:"wrong"}),/CONDITIONAL_COMMITMENT_REVIEW_SCOPE/);
+ assert.throws(()=>admitP6NonpaidSourceDayGithub({...f.env,P6_CONDITIONAL_COMMITMENT_REVIEW_SHA256:sha("a")}),/CONDITIONAL_COMMITMENT_REVIEW_SCOPE/);
+});
+
+test("T121 exact owner commitment review metadata transport needs no local predecessor or new main commit",()=>{
+ const f=fixture(),e=custodyEnv({...f.env,GITHUB_EVENT_NAME:"workflow_dispatch",GITHUB_ACTOR:"HKcode22",P6_NONPAID_SOURCE_CONFIRM:"VERIFY_FUTURE_CONDITIONAL_POLICY_CUSTODY_NO_PROVIDER",P6_NONPAID_SOURCE_REQUESTED_DAY:"5"});
+ const review=Buffer.from(JSON.stringify({schema:"v39.phase5b.prospective-conditional-commissioning-commitment-review.v1",firstEligibleRunDayIndex:5,basePolicyCommitmentSha256:sha("a")}));
+ const input={...e,P6_CONDITIONAL_COMMITMENT_REVIEW_SHA256:h(review),P6_CONDITIONAL_COMMITMENT_REVIEW_BASE64:review.toString("base64")};
+ assert.equal(admitP6NonpaidSourceDayGithub(input).mode,"conditional_custody");
+ assert.deepEqual(readP6ConditionalCommitmentReview(input,5,()=>{throw Error("must not read file");}),review);
+ assert.deepEqual(readP6ConditionalCommitmentReview({...input,P6_CONDITIONAL_COMMITMENT_REVIEW_BASE64:""},5,p=>{
+  assert.equal(p,"data-collection/phase5b/reviews/prospective-conditional-commissioning-day-05.json");return review;
+ }),review);
+ assert.equal(readP6ConditionalCommitmentReview(e,5),null);
+ for(const delta of [{GITHUB_ACTOR:"other"},{GITHUB_EVENT_NAME:"schedule"},{P6_NONPAID_SOURCE_CONFIRM:"ONE_APPROVED_PROSPECTIVE_SOURCE_DAY_NONPAID_PREPARE_PUBLISH"},{P6_CONDITIONAL_COMMITMENT_REVIEW_SHA256:""},{P6_NONPAID_SOURCE_REQUESTED_DAY:"6"}])
+  assert.throws(()=>readP6ConditionalCommitmentReview({...input,...delta},5),/CONDITIONAL_COMMITMENT_REVIEW_SCOPE/);
+ assert.throws(()=>admitP6NonpaidSourceDayGithub({...e,P6_CONDITIONAL_COMMITMENT_REVIEW_BASE64:review.toString("base64")}),/CONDITIONAL_COMMITMENT_REVIEW_SCOPE/);
+ assert.throws(()=>readP6ConditionalCommitmentReview({...input,P6_CONDITIONAL_COMMITMENT_REVIEW_SHA256:sha("b")},5),/UNPINNED_APPROVAL_BYTES/);
+ assert.throws(()=>readP6ConditionalCommitmentReview({...input,P6_CONDITIONAL_COMMITMENT_REVIEW_BASE64:review.toString("base64")+"="},5),/INVALID_CONDITIONAL_COMMITMENT_REVIEW/);
+ const wrong=Buffer.from(review.toString().replace('"firstEligibleRunDayIndex":5','"firstEligibleRunDayIndex":6'));
+ assert.throws(()=>readP6ConditionalCommitmentReview({...input,P6_CONDITIONAL_COMMITMENT_REVIEW_SHA256:h(wrong),P6_CONDITIONAL_COMMITMENT_REVIEW_BASE64:wrong.toString("base64")},5),/CONDITIONAL_COMMITMENT_REVIEW_DAY/);
+ assert.throws(()=>readP6ConditionalCommitmentReview({...input,P6_CONDITIONAL_COMMITMENT_REVIEW_BASE64:""},5,()=>{throw Error("absent");}),/CONDITIONAL_COMMITMENT_REVIEW_MISSING/);
 });

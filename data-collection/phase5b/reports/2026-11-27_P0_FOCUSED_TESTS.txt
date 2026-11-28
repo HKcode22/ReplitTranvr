@@ -1,0 +1,17 @@
+Nov27 P0 candidate and reporting verification
+
+Exact tested checkout: 039a17b819f9bdde8b7881fdb9bf6c84bb613d59
+
+Commands:
+  npx --no-install tsx --test tests/phase5b_conditional_policy_candidate_v39.test.mjs tests/phase5b_owner_local_policy_predecessor_v39.test.mjs
+  node --test tests/phase5b_recovery_register_v39.test.mjs tests/phase5b_progress_report_v39.test.mjs
+  git diff --check
+
+Results:
+  Conditional candidate and predecessor tests: 11 passed, 0 failed.
+  Recovery register and progress report tests: 10 passed, 0 failed.
+  Whitespace/conflict-marker check: passed.
+  Exact hosted offline-safety run46067505444: passed full job, including TypeScript, V3.9 tests, full suite, lint, registry, traceability, contradiction scan, production build, and disposable PG16 checks.
+  Exact hosted callback-only reviewed-source run46067504964: eight test files/30 cases passed, then its source-equivalence guard held because guarded executable inputs differ from reviewed PIN c3c3050e12c4e327f9c82c35c95f856f3c1cbd20. This is a release hold; no source-equivalent callback build or deployment is claimed.
+
+Scientific outcome: not demonstrated. No production PRE, Packet B, POST or physical label was created by these checks. Protected Day5 custody remains ABSENT/no-install/no-precommit from run46065789071.

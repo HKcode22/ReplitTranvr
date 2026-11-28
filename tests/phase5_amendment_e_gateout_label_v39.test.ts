@@ -177,3 +177,17 @@ describe("T075 distinct scheduled and actual evidence at candidate boundary",()=
   expect(assessP5AmendmentEGateOutDelayCandidate(x).candidateDelayMinutes).toBeNull();
  });
 });
+
+
+describe("T075 runtime gate-out evidence digest identity",()=>{
+ it("rejects malformed JSON values before comparing distinct scheduled, frozen-source and actual evidence",()=>{
+  const x=sample();
+  const asMalformed=(value:unknown)=>value as string;
+  for(const changed of [
+   {...x,outcome:{...x.outcome,evidenceSha256:asMalformed([x.scheduled.evidenceSha256])}},
+   {...x,outcome:{...x.outcome,evidenceSha256:asMalformed([x.frozenSourceOriginalSha256])}},
+   {...x,frozenSourceOriginalSha256:asMalformed([x.frozenSourceOriginalSha256])},
+   {...x,scheduled:{...x.scheduled,evidenceSha256:asMalformed([x.scheduled.evidenceSha256])}}
+  ])expect(()=>assessP5AmendmentEGateOutDelayCandidate(changed)).toThrow("INVALID_SOURCE_OR_LABEL_EVIDENCE_CONTRACT");
+ });
+});
