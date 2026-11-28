@@ -236,11 +236,11 @@ export function requireP6ConditionalPreflightClock(x,clock,actorOnly){
      t.scope?.externalContentUseReviewSha256!==f.externalContentUseReviewSha256||l.scope?.externalContentUseReviewSha256!==f.externalContentUseReviewSha256||
      t.validFromUtc!==tr.conditionalEffectiveUtc||l.validFromUtc!==tr.conditionalEffectiveUtc||
      !iso(t.validUntilUtc)||!iso(l.validUntilUtc)||!iso(l.day?.validFromUtc)||!iso(l.day?.validUntilUtc)||
-     l.day.validFromUtc!==tr.conditionalEffectiveUtc||clock>=l.day.validUntilUtc||
-     (!actorOnly&&clock<tr.conditionalEffectiveUtc))hold("CONDITIONAL_PRESERVATION_CHAIN_NOT_READY");
+     l.day.validFromUtc!==tr.conditionalEffectiveUtc)hold("CONDITIONAL_PRESERVATION_CHAIN_NOT_READY");
  }
  if(x.conditionalT24Reviewer&&(clock>=x.conditionalT24Reviewer.validUntilUtc||(!actorOnly&&clock<x.conditionalT24Reviewer.validFromUtc)))hold("CONDITIONAL_T24_REVIEWER_CLOCK");
  if(x.conditionalLaterReviewer&&(clock>=x.conditionalLaterReviewer.validUntilUtc||(!actorOnly&&clock<x.conditionalLaterReviewer.validFromUtc)))hold("CONDITIONAL_LATER_REVIEWER_CLOCK");
+ if(tr&&clock>=x.conditionalLaterReviewer.day.validUntilUtc)hold("CONDITIONAL_PRESERVATION_CHAIN_NOT_READY");
 }
 export async function preflightP6NativeLaterRuntime(env){
  const actorOnly=env.V39_P5_CHILD_CONFIRM==="ONLY_PRE_INDEPENDENT_ACTOR_PREFLIGHT_NO_PROVIDER";

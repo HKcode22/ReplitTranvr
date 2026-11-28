@@ -278,7 +278,7 @@ test("F026 conditional day must have all admitted PRE preservation actors before
  const x={nativeT24PolicyTransition:{firstConditionalRunDayIndex:5,conditionalEffectiveUtc:effective},c:{selector:{runDayIndex:5},policy:{conditionalPreFeatureReview:f}},conditionalT24Reviewer:t,conditionalLaterReviewer:l,conditionalAppendApproval:{}};
  requireP6ConditionalPreflightClock(x,before,true);
  requireP6ConditionalPreflightClock(x,now,false);
- assert.throws(()=>requireP6ConditionalPreflightClock(x,before,false),/CHAIN_NOT_READY/);
+ assert.throws(()=>requireP6ConditionalPreflightClock(x,before,false),/CONDITIONAL_T24_REVIEWER_CLOCK/);
  for(const patch of [{conditionalT24Reviewer:null},{conditionalLaterReviewer:null},{conditionalAppendApproval:null},{conditionalLaterReviewer:{...l,scope:{...scope,protocolSha256:"c".repeat(64)}}},{conditionalLaterReviewer:{...l,day:{...l.day,validUntilUtc:now}}},{c:{...x.c,policy:{}}}])
   assert.throws(()=>requireP6ConditionalPreflightClock({...x,...patch},now,true),/CHAIN_NOT_READY/);
  assert.throws(()=>requireP6ConditionalPreflightClock(x,expires,true),/CHAIN_NOT_READY|REVIEWER_CLOCK/);
