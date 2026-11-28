@@ -1,11 +1,11 @@
 {
-  "asOfUtc": "2026-11-27T20:46:08.314097Z",
-  "exactCandidate": "c4408c621a84a2549355d935cca7333c5527d3c2",
+  "asOfUtc": "2026-11-28T10:12:29Z",
+  "exactCandidate": "d9ab4eda6083edc9e0b390d9ae40b9254bcab313",
   "canonicalRegister": "../phase6/RECOVERY_REGISTER.md",
   "counts": {
-    "narrowCorrected": 16,
-    "exactCiGreenPendingDeployment": 10,
-    "partialOrOpen": 31,
+    "narrowCorrected": 23,
+    "exactCiGreenPendingDeployment": 0,
+    "partialOrOpen": 34,
     "historicalLoss": 2
   },
   "failures": [
@@ -76,9 +76,11 @@
         "I059",
         "I124",
         "I137",
-        "I138"
+        "I138",
+        "I143",
+        "I144"
       ],
-      "next": "Exact #982 CI and guarded worker-only successor; actual protected exact prospective preview, six inactive staged values, separate actual staged readback, owner selector activation, active readback, genuine cutoff-safe PRE and atomic Packet B. No retroactive markers.",
+      "next": "Deployed frozen-reference application and database repair; actual protected preview, separate stage/active readback, and genuine cutoff-safe PRE/Packet B required.",
       "closureStatus": "NOT_CLOSED",
       "scientificRisk": "P0_SCIENTIFIC",
       "workstream": "preservation_admission"
@@ -354,9 +356,10 @@
         "I087",
         "I090",
         "I120",
-        "I133"
+        "I133",
+        "I141"
       ],
-      "next": "Actual I133/T127 owner readback 2026-11-28 01:55:36Z: 148 timely, 86 live, 62 expired, zero PRE/global Packet B. Six scoped near-expiry originals all native shape fail, no tasks; no retrospective salvage; continue lawful retention and future admission.",
+      "next": "Historical scientific preservation loss cannot be backfilled. Paid maintenance hold, actual future cutoff-safe PRE and independent Packet B required.",
       "closureStatus": "NOT_CLOSED",
       "scientificRisk": "P0_SCIENTIFIC",
       "workstream": "preservation_admission"
@@ -416,9 +419,11 @@
         "I128",
         "I135",
         "I137",
-        "I138"
+        "I138",
+        "I143",
+        "I144"
       ],
-      "next": "Exact #982 CI and guarded worker-only successor; actual protected exact prospective preview, six inactive staged values, separate actual staged readback, owner selector activation, active readback, genuine cutoff-safe PRE and atomic Packet B. No retroactive markers.",
+      "next": "Deployed frozen-reference application and database repair; actual protected preview, separate stage/active readback, and genuine cutoff-safe PRE/Packet B required.",
       "closureStatus": "NOT_CLOSED",
       "scientificRisk": "P0_SCIENTIFIC",
       "workstream": "preservation_admission"
@@ -441,9 +446,12 @@
       "implementations": [
         "I005",
         "I081",
-        "I128"
+        "I128",
+        "I140",
+        "I145",
+        "I146"
       ],
-      "next": "T075 runtime strict primitive digest matching locally verified against seven malformed cases; exact CI and authentic producer/anchor/physical actual or separate conditional POST evidence still required.",
+      "next": "Deployed attribution correction; PR #983 candidate fixes conditional source clock and retimed witness comparison. Actual protected POST issuer, authentic outcome and physical-label evidence remain open.",
       "closureStatus": "NOT_CLOSED",
       "scientificRisk": "P0_SCIENTIFIC",
       "workstream": "outcome_truth"
@@ -580,7 +588,9 @@
         "I112",
         "I132",
         "I134",
-        "I139"
+        "I139",
+        "I141",
+        "I142"
       ],
       "next": "Preserve exact reviewed pins and natural-drain/quiet helper; future overlaps still require fresh guard",
       "closureStatus": "CLOSED",
@@ -607,9 +617,10 @@
       "implementations": [
         "I088",
         "I089",
-        "I093"
+        "I093",
+        "I146"
       ],
-      "next": "Protected actual POST actor admission + positive authorized POST (no new spend)",
+      "next": "Deployed attribution correction; PR #983 candidate fixes conditional source clock and retimed witness comparison. Actual protected POST issuer, authentic outcome and physical-label evidence remain open.",
       "closureStatus": "NOT_CLOSED",
       "scientificRisk": "P0_SCIENTIFIC",
       "workstream": "outcome_truth"
@@ -654,64 +665,69 @@
       "implementations": [
         "I104",
         "I106",
-        "I112"
+        "I112",
+        "I142"
       ],
-      "next": "#979 incident resolved; verify #980 safe cutover and recovery",
+      "next": "Paused exact cutover succeeded; preserve recovery safeguards for future coordinated releases.",
       "closureStatus": "NOT_CLOSED",
       "scientificRisk": "OPERATIONAL",
       "workstream": "release_reliability"
     },
     {
       "id": "F047",
-      "classification": "EXACT_CI_GREEN_DEPLOYMENT_PENDING",
+      "classification": "NARROW_CORRECTION_RECORDED",
       "implementations": [
         "I107"
       ],
-      "next": "Deploy manual redirect guard; no extra paid attempt",
-      "closureStatus": "NOT_CLOSED",
+      "next": "Preserve the deployed narrow correction; no intentional recurrence test or broader scientific acceptance inferred.",
+      "closureStatus": "CLOSED",
       "scientificRisk": "OPERATIONAL",
-      "workstream": "source_effectiveness"
+      "workstream": "source_effectiveness",
+      "closureEvidence": "One explicit fetch attempt could follow HTTP redirect and make an unreserved second physical request. Real Node loopback default followed two requests; manual redirect one. No evidence this caused F017. Exact reviewed #982 tree equals deployed main 9426eda5f749e43b1e798b1c308f5c428f696882. Exact source-diagnostics CI 46130715325 and offline safety 46130715089 passed; owner paused cutover and full retention 46133273814 verified. The scoped one-attempt transport correction is deployed and regression-tested; no deliberate live redirect or historical cause attribution required."
     },
     {
       "id": "F048",
-      "classification": "EXACT_CI_GREEN_DEPLOYMENT_PENDING",
+      "classification": "NARROW_CORRECTION_RECORDED",
       "implementations": [
         "I109"
       ],
-      "next": "Deploy fail-closed custody transaction cleanup; actual protected readback",
-      "closureStatus": "NOT_CLOSED",
+      "next": "Preserve the deployed narrow correction; no intentional recurrence test or broader scientific acceptance inferred.",
+      "closureStatus": "CLOSED",
       "scientificRisk": "OPERATIONAL",
-      "workstream": "preservation_admission"
+      "workstream": "preservation_admission",
+      "closureEvidence": "I108 swallowed an uncertain ROLLBACK; could return a success receipt despite unverified cleanup. Actual Stage28 adapter already destroys every connection on release; no actual pooled reuse or production recurrence established. Direct disposable pool fixture exercises cleanup semantics. Exact reviewed #982 tree equals deployed main 9426eda5f749e43b1e798b1c308f5c428f696882. Exact source-diagnostics CI 46130715325 and offline safety 46130715089 passed; owner paused cutover and full retention 46133273814 verified. Actual protected read-only custody run 46133743593 completed successfully on that main. The actual protected custody read completed; negative rollback/BEGIN regression refuses a receipt and discards the connection. No live rollback fault was induced."
     },
     {
       "id": "F049",
-      "classification": "EXACT_CI_GREEN_DEPLOYMENT_PENDING",
+      "classification": "NARROW_CORRECTION_RECORDED",
       "implementations": [
         "I110"
       ],
-      "next": "Deploy next unsigned-day guard; actual Day5 readback",
-      "closureStatus": "NOT_CLOSED",
+      "next": "Preserve the deployed narrow correction; no intentional recurrence test or broader scientific acceptance inferred.",
+      "closureStatus": "CLOSED",
       "scientificRisk": "P1_SCIENTIFIC",
-      "workstream": "preservation_admission"
+      "workstream": "preservation_admission",
+      "closureEvidence": "Requested day selector can skip an earlier unsigned prospective conditional day; violates next unsigned commissioning target. No production execution or recurrence. Exact reviewed #982 tree equals deployed main 9426eda5f749e43b1e798b1c308f5c428f696882. Exact source-diagnostics CI 46130715325 and offline safety 46130715089 passed; owner paused cutover and full retention 46133273814 verified. Actual protected read-only custody run 46133743593 completed successfully on that main. The actual protected selector accepted the next eligible unsigned day; negative regressions refuse skipped or partial earlier genesis. No signed calendar change."
     },
     {
       "id": "F050",
-      "classification": "EXACT_CI_GREEN_DEPLOYMENT_PENDING",
+      "classification": "NARROW_CORRECTION_RECORDED",
       "implementations": [
         "I111"
       ],
-      "next": "Deploy complete marker inventory; actual protected policy state",
-      "closureStatus": "NOT_CLOSED",
+      "next": "Preserve the deployed narrow correction; no intentional recurrence test or broader scientific acceptance inferred.",
+      "closureStatus": "CLOSED",
       "scientificRisk": "P1_SCIENTIFIC",
-      "workstream": "preservation_admission"
+      "workstream": "preservation_admission",
+      "closureEvidence": "Nested conditional successor scope omitted from custody inventory; unexpected marker on original native append policy also not detected. Could report false ABSENT or ALL_FIELDS_PRESENT. No actual commissioning proof or recurrence. Exact reviewed #982 tree equals deployed main 9426eda5f749e43b1e798b1c308f5c428f696882. Exact source-diagnostics CI 46130715325 and offline safety 46130715089 passed; owner paused cutover and full retention 46133273814 verified. Actual protected read-only custody run 46133743593 completed successfully on that main. The actual protected native-policy custody completed with the complete marker inventory; regressions refuse partial and unexpected markers. Presence is not commissioning."
     },
     {
       "id": "F051",
-      "classification": "EXACT_CI_GREEN_DEPLOYMENT_PENDING",
+      "classification": "PARTIAL_OR_OPEN",
       "implementations": [
         "I113"
       ],
-      "next": "Deploy proof actor key binding; verify actual distinct key pins",
+      "next": "Protected actual candidate preview and exact independent readback.",
       "closureStatus": "NOT_CLOSED",
       "scientificRisk": "P1_SCIENTIFIC",
       "workstream": "preservation_admission"
@@ -731,58 +747,61 @@
     },
     {
       "id": "F053",
-      "classification": "EXACT_CI_GREEN_DEPLOYMENT_PENDING",
+      "classification": "PARTIAL_OR_OPEN",
       "implementations": [
         "I115"
       ],
-      "next": "Deploy shared native feature predicate; actual rights-bound readiness",
+      "next": "Protected actual candidate preview and exact independent readback.",
       "closureStatus": "NOT_CLOSED",
       "scientificRisk": "P1_SCIENTIFIC",
       "workstream": "preservation_admission"
     },
     {
       "id": "F054",
-      "classification": "EXACT_CI_GREEN_DEPLOYMENT_PENDING",
+      "classification": "PARTIAL_OR_OPEN",
       "implementations": [
         "I116"
       ],
-      "next": "Deploy exact final clock/quiet guard; actual safe cutover",
+      "next": "Normal active-schedule freshness guard remains separately scoped; do not manufacture an active paid window to test it.",
       "closureStatus": "NOT_CLOSED",
       "scientificRisk": "OPERATIONAL",
       "workstream": "release_reliability"
     },
     {
       "id": "F055",
-      "classification": "EXACT_CI_GREEN_DEPLOYMENT_PENDING",
+      "classification": "NARROW_CORRECTION_RECORDED",
       "implementations": [
         "I117"
       ],
-      "next": "Deploy reject partial/unexpected 2xx; observe actual fault if any",
-      "closureStatus": "NOT_CLOSED",
+      "next": "Preserve the deployed narrow correction; no intentional recurrence test or broader scientific acceptance inferred.",
+      "closureStatus": "CLOSED",
       "scientificRisk": "P1_SCIENTIFIC",
-      "workstream": "source_effectiveness"
+      "workstream": "source_effectiveness",
+      "closureEvidence": "One-GET FIDS accepted valid JSON from 206 or unexpected 2xx as a complete response; current documented operation returns 200 payload or 204 no content. No actual 206 occurrence or F017 cause claimed. Exact reviewed #982 tree equals deployed main 9426eda5f749e43b1e798b1c308f5c428f696882. Exact source-diagnostics CI 46130715325 and offline safety 46130715089 passed; owner paused cutover and full retention 46133273814 verified. Exact negative transport regressions reject incomplete or unexpected successful responses; no intentional paid 206 experiment, historical cause attribution, or coverage recovery claimed."
     },
     {
       "id": "F056",
-      "classification": "EXACT_CI_GREEN_DEPLOYMENT_PENDING",
+      "classification": "NARROW_CORRECTION_RECORDED",
       "implementations": [
         "I118"
       ],
-      "next": "Deploy safe transport diagnostic categories",
-      "closureStatus": "NOT_CLOSED",
+      "next": "Preserve the deployed narrow correction; no intentional recurrence test or broader scientific acceptance inferred.",
+      "closureStatus": "CLOSED",
       "scientificRisk": "OPERATIONAL",
-      "workstream": "source_effectiveness"
+      "workstream": "source_effectiveness",
+      "closureEvidence": "SOURCE child collapses DNS, TLS, timeout and socket faults to generic transport; cannot distinguish actionable client/network causes from no-content. No historical attribution. Exact reviewed #982 tree equals deployed main 9426eda5f749e43b1e798b1c308f5c428f696882. Exact source-diagnostics CI 46130715325 and offline safety 46130715089 passed; owner paused cutover and full retention 46133273814 verified. Exact synthetic transport fault regressions separate fixed safe categories; no deliberate paid fault, historical attribution, or improved response yield claimed."
     },
     {
       "id": "F057",
-      "classification": "EXACT_CI_GREEN_DEPLOYMENT_PENDING",
+      "classification": "NARROW_CORRECTION_RECORDED",
       "implementations": [
         "I119"
       ],
-      "next": "Deploy complete signed frame guard; actual exact request path",
-      "closureStatus": "NOT_CLOSED",
+      "next": "Preserve the deployed narrow correction; no intentional recurrence test or broader scientific acceptance inferred.",
+      "closureStatus": "CLOSED",
       "scientificRisk": "P1_SCIENTIFIC",
-      "workstream": "source_effectiveness"
+      "workstream": "source_effectiveness",
+      "closureEvidence": "Scoped source bridge checked airport/local times/direction/list strictness but did not independently verify all frozen Boolean transport options and category at pre-reservation boundary. Existing census currently forwards expected options; no actual drift demonstrated. Exact reviewed #982 tree equals deployed main 9426eda5f749e43b1e798b1c308f5c428f696882. Exact source-diagnostics CI 46130715325 and offline safety 46130715089 passed; owner paused cutover and full retention 46133273814 verified. Exact mocked outbound boundary regressions refuse signed geometry and filter drift before reservation, using existing approved settings. No new paid frame or coverage result claimed."
     },
     {
       "id": "F058",
@@ -810,9 +829,9 @@
     }
   ],
   "binaryClosure": {
-    "closed": 16,
-    "notClosed": 43,
-    "definition": "CLOSED only for an explicitly evidenced, narrowly defined correction already recorded; no broader component or future recurrence guarantee. Partial, candidate-only, historical loss with unverified recurrence prevention, and missing positive production proof are NOT_CLOSED. No previously closed ID reopened."
+    "closed": 23,
+    "notClosed": 36,
+    "definition": "CLOSED only for an explicitly evidenced narrowly defined correction. Reproduced software defect plus exact regression and verified deployment can close that implementation defect without deliberately provoking an unsafe paid production fault. Scientific admission, preservation, outcome truth, historical losses and recurrence claims require their own positive evidence. No broader component or future recurrence guarantee."
   },
   "riskDefinition": {
     "P0_SCIENTIFIC": "Confirmed loss or primary preservation/outcome blocker; fix before avoidable additional loss",
