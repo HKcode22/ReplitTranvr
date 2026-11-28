@@ -4,7 +4,7 @@
  * Never print individual policy hashes, private values, paths or exceptions.
  */
 import {createHash} from "node:crypto";
-import {lstatSync,openSync,fstatSync,readFileSync,closeSync,readdirSync,constants} from "node:fs";
+import {lstatSync,openSync,fstatSync,readFileSync,closeSync,readdirSync,constants,realpathSync} from "node:fs";
 import {join} from "node:path";
 import {pathToFileURL} from "node:url";
 const H=/^[a-f0-9]{64}$/,C=/^[a-f0-9]{40}$/;
@@ -75,7 +75,11 @@ export function inspectP6OwnerLocalPolicyPredecessor(home,expectedManifest,expec
   basePolicyCommitmentSha256:commitment,actualProtectedBytesVerified:false,actualConditionalPolicyInstalledVerified:false,actualConditionalPreCommitVerified:false,
   providerCalls:0,databaseReads:0,databaseWrites:0,githubWrites:0,signaturesIssued:0,phase6PaidGo:false});
 }
-if(process.argv[1]&&import.meta.url===pathToFileURL(process.argv[1]).href){
+function invokedDirectly(){
+ if(!process.argv[1])return false;
+ try{return import.meta.url===pathToFileURL(realpathSync(process.argv[1])).href;}catch{return false;}
+}
+if(invokedDirectly()){
  try{
   if(process.argv.length!==4)hold("CLI_ARGUMENTS");
   const out=inspectP6OwnerLocalPolicyPredecessor(process.env.HOME,process.argv[2],process.argv[3]);console.log(JSON.stringify(out));

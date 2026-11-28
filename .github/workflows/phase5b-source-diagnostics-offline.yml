@@ -30,6 +30,8 @@ on:
       - 'tests/phase5b_conditional_query_scope_owner_v39.test.mjs'
       - 'tests/phase5b_conditional_query_scope_real_pg16_v39.mjs'
       - 'scripts/v39_phase5b_conditional_policy_candidate_v39.mjs'
+      - 'scripts/v39_phase5b_conditional_policy_install_v39.mjs'
+      - 'scripts/v39_phase5b_conditional_review_metadata_v39.mjs'
       - 'scripts/v39_phase5b_owner_local_policy_predecessor.mjs'
       - 'tests/phase5b_owner_local_policy_predecessor_v39.test.mjs'
       - 'tests/phase5b_conditional_policy_candidate_v39.test.mjs'
@@ -54,6 +56,7 @@ on:
       - 'server/lib/disruption/phase5AmendmentEFidsOriginalFeatureCompiler_v39.ts'
       - 'tests/phase5_amendment_e_real_fids_original_feature_compiler_v39.test.ts'
       - 'tests/phase5_conditional_bound_source_review_v39.test.ts'
+      - 'tests/phase5b_conditional_frozen_t_retime_v39.test.ts'
       - 'server/lib/disruption/phase5ConditionalSignedSchedulePair_v39.ts'
       - 'tests/phase5_conditional_signed_schedule_pair_v39.test.ts'
       - 'server/lib/disruption/phase5AmendmentEGateOutDelayLabel_v39.ts'
@@ -65,6 +68,10 @@ on:
       - 'tests/phase5b_cutover_quiet_v39.test.mjs'
       - 'scripts/v39_phase5b_post_cutover_pin_readonly.sh'
       - 'scripts/v39_phase5b_source_only_successor_owner.sh'
+      - 'scripts/v39_phase5b_scientific_pause_owner.sh'
+      - 'tests/phase5b_scientific_pause_owner_v39.test.mjs'
+      - 'scripts/v39_phase5b_callback_worker_only_guard.sh'
+      - 'tests/phase5b_callback_worker_scope_v39.test.mjs'
       - 'scripts/v39_phase6_stored_source_postcommit_native_audit_v39.mjs'
       - 'server/lib/disruption/phase6StoredSourceNativeCandidateAudit_v39.mjs'
       - 'tests/phase6_stored_source_native_candidate_audit_v39.test.ts'
@@ -102,10 +109,14 @@ jobs:
           node-version: '20'
       - run: node --check scripts/v39_phase5b_paid_child_audit_owner.mjs && node --check scripts/v39_phase5b_signed_calendar_coverage_owner.mjs && node --check scripts/v39_phase5b_conditional_query_scope_owner.mjs
       - run: node --test tests/phase5b_source_diagnostics_v39.test.mjs tests/phase5b_recovery_register_v39.test.mjs tests/phase5b_retention_p7_inventory_v39.test.mjs tests/phase5b_cutover_quiet_v39.test.mjs tests/phase5b_conditional_query_scope_owner_v39.test.mjs tests/phase5b_maintenance_and_f017_owner_v39.test.mjs tests/phase5b_owner_local_policy_predecessor_v39.test.mjs
+      - run: bash -n scripts/v39_phase5b_scientific_pause_owner.sh && node --test tests/phase5b_scientific_pause_owner_v39.test.mjs
+      - run: node --test tests/phase5b_callback_worker_scope_v39.test.mjs
       - run: npm ci --include=dev --no-audit --no-fund
       - run: npm run check
       - name: Full offline suite on exact clean recovery commit
         run: npm test
+      - name: Conditional later PRE frozen-reference retiming regression
+        run: npx vitest run tests/phase5b_conditional_frozen_t_retime_v39.test.ts
       - run: npx vitest run tests/phase3_gate05_free_feed_429_pacing_contract_v39.test.ts tests/phase5b_fids_response_diagnostics_v39.test.ts tests/phase5_no_provider_prearm_clock_v39.test.ts tests/phase5_conditional_fids_service_recovery_v39.test.ts tests/phase5_conditional_bound_source_review_v39.test.ts tests/phase5_signed_later_pre_day_registry_v39.test.ts tests/phase5_amendment_e_real_fids_original_feature_compiler_v39.test.ts tests/phase5_conditional_signed_schedule_pair_v39.test.ts tests/phase5_amendment_e_gateout_label_v39.test.ts tests/phase5_scoped_fids_source_bridge_v39.test.ts tests/phase4_gate5_g5a_native_fids_identity_v39.test.ts tests/phase5b_conditional_source_signer_scope_v39.test.ts tests/phase5_prospective_fids_identity_custody_v39.test.ts tests/phase6_stored_source_native_candidate_audit_v39.test.ts tests/phase7_local_private_pre_handoff_v39.test.ts tests/phase6_native_post_pre_candidates_v39.test.ts
       - run: npx --no-install tsx --test tests/phase6_stored_source_postcommit_native_audit_v39.test.mjs tests/phase5b_conditional_policy_candidate_v39.test.mjs tests/phase6_stored_source_child_dispatcher_v39.test.mjs tests/phase6_nonpaid_source_day_github_runtime_v39.test.mjs
       - name: Retrieve the exact historical T126 fixture if shallow checkout omitted it

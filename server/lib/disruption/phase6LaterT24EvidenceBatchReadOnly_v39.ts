@@ -6,7 +6,7 @@
  * A missing separately archived Stage17 receipt is NOT missing T24.
  */
 import type {Pool} from "pg";
-import {readP5SignedConditionalServiceReview,type P5SignedConditionalFeatureReadScope} from "./phase5ConditionalBoundSourceReview_v39";
+import {readP5ConditionalLaterIdentityInventory,type P5SignedConditionalFeatureReadScope} from "./phase5ConditionalBoundSourceReview_v39";
 import type {P5EReadOnlyPgPool} from "./phase5AmendmentEOriginalFidsReadonlyCompiler_v39";
 import {P5_STAGE28_GROUPS} from "./phase5Stage28DedicatedRolePool_v39";
 import {P5_STAGE24_REVIEWED_WITNESSED_T24_SQL} from "./phase5V0079SingleBoundFlightPreWriter_v39";
@@ -135,7 +135,10 @@ type SelectedScope=Pick<P6LaterT24EvidenceReadScope,"expectedDossierSha256"|"exp
  * immutable readback rules. The native and conditional admission checks
  * remain separate; this common reader has no signing or publishing power. */
 async function readP6ExactSelectedLaterT24Evidence(pool:Pick<Pool,"connect">,selected:readonly SelectedEvidence[],
- scope:SelectedScope,byReceipt:ReadonlyMap<string,ReviewReceipt>,unresolved:readonly string[],conditionalMetadataReaderLogin?:string){
+  scope:SelectedScope,byReceipt:ReadonlyMap<string,ReviewReceipt>,unresolved:readonly string[],conditionalMetadataReaderLogin?:string,
+  // Private positional authority: never read this mode from a caller's
+  // extensible native scope. Only the conditional entry passes its frame.
+  conditionalFrozenT24SourceWindow?:{startUtc:string;endUtc:string}){
  const priorClock=utc(scope.sourceObservedDbClockUtc),ids=selected.map(e=>e.source.flightInstanceId);
  const c=await pool.connect();let begun=false;
  try{
@@ -177,7 +180,7 @@ async function readP6ExactSelectedLaterT24Evidence(pool:Pick<Pool,"connect">,sel
     sr=snaps.get(id)??[],wr=witnesses.get(id)??[],r=byReceipt.get(id);
    let status:P6LaterT24EvidenceStatus;
    let receiptSha256:string|null=null;
-   if(now>=cutoff-900000)status="LATER_REVIEW_LEAD_MISSED_CENSOR";
+   if(!conditionalFrozenT24SourceWindow&&now>=cutoff-900000)status="LATER_REVIEW_LEAD_MISSED_CENSOR";
    else if(unresolved.includes(id))status="T24_PRIVATE_CUSTODY_INVALID_OR_EXPIRED_UNRESOLVED";
    else if(sr.length===0&&wr.length===0){
     if(r)status="T24_RECEIPT_OR_NATIVE_ANCHOR_MISMATCH";
@@ -188,11 +191,18 @@ async function readP6ExactSelectedLaterT24Evidence(pool:Pick<Pool,"connect">,sel
    else if(!r)status="T24_EXISTS_PRIVATE_RECEIPT_UNAVAILABLE";
    else{
     try{
-     verifyP5Stage24WitnessedFrozenT(wr[0],r.receipt,{flightInstanceId:id,selectedTNativeUtc:s.selectedTNativeUtc,
+     const frame=conditionalFrozenT24SourceWindow;
+     const frozen=frame?utc(r.receipt.selectedTNativeUtc):native;
+     const frozenCutoff=frame?frozen-(s.horizon==="T-6h"?21600000:5400000):cutoff;
+     if(frame&&(frozen<utc(frame.startUtc)||frozen>=utc(frame.endUtc)))hold("T24_REFERENCE_OUTSIDE_SIGNED_SOURCE_FRAME");
+     // Actual persisted witness + separately authenticated custody first.
+     // A current reported retime never rewrites the original reference.
+     verifyP5Stage24WitnessedFrozenT(wr[0],r.receipt,{flightInstanceId:id,selectedTNativeUtc:new Date(frozen).toISOString(),
       expectedSelectedTVersion:scope.expectedSelectedTVersion,expectedFrameSha256:scope.expectedFrameSha256,
-      expectedConfigSha256:scope.expectedConfigSha256,cutoffUtc:s.ownPreCutoffUtc,horizon:s.horizon as "T-6h"|"T-90m"});
+       expectedConfigSha256:scope.expectedConfigSha256,cutoffUtc:new Date(frozenCutoff).toISOString(),horizon:s.horizon as "T-6h"|"T-90m"});
      if(utc(r.receipt.stage17PostCommitReadbackAtUtc)>now)hold("FUTURE_T24_READBACK");
-     status="T24_PERSISTED_AND_SEPARATE_RECEIPT_MATCH_REVIEW_REQUIRED";receiptSha256=r.expectedReceiptSha256;
+     if(now>=frozenCutoff-900000)status="LATER_REVIEW_LEAD_MISSED_CENSOR";
+     else{status="T24_PERSISTED_AND_SEPARATE_RECEIPT_MATCH_REVIEW_REQUIRED";receiptSha256=r.expectedReceiptSha256;}
     }catch{status="T24_RECEIPT_OR_NATIVE_ANCHOR_MISMATCH";}
    }
    return Object.freeze({flightInstanceId:id,horizon:s.horizon as "T-6h"|"T-90m",status,receiptSha256});
@@ -307,14 +317,14 @@ export async function readP6ConditionalLaterT24EvidencePage(
     t.manifestSha256!==q.manifestSha256||t.rightsSha256!==q.rightsReviewSha256||t.releaseSha256!==q.reviewedReleaseSha256||
     t.expectedFrameSha256!==scope.expectedFrameSha256||t.expectedConfigSha256!==scope.expectedConfigSha256||t.expectedSelectedTVersion!==scope.expectedSelectedTVersion)
   return hold("CONDITIONAL_EXACT_SCOPE");
- const actual=await readP5SignedConditionalServiceReview(sourcePool,sourceScope);
+ const actual=await readP5ConditionalLaterIdentityInventory(sourcePool,sourceScope);
  const members=new Map(actual.memberReview.privateReviewProposals.map(p=>[p.flightInstanceId,p]));
  const drafts=new Set(actual.privateFeatureDrafts.map(p=>p.flightInstanceId));
- if(members.size!==actual.memberReview.privateReviewProposals.length||drafts.size!==actual.privateFeatureDrafts.length||
+ if(actual.report.predictionTimingReviewed!==false||members.size!==actual.memberReview.privateReviewProposals.length||drafts.size!==actual.privateFeatureDrafts.length||
     requestedFlightInstanceIds.some(id=>!members.has(id)||!drafts.has(id)))return hold("CONDITIONAL_CURRENT_MEMBER_REQUIRED");
  const selected=requestedFlightInstanceIds.map(id=>{
   const p=members.get(id)!;
-  if(p.identityEvidenceTier!=="CONDITIONAL_QUERY_FILTERED_SERVICE"||p.reviewedProtocolAmendmentSha256!==sourceScope.protocolSha256||
+   if(p.forecastReferenceEvidence!=="PENDING_T24_REVIEW"||p.identityEvidenceTier!=="CONDITIONAL_QUERY_FILTERED_SERVICE"||p.reviewedProtocolAmendmentSha256!==sourceScope.protocolSha256||
      p.manifestSha256!==q.manifestSha256||p.horizon!==q.horizon||
      utc(p.selectedTNativeUtc)-utc(p.predictionCutoffUtc)!==(q.horizon==="T-6h"?21600000:5400000))
    return hold("CONDITIONAL_MEMBER_CUTOFF_DRIFT");
@@ -329,7 +339,8 @@ export async function readP6ConditionalLaterT24EvidencePage(
  }
  const evidence=await readP6ExactSelectedLaterT24Evidence(prePool,selected,{
   expectedDossierSha256:q.queryDigestSha256,expectedFrameSha256:scope.expectedFrameSha256,expectedConfigSha256:scope.expectedConfigSha256,
-  expectedSelectedTVersion:scope.expectedSelectedTVersion,pageIndex:1,runDayIndex:q.runDayIndex,sourceObservedDbClockUtc:actual.observedDbClockUtc},byReceipt,unresolved,scope.conditionalMetadataReaderLogin);
+   expectedSelectedTVersion:scope.expectedSelectedTVersion,pageIndex:1,runDayIndex:q.runDayIndex,sourceObservedDbClockUtc:actual.observedDbClockUtc},byReceipt,unresolved,scope.conditionalMetadataReaderLogin,
+   {startUtc:sourceScope.expectedServiceWindowStartUtc,endUtc:sourceScope.expectedServiceWindowEndUtc});
  if(utc(evidence.observedDbClockUtc)<utc(got.observedDbClockUtc))return hold("CONDITIONAL_CUSTODY_TO_PRE_CLOCK_REGRESSION");
  const {expectedDossierSha256:unused,...redacted}=evidence;
  const summary={...redacted,status:"ACTUAL_CONDITIONAL_T24_EVIDENCE_PAGE_FOR_SEPARATE_LATER_REVIEW_NO_GO",

@@ -3,6 +3,7 @@ on:
   pull_request:
     branches: [main]
     paths:
+      - 'scripts/v39_phase5b_source_only_successor_owner.sh'
       - '.github/workflows/phase5-v0088-real-queue-stage14-disposable-pg16.yml'
       - 'migrations/staged/V0088__phase5_cd_real_v0087_queue_stage14_scoped_admission_v39.sql'
       - 'migrations/staged/V0087__phase5_cd_durable_per_flight_horizon_queue_v39.sql'

@@ -2,7 +2,8 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {mkdtempSync,mkdirSync,writeFileSync,chmodSync,symlinkSync,rmSync} from "node:fs";
 import {tmpdir} from "node:os";
-import {join} from "node:path";
+import {join,resolve} from "node:path";
+import {spawnSync} from "node:child_process";
 import {createHash} from "node:crypto";
 import {inspectP6OwnerLocalPolicyPredecessor as inspect} from "../scripts/v39_phase5b_owner_local_policy_predecessor.mjs";
 const hash=x=>createHash("sha256").update(JSON.stringify(x)).digest("hex"),m=hash("manifest"),r=hash("rights");
@@ -40,5 +41,20 @@ test("T120 reject changed receipt, wrong manifest, conditional marker, unsafe pe
   const out=inspect(home,m,r);assert.equal(out.status,"HOLD_NO_EXACT_LOCAL_PREDECESSOR");assert.equal(out.rejectedDirectories,4);
   const d=fixture(home,"d");assert.equal(inspect(home,hash("wrong"),r).basePolicyCommitmentSha256,null);
   assert.equal(inspect(home,m,r).basePolicyCommitmentSha256,d.commitment);
+ }finally{rmSync(home,{recursive:true,force:true});}
+});
+
+test("T131 CLI through a symlinked temporary path emits the actual bounded receipt",()=>{
+ const home=mkdtempSync(join(tmpdir(),"p6-local-cli-"));
+ try{
+  const a=fixture(home,"a");
+  const alias=join(home,"check.mjs");
+  symlinkSync(resolve("scripts/v39_phase5b_owner_local_policy_predecessor.mjs"),alias);
+  const call=manifest=>spawnSync(process.execPath,[alias,manifest,r],{env:{...process.env,HOME:home},encoding:"utf8",timeout:10000});
+  const good=call(m);assert.equal(good.status,0,good.stderr);
+  assert.equal(JSON.parse(good.stdout).basePolicyCommitmentSha256,a.commitment);
+  assert.doesNotMatch(good.stdout,/private-fixture|static-values-PRIVATE/);
+  const bad=call(hash("wrong"));assert.equal(bad.status,2);
+  assert.equal(JSON.parse(bad.stdout).status,"HOLD_NO_EXACT_LOCAL_PREDECESSOR");
  }finally{rmSync(home,{recursive:true,force:true});}
 });

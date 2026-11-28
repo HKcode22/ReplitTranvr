@@ -22,7 +22,11 @@ import {measureP5ConditionalSignedSchedulePair} from "./phase5ConditionalSignedS
 
 const SHA=/^[a-f0-9]{64}$/;
 const CONDITIONAL_ID=/^leg:g5a:[a-f0-9]{64}$/;
+// PostgreSQL emits UUIDs in this canonical spelling. Alternate hyphen
+// positions can name the same UUID and must not evade identity comparisons.
+const UUID=/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/;
 const HORIZONS=["T-24h","T-6h","T-90m"] as const;
+const HORIZON_OFFSETS_MS={"T-24h":86400000,"T-6h":21600000,"T-90m":5400000} as const;
 const SLOTS=["HUB","MID_A","MID_B","REGIONAL"] as const;
 export type P5PostHorizon=(typeof HORIZONS)[number];
 export type P5PostSlot=(typeof SLOTS)[number];
@@ -43,11 +47,14 @@ export interface P5PreservedPreOutcomeAnchor{
  phase7GroupId:string;
  preIssuedAtUtc:string;
  predictionCutoffUtc:string;
- /** Authenticated committed PRE fields; required for conditional attribution. */
+ /** Committed PRE provenance; production readback must authenticate it.
+  * Native outcome attribution requires the original response and availability.
+  * Conditional attribution additionally binds the signed PRE receipt. */
  manifestSha256?:string;
  preIssueReceiptSha256?:string;
  originalSourceQueryId?:string;
  originalSourceResponseSha256?:string;
+ originalSourceAvailableAtUtc?:string;
  selectedScheduledDepartureUtc?:string;
 }
 
@@ -108,7 +115,7 @@ export function matchP5PreservedPreToSeparatedPostOutcomes(
  const groupOwners=new Map<string,string>();
  const legs=new Map<string,{
   flightInstanceId:string;identityTier:P5PostIdentityTier;runDayIndex:number;
-  split:P5PostSplit;slot:P5PostSlot;phase7GroupId:string;
+  split:P5PostSplit;slot:P5PostSlot;phase7GroupId:string;frozenTMs:number;
   horizons:Map<P5PostHorizon,P5PreservedPreOutcomeAnchor>;
  }>();
  for(const a of anchors){
@@ -116,16 +123,37 @@ export function matchP5PreservedPreToSeparatedPostOutcomes(
      !Number.isInteger(a.runDayIndex)||a.runDayIndex<1||a.runDayIndex>31||
      !SLOTS.includes(a.slot)||!HORIZONS.includes(a.horizon)||
      !["PROVIDER_NATIVE_OPERATING_LEG","CONDITIONAL_QUERY_FILTERED_SERVICE"].includes(a.identityTier)||
-     !/^[1-9][0-9]{0,17}$/.test(a.preSnapshotId??"")||
-     !/^[a-f0-9-]{36}$/.test(a.phase7FragmentRowId??"")||
-     !/^[a-f0-9-]{36}$/.test(a.phase7GroupId??""))
+     typeof a.preSnapshotId!=="string"||!/^[1-9][0-9]{0,17}$/.test(a.preSnapshotId)||
+     typeof a.phase7FragmentRowId!=="string"||!UUID.test(a.phase7FragmentRowId)||
+     typeof a.phase7GroupId!=="string"||!UUID.test(a.phase7GroupId))
    hold("INVALID_PRE_ANCHOR_SCOPE");
   const isCondId=CONDITIONAL_ID.test(a.flightInstanceId);
   if((a.identityTier==="CONDITIONAL_QUERY_FILTERED_SERVICE")!==isCondId)
    hold("IDENTITY_TIER_NAMESPACE_MISMATCH");
+  // Date.parse also coerces arrays/numbers; require actual clock strings
+  // while preserving the existing accepted timestamp serialization.
+  if(typeof a.preIssuedAtUtc!=="string"||typeof a.predictionCutoffUtc!=="string")
+   hold("PRE_CUTOFF_INVARIANT_VIOLATED");
   const preMs=Date.parse(a.preIssuedAtUtc),cutMs=Date.parse(a.predictionCutoffUtc);
   if(!Number.isFinite(preMs)||!Number.isFinite(cutMs)||preMs>cutMs)
    hold("PRE_CUTOFF_INVARIANT_VIOLATED");
+  // Optional provenance remains unverified supplied-anchor metadata. When
+  // present, however, it cannot contradict PRE chronology at any horizon.
+  if(a.originalSourceResponseSha256!==undefined&&!isValidOutcomeEvidenceSha256(a.originalSourceResponseSha256))
+   hold("PRE_ANCHOR_SOURCE_DIGEST_INVALID");
+  if(a.originalSourceAvailableAtUtc!==undefined){
+   if(typeof a.originalSourceAvailableAtUtc!=="string")hold("PRE_ANCHOR_SOURCE_AVAILABLE_CLOCK_INVALID");
+   const availableMs=Date.parse(a.originalSourceAvailableAtUtc);
+   if(!Number.isFinite(availableMs)||availableMs>preMs||availableMs>cutMs)
+    hold("PRE_ANCHOR_SOURCE_AVAILABLE_CLOCK_INVALID");
+  }
+  // Every horizon refers to the same frozen event time. Group or flight IDs
+  // alone cannot turn PRE rows at different event times into a paired cohort.
+  const frozenTMs=cutMs+HORIZON_OFFSETS_MS[a.horizon];
+  if(!Number.isFinite(new Date(frozenTMs).getTime())||
+     (a.selectedScheduledDepartureUtc!==undefined&&
+      (typeof a.selectedScheduledDepartureUtc!=="string"||Date.parse(a.selectedScheduledDepartureUtc)!==frozenTMs)))
+   hold("PRE_ANCHOR_FROZEN_T_CUTOFF_DRIFT");
   const anchorKey=a.flightInstanceId+"|"+a.horizon;
   if(seenAnchor.has(anchorKey))hold("DUPLICATE_FLIGHT_HORIZON_ANCHOR");
   seenAnchor.add(anchorKey);
@@ -141,11 +169,12 @@ export function matchP5PreservedPreToSeparatedPostOutcomes(
    if(existing.runDayIndex!==a.runDayIndex||existing.split!==split||existing.slot!==a.slot||
       existing.identityTier!==a.identityTier||existing.phase7GroupId!==a.phase7GroupId)
     hold("CROSS_DAY_SPLIT_TIER_OR_GROUP_LEAKAGE");
+   if(existing.frozenTMs!==frozenTMs)hold("CROSS_HORIZON_FROZEN_T_DRIFT");
    existing.horizons.set(a.horizon,a);
   }else{
    legs.set(a.flightInstanceId,{
     flightInstanceId:a.flightInstanceId,identityTier:a.identityTier,runDayIndex:a.runDayIndex,
-    split,slot:a.slot,phase7GroupId:a.phase7GroupId,horizons:new Map([[a.horizon,a]])
+    split,slot:a.slot,phase7GroupId:a.phase7GroupId,frozenTMs,horizons:new Map([[a.horizon,a]])
    });
   }
  }
@@ -197,6 +226,16 @@ export function matchP5PreservedPreToSeparatedPostOutcomes(
     const t6=leg.horizons.get("T-6h")!;
     if(out.gateOutInput.preIssuedAtUtc!==t6.preIssuedAtUtc)
      hold("NATIVE_OUTCOME_PRE_ISSUED_CLOCK_DRIFT");
+    if(typeof out.gateOutInput.selectedNativeTUtc!=="string"||
+       Date.parse(out.gateOutInput.selectedNativeTUtc)!==leg.frozenTMs)
+     hold("NATIVE_OUTCOME_FROZEN_T_CUTOFF_DRIFT");
+    if(!isValidOutcomeEvidenceSha256(t6.originalSourceResponseSha256)||
+       out.gateOutInput.frozenSourceOriginalSha256!==t6.originalSourceResponseSha256)
+     hold("NATIVE_OUTCOME_PRE_SOURCE_DRIFT");
+    if(typeof t6.originalSourceAvailableAtUtc!=="string"||
+       !Number.isFinite(Date.parse(t6.originalSourceAvailableAtUtc))||
+       out.gateOutInput.originalSourceAvailableAtUtc!==t6.originalSourceAvailableAtUtc)
+     hold("NATIVE_OUTCOME_PRE_SOURCE_AVAILABLE_CLOCK_DRIFT");
     const assessed=assessP5AmendmentEGateOutDelayCandidate(out.gateOutInput);
     if(assessed.status==="MATCHED_ACTUAL_GATE_OUT_CANDIDATE"&&assessed.hasNumericalCandidate){
      // The candidate evaluator does not authenticate physical truth or rights.
@@ -276,3 +315,4 @@ export function matchP5PreservedPreToSeparatedPostOutcomes(
 export function isValidOutcomeEvidenceSha256(value:unknown):value is string{
  return typeof value==="string"&&SHA.test(value);
 }
+

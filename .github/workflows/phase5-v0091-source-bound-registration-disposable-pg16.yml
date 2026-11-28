@@ -3,9 +3,17 @@ on:
   pull_request:
     branches: [main]
     paths:
+      - 'scripts/v39_phase5b_source_only_successor_owner.sh'
       - '.github/workflows/phase5-v0091-source-bound-registration-disposable-pg16.yml'
       - 'migrations/staged/V0091__phase5_cd_source_bound_flight_registration_prepare_only_v39.sql'
+      - 'migrations/staged/V0111__phase5b_prospective_conditional_t24_witness_v39.sql'
       - 'migrations/staged/V0112__phase5b_prospective_conditional_queue_registration_v39.sql'
+      - 'migrations/staged/V0114__phase5b_conditional_witnessed_frozen_t_registration_v39.sql'
+      - 'scripts/v39_phase5b_v0114_owner_once_v39.mjs'
+      - 'scripts/v39_phase5_cd_github_one_source_bound_enqueue_v39.ts'
+      - 'scripts/v39_phase6_private_later_restartable_enrollment_v39.ts'
+      - 'tests/phase5b_v0114_owner_lifecycle_pg16_v39.mjs'
+      - 'tests/phase5b_v0114_owner_once_v39.test.mjs'
       - 'scripts/v39_phase5_cd_v0091_owner_once.mjs'
       - 'scripts/v39_phase6_v0100_owner_schema_once_v39.mjs'
       - 'migrations/staged/V0100__phase6_restartable_exact_v0091_enrollment_v39.sql'
@@ -80,6 +88,10 @@ jobs:
           npx --no-install tsx scripts/apply_boot_migrations_v39.ts
           psql "$DATABASE_URL" -X -v ON_ERROR_STOP=1 -f migrations/staged/V0079__phase5_fids_31day_physical_attempt_and_original_binding_v39.sql
           psql "$DATABASE_URL" -X -v ON_ERROR_STOP=1 -f migrations/staged/V0081__phase5_t24_separate_transaction_postcommit_witness_v39.sql
+          # I144/T140 uses the actual already-commissioned conditional witness
+          # trigger as its immutable predecessor. No historical rows are made
+          # by this schema step and no old migration is replayed in production.
+          psql "$DATABASE_URL" -X -v ON_ERROR_STOP=1 -f migrations/staged/V0111__phase5b_prospective_conditional_t24_witness_v39.sql
           psql "$DATABASE_URL" -X -v ON_ERROR_STOP=1 -f migrations/staged/V0087__phase5_cd_durable_per_flight_horizon_queue_v39.sql
           psql "$DATABASE_URL" -X -v ON_ERROR_STOP=1 -f migrations/staged/V0088__phase5_cd_real_v0087_queue_stage14_scoped_admission_v39.sql
           psql "$DATABASE_URL" -X -v ON_ERROR_STOP=1 <<'SQL'
@@ -104,6 +116,12 @@ jobs:
            clean.phase5_fids_original_binding_v39,
            clean.fids_query_response,clean.flight_population,
            clean.flight_snapshots TO phase5_cd_ci_owner WITH GRANT OPTION;
+          GRANT SELECT(snapshot_id,flight_instance_id,population_query_id,
+           fids_response_hash,source_query_digest,rights_review_sha256,
+           selected_t_native_utc,selected_t_version,t24_cutoff_utc,frame_hash,
+           config_hash,post_pre_commit_db_observed_at_utc)
+           ON clean.phase5_t24_postcommit_witness_v39
+           TO phase5_cd_ci_owner WITH GRANT OPTION;
           GRANT USAGE ON SEQUENCE clean.phase5_cd_pre_task_v39_task_id_seq
            TO phase5_cd_ci_owner WITH GRANT OPTION;
           SQL
@@ -166,6 +184,13 @@ jobs:
           grep -Fq P5B_V0091_EXACT_PREDECESSOR_REQUIRED "$TMP/v0112-repeat.txt"
           test "$(psql "$OWNER_URL" -XAt -v ON_ERROR_STOP=1 -c "SELECT NOT pg_has_role(current_user,'phase5_cd_source_registration_owner_v39','SET') AND NOT has_schema_privilege('phase5_cd_source_registration_owner_v39','clean','CREATE')")" = t
           echo T073_V0112_REAL_NON_SUPERUSER_COMMIT_ROLLBACK_REPEAT_NO_LASTING_GRANT_PASS
+      - name: I144 T140 actual nonsuperuser witnessed-registration migration and rollback
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          node --check scripts/v39_phase5b_v0114_owner_once_v39.mjs
+          node --test tests/phase5b_v0114_owner_once_v39.test.mjs
+          node tests/phase5b_v0114_owner_lifecycle_pg16_v39.mjs
       - name: Reuse full existing FIDS original + physical flight Stage14 fixture and V0091 scoped PREPARE enrollment
         shell: bash
         run: |

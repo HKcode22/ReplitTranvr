@@ -13,7 +13,7 @@ import {inspectP6DayEpochExistingShardSemanticsNoGo} from "./phase6DayEpochOrigi
 import {verifyP5F8ExactSourcePartition} from "./phase5ScopedFidsSourceBridge_v39.ts";
 import {auditP5RealSourceToNativeFlightCandidatesReadonly}
  from "../../../scripts/v39_phase5_actual_source_native_flight_candidate_readonly_owner_v39.ts";
-import {readP5SignedConditionalServiceReview} from "./phase5ConditionalBoundSourceReview_v39.ts";
+import {readP5SignedConditionalServiceReview,readP5ConditionalLaterIdentityInventory} from "./phase5ConditionalBoundSourceReview_v39.ts";
 import {digestP5ActualSourceCandidateAudit} from "./phase5ActualSourceNativeFlightCandidateAudit_v39.ts";
 import {buildP5UnsignedNativePreReviewDossier,digestP5UnsignedNativePreDossier} from "./phase5SourceBoundUnsignedPreDossier_v39.ts";
 import {completeP5NativeLaterPrePacketForIndependentSigning,completeP5NativeT24PrePacketForIndependentSigning} from "./phase5IndependentLaterPrePacketCompletion_v39.ts";
@@ -393,14 +393,14 @@ export async function auditP6StoredCommittedNativeSource({readerClient,sourcePoo
   expectedLocalTo:conditional.localTo,expectedServiceWindowStartUtc:auditedScope.expectedServiceWindowStartUtc,
   expectedServiceWindowEndUtc:auditedScope.expectedServiceWindowEndUtc,
   ...(featurePolicy?{externalContentUseReviewSha256:featurePolicy.externalContentUseReviewSha256}:{})}):null;
- const conditionalReview=conditionalScope?await readP5SignedConditionalServiceReview(sourcePool,conditionalScope):null;
+ const conditionalReview=conditionalScope?await (auditedScope.horizon==="T-24h"?readP5SignedConditionalServiceReview:readP5ConditionalLaterIdentityInventory)(sourcePool,conditionalScope):null;
  const out={status:"ACTUAL_COMMITTED_SOURCE_CANDIDATES_AWAIT_INDEPENDENT_PRE_REVIEW",
   runDayIndex:selector.runDayIndex,horizon:auditedScope.horizon,
   candidateAuditSha256:digestP5ActualSourceCandidateAudit(audit),observedMemberCount:audit.observedMemberCount,
   candidateCount:audit.candidateCount,censoredCount:audit.censoredCount,classifications:audit.classifications,
   sourceTimingDiagnostics:audit.sourceTimingDiagnostics,
   ...(audit.retainedCrossOriginalIdentityReview?{retainedCrossOriginalIdentityReview:audit.retainedCrossOriginalIdentityReview}:{}),
-  ...(conditionalReview?{conditionalSourceReview:{status:conditionalReview.report.status,
+  ...(conditionalReview?{conditionalSourceReview:{status:conditionalReview.report.status,predictionTimingReviewed:conditionalReview.report.predictionTimingReviewed,
     counts:conditionalReview.report.counts,stage14MatchedMembershipCount:conditionalReview.memberReview.stage14MatchedMembershipCount,
     observedDbClockUtc:conditionalReview.observedDbClockUtc,featureReview:conditionalReview.conditionalFeatureReview,actualPreIssued:false,providerCalls:0,databaseWrites:0}}:{}),
   actualDbClockUtc:audit.actualDbClockUtc,providerCalls:0,databaseWrites:0,signedPrePacketsIssued:0,phase6PaidGo:false};

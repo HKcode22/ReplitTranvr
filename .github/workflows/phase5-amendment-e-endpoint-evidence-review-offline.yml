@@ -3,6 +3,7 @@ on:
   pull_request:
     branches: [main]
     paths:
+      - 'scripts/v39_phase5b_source_only_successor_owner.sh'
       - 'server/lib/disruption/phase5RouteAndModelDataSupportAudit_v39.mjs'
       - 'tests/phase5_route_model_data_support_audit_v39.test.ts'
       - 'server/lib/disruption/phase5AmendmentEGateOutDelayLabel_v39.ts'

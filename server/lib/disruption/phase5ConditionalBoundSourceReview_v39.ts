@@ -3,7 +3,8 @@
  * The caller must supply independently authenticated prospective policy/scope;
  * this reader does not authenticate a signature merely from a digest.
  */
-import {prepareP5ConditionalFidsServiceRecoveryV39} from "./phase5ConditionalFidsServiceRecovery_v39";
+import {prepareP5ConditionalFidsServiceRecoveryV39,type P5ConditionalRecoveryTiming} from "./phase5ConditionalFidsServiceRecovery_v39";
+import type {P5Stage24ReviewedT24Receipt} from "./phase5T24WitnessedLaterHorizonGuard_v39";
 import {buildP5EAlreadyMatchedMovementSupplement} from "./phase5AmendmentEFidsOriginalFeatureCompiler_v39";
 import {P5_STAGE28_GROUPS} from "./phase5Stage28DedicatedRolePool_v39";
 import {P5_STAGE14_BOUND_SOURCE_SQL,verifyP5Stage14SourceBindingForIndependentRead,type P5Stage14SingleFlightPrePermit} from "./phase5V0079SingleBoundFlightPreWriter_v39";
@@ -29,7 +30,7 @@ const stamp=(x:unknown)=>{
 };
 const ms=(x:unknown)=>Date.parse(stamp(x));
 const maybeMs=(x:unknown)=>x instanceof Date?x.getTime():typeof x==="string"?Date.parse(x):NaN;
-export function prepareP5BoundConditionalServiceReview(s:ReviewScope,rows:readonly Record<string,unknown>[],originals:readonly Record<string,unknown>[],clock:Date|string){
+export function prepareP5BoundConditionalServiceReview(s:ReviewScope,rows:readonly Record<string,unknown>[],originals:readonly Record<string,unknown>[],clock:Date|string,timing?:P5ConditionalRecoveryTiming){
  const q=s?.source;
  if(!q||s.ownerProspectiveSeparateTierApproved!==true||![q.manifestSha256,q.queryDigestSha256,q.reviewedReleaseSha256,q.rightsReviewSha256,q.providerContractSha256,q.earlyDrawSha256,s.protocolSha256,s.expectedResponseSha256,s.expectedDecodedBodySha256].every(x=>SHA.test(x??""))||
  !UUID.test(s.expectedPopulationQueryId??"")||!q.plannedRequestUtc||!Number.isSafeInteger(q.runDayIndex)||q.runDayIndex<1||q.runDayIndex>31||
@@ -62,7 +63,7 @@ export function prepareP5BoundConditionalServiceReview(s:ReviewScope,rows:readon
   plannedSourceUtc:stamp(q.plannedRequestUtc),sourceAvailableUtc:stamp(o.bound_at_utc),originalSourceAvailableUtc:stamp(o.source_available),sourceExpiresUtc:stamp(o.source_expires_at_utc),dbObservedUtc:stamp(clock),
   serviceWindowStartUtc:stamp(o.service_window_start_utc),serviceWindowEndUtc:stamp(o.service_window_end_utc),horizon:q.horizon,
   maximumStalenessSeconds:q.maxPopulationStalenessSeconds,minimumReviewLeadSeconds:s.minimumReviewLeadSeconds
- });
+ },timing);
 }
 /** Existing Stage14 writer accepts exactly these G5A fields. This
  * does not fabricate a signed permit or an issued PRE. */
@@ -70,6 +71,7 @@ export function matchP5ConditionalStage14Members(
  s:ReviewScope,report:ReturnType<typeof prepareP5BoundConditionalServiceReview>,
  members:readonly Record<string,unknown>[],expectedCount:number,dbClock:string,originalSourceAvailableUtc?:string){
  const observed=ms(dbClock),originalAvailable=originalSourceAvailableUtc===undefined?null:ms(originalSourceAvailableUtc);
+ const identityOnly=report.predictionTimingReviewed===false;
  if(originalAvailable!==null&&originalAvailable>observed)hold("MEMBER_SOURCE_CLOCK");
  if(!Number.isSafeInteger(expectedCount)||expectedCount<0||expectedCount>2500||members.length!==expectedCount)hold("MEMBER_COUNT");
  const by=new Map<string,Record<string,unknown>[]>(),memberIds=new Set<string>();
@@ -96,8 +98,8 @@ export function matchP5ConditionalStage14Members(
     m.codeshare_resolution_status!=="g5a_conditional_operator_composite_no_native_id"||
     m.source_type!=="fids"||m.population_role!=="requested_airport_primary"||m.query_direction!=="Departure"||
     !Number.isFinite(scheduled)||!Number.isFinite(available)||scheduled!==ms(candidate.selectedReportedDepartureUtc)||
-    (originalAvailable!==null&&available<originalAvailable)||available>observed||available>ms(candidate.ownCutoffUtc)||
-    ms(candidate.ownCutoffUtc)-observed<=s.minimumReviewLeadSeconds*1000){
+    (originalAvailable!==null&&available<originalAvailable)||available>observed||
+    (!identityOnly&&(available>ms(candidate.ownCutoffUtc)||ms(candidate.ownCutoffUtc)-observed<=s.minimumReviewLeadSeconds*1000))){
    missingOrAmbiguous++;continue;
   }
   matched.push(Object.freeze({flightInstanceId:id,populationMemberId:String(m.population_member_id),
@@ -105,13 +107,15 @@ export function matchP5ConditionalStage14Members(
    identityEvidenceTier:"CONDITIONAL_QUERY_FILTERED_SERVICE" as const,reviewedProtocolAmendmentSha256:s.protocolSha256,
    requireProspectiveConditionalSourceMarker:true as const,
    reviewedStableServiceKeySha256:id.slice("leg:g5a:".length),expectedOperatorFlightNumber:candidate.operatorFlightNumber,
-   expectedDestinationIcao:candidate.destinationIcao,selectedTNativeUtc:candidate.selectedReportedDepartureUtc,
+    expectedDestinationIcao:candidate.destinationIcao,currentReportedScheduleUtc:candidate.selectedReportedDepartureUtc,
+    selectedTNativeUtc:candidate.selectedForecastReferenceUtc,forecastReferenceEvidence:candidate.forecastReferenceEvidence,
+    referenceT24ReceiptSha256:candidate.referenceT24ReceiptSha256,
    predictionCutoffUtc:candidate.ownCutoffUtc,sourceMemberAvailableUtc:new Date(available).toISOString(),
    observedDbClockUtc:new Date(observed).toISOString(),sourceBodySha256:s.expectedDecodedBodySha256,
    queryDigestSha256:s.source.queryDigestSha256,expectedGithubSourceRunId:s.source.expectedSourceGithubRunId,
    manifestSha256:s.source.manifestSha256,runDayIndex:s.source.runDayIndex,horizon:s.source.horizon,airportIcao:s.source.airportIcao}));
  }
- const summary={stage14MatchedMembershipCount:matched.length,missingOrAmbiguous,actualPreIssued:false,providerCalls:0,databaseWrites:0};
+ const summary={stage14MatchedMembershipCount:matched.length,missingOrAmbiguous,predictionTimingReviewed:!identityOnly,actualPreIssued:false,providerCalls:0,databaseWrites:0};
  return Object.freeze(Object.defineProperty(summary,"privateReviewProposals",{value:Object.freeze(matched),enumerable:false})) as typeof summary&{readonly privateReviewProposals:readonly (typeof matched)[number][]};
 }
 export async function readP5BoundConditionalServiceReview(pool:P5EReadOnlyPgPool,s:ReviewScope){
@@ -120,9 +124,17 @@ export async function readP5BoundConditionalServiceReview(pool:P5EReadOnlyPgPool
 /** Runtime-only entry: the caller has verified signed SOURCE packet bytes and
  * an actual committed-query audit. Derive decoded-body digest from the exact
  * existing immutable binding, not from the body to be verified. */
-export async function readP5SignedConditionalServiceReview(pool:P5EReadOnlyPgPool,s:Omit<ReviewScope,"expectedDecodedBodySha256">&{expectedServiceWindowStartUtc:string;expectedServiceWindowEndUtc:string}){
+export async function readP5SignedConditionalServiceReview(pool:P5EReadOnlyPgPool,s:Omit<ReviewScope,"expectedDecodedBodySha256">&{expectedServiceWindowStartUtc:string;expectedServiceWindowEndUtc:string},reviewedT24Receipts?:readonly P5Stage24ReviewedT24Receipt[]){
  if(!s.expectedServiceWindowStartUtc||!s.expectedServiceWindowEndUtc||ms(s.expectedServiceWindowStartUtc)>=ms(s.expectedServiceWindowEndUtc))hold("SIGNED_SOURCE_WINDOW_REQUIRED");
- return readBound(pool,s,true);
+ return readBound(pool,s,true,undefined,reviewedT24Receipts===undefined?undefined:{mode:"REVIEWED_T24_REFERENCES",receipts:reviewedT24Receipts});
+}
+/** Bounded unsigned discovery only. A changed current schedule cannot erase
+ * the service before actual original T24 custody/witness lookup. Source
+ * integrity, original signed frame, identity and retention remain required;
+ * no cutoff/staleness eligibility or PRE permit follows from this result. */
+export async function readP5ConditionalLaterIdentityInventory(pool:P5EReadOnlyPgPool,s:Omit<ReviewScope,"expectedDecodedBodySha256">&{expectedServiceWindowStartUtc:string;expectedServiceWindowEndUtc:string}){
+ if(!["T-6h","T-90m"].includes(s?.source?.horizon)||!s.expectedServiceWindowStartUtc||!s.expectedServiceWindowEndUtc||ms(s.expectedServiceWindowStartUtc)>=ms(s.expectedServiceWindowEndUtc))hold("LATER_IDENTITY_INVENTORY_SCOPE");
+ return readBound(pool,s,true,undefined,{mode:"IDENTITY_ONLY"});
 }
 export type P5SignedConditionalFeatureReadScope=Omit<ReviewScope,"expectedDecodedBodySha256"|"externalContentUseReviewSha256">&{
  expectedServiceWindowStartUtc:string;expectedServiceWindowEndUtc:string;externalContentUseReviewSha256:string;
@@ -155,10 +167,11 @@ export async function readP5ExactConditionalPermitPage(pool:P5EReadOnlyPgPool,s:
    hold("EXACT_CONDITIONAL_PERMIT_PAGE_BINDING");
   ids.add(p.flightInstanceId);
  }
- return readBound(pool,s,true,permits);
+ const receipts=permits.flatMap(p=>p.reviewedT24WitnessReceipt?[p.reviewedT24WitnessReceipt]:[]);
+ return readBound(pool,s,true,permits,receipts.length?{mode:"REVIEWED_T24_REFERENCES",receipts}:undefined);
 }
 async function readBound(pool:P5EReadOnlyPgPool,input:Omit<ReviewScope,"expectedDecodedBodySha256">&{expectedDecodedBodySha256?:string},signed:boolean,
- permits?:readonly P5Stage14SingleFlightPrePermit[]){
+ permits?:readonly P5Stage14SingleFlightPrePermit[],timing?:P5ConditionalRecoveryTiming){
  if(input.externalContentUseReviewSha256!==undefined&&(!signed||!SHA.test(input.externalContentUseReviewSha256)))hold("CONDITIONAL_FEATURE_REVIEW_SCOPE");
  const c=await pool.connect();let began=false;
  try{
@@ -201,12 +214,12 @@ async function readBound(pool:P5EReadOnlyPgPool,input:Omit<ReviewScope,"expected
   }
   const z=(await c.query("SELECT clock_timestamp() AS at")).rows;
   if(z.length!==1)hold("CLOCK");
-  prepareP5BoundConditionalServiceReview(s,rows,originals,stamp(z[0].at));
+   prepareP5BoundConditionalServiceReview(s,rows,originals,stamp(z[0].at),timing);
   const members=(await c.query(P5_ACTUAL_SOURCE_ALL_MEMBERS_READONLY_SQL,[s.expectedPopulationQueryId])).rows;
   const fresh=(await c.query("SELECT clock_timestamp() AS at")).rows;
   if(fresh.length!==1||ms(fresh[0].at)>=ms(o.source_expires_at_utc))hold("FRESH_MEMBER_CLOCK");
   // Reprepare at actual fresh clock: member reading cannot steal PRE lead.
-  const finalReport=prepareP5BoundConditionalServiceReview(s,rows,originals,stamp(fresh[0].at));
+   const finalReport=prepareP5BoundConditionalServiceReview(s,rows,originals,stamp(fresh[0].at),timing);
   const memberReview=matchP5ConditionalStage14Members(s,finalReport,members,Number(o.normalized_members_count),stamp(fresh[0].at),stamp(o.source_available));
   // F027/C002: reuse the existing feature dictionary, but only from the
   // actual decoded original index independently matched to its stored G5A
@@ -234,10 +247,11 @@ async function readBound(pool:P5EReadOnlyPgPool,input:Omit<ReviewScope,"expected
   // describe the same final database clock. The earlier authenticated raw
   // match remains valid; time can only remove candidates, never add any.
   const endClock=stamp(end[0].at),endMs=ms(endClock);
-  const liveCandidates=finalReport.privateCandidates.filter(x=>ms(x.ownCutoffUtc)-endMs>s.minimumReviewLeadSeconds*1000);
+   const liveCandidates=finalReport.privateCandidates.filter(x=>!finalReport.predictionTimingReviewed||ms(x.ownCutoffUtc)-endMs>s.minimumReviewLeadSeconds*1000);
   const dropped=finalReport.privateCandidates.length-liveCandidates.length;
   const liveReport=Object.freeze(Object.defineProperty({...finalReport,
-   counts:{...finalReport.counts,conditionalCandidates:liveCandidates.length,lateOrStale:finalReport.counts.lateOrStale+dropped}},
+    counts:{...finalReport.counts,conditionalCandidates:finalReport.predictionTimingReviewed?liveCandidates.length:0,
+     identityReviewCandidates:finalReport.predictionTimingReviewed?0:liveCandidates.length,lateOrStale:finalReport.counts.lateOrStale+dropped}},
    "privateCandidates",{value:Object.freeze(liveCandidates),enumerable:false})) as typeof finalReport;
   const liveMemberReview=endClock===stamp(fresh[0].at)?memberReview:
    matchP5ConditionalStage14Members(s,liveReport,members,Number(o.normalized_members_count),endClock,stamp(o.source_available));
@@ -264,7 +278,8 @@ async function readBound(pool:P5EReadOnlyPgPool,input:Omit<ReviewScope,"expected
   }
   await c.query("COMMIT");began=false;
   const out={report:liveReport,memberReview:liveMemberReview,observedDbClockUtc:endClock,
-   conditionalFeatureReview:{status:s.externalContentUseReviewSha256?"CONDITIONAL_FEATURE_DRAFTS_NOT_SIGNED":"NO_CONDITIONAL_FEATURE_USE_SCOPE",
+    conditionalFeatureReview:{status:!finalReport.predictionTimingReviewed?"CONDITIONAL_IDENTITY_FEATURE_DRAFTS_NOT_PRE_ELIGIBLE":s.externalContentUseReviewSha256?"CONDITIONAL_FEATURE_DRAFTS_NOT_SIGNED":"NO_CONDITIONAL_FEATURE_USE_SCOPE",
+     predictionTimingReviewed:finalReport.predictionTimingReviewed,
     featureDraftCount:liveDrafts.length,lateDraftCount:featureDrafts.length-liveDrafts.length,
     evidencedFidsFields:liveDrafts.reduce((n,x)=>n+x.compiled.evidencedFidsFields,0),
     missingFidsFields:liveDrafts.reduce((n,x)=>n+x.compiled.missingFidsFields.length,0),actualPreIssued:false,providerCalls:0,databaseWrites:0}};
