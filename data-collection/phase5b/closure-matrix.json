@@ -74,9 +74,11 @@
         "I016",
         "I034",
         "I059",
-        "I124"
+        "I124",
+        "I137",
+        "I138"
       ],
-      "next": "Actual owner next-hour readback mapped six Day3 T6 originals (312 observations) to zero native-shape/lead passing members; obtain genuinely governed future conditional admission and positive PRE/Packet B.",
+      "next": "Exact #982 CI and guarded worker-only successor; actual protected exact prospective preview, six inactive staged values, separate actual staged readback, owner selector activation, active readback, genuine cutoff-safe PRE and atomic Packet B. No retroactive markers.",
       "closureStatus": "NOT_CLOSED",
       "scientificRisk": "P0_SCIENTIFIC",
       "workstream": "preservation_admission"
@@ -329,7 +331,7 @@
       "closureStatus": "CLOSED",
       "scientificRisk": "OPERATIONAL",
       "workstream": "release_reliability",
-      "closureEvidence": "Superseded V0112 predecessor mismatch 45796497453; seven workflows on 6572192 failed same TS18048; two on 41d5d38f failed synthetic Phase7 digest shape. Successor #976 exact 454349c9 passed 46/46, including TypeScript, focused proof/registration, PG16 and full offline safety. Production install separate. Four #977 runs on 427411f4 failed one TS2345 legacy-child union mismatch; 433082ba focused diagnostics and V0094 PG16 passed, full offline pending at 03:50 PST. Recurrence exact 88188823: four workflows 45895855329/45895855211/45895855254/45895855318 failed the same TS18048 optional response wire type narrowing; no production fault. Exact 6be1b51a T076 shell mock JSON overwritten by real RELAY variable; fixture repair within I082/T076. Exact 61f677b6 full safety 45916151587 failed only ESLint no-regex-spaces in T087 line64; corrected quantifier, no production impact. #981 exact 2eeefa6b run 46097363166 job 140831697381 failed only when T126 tried reading historical blob absent from shallow checkout; full suite 4621 passed, focused 198 passed, earlier 51 and 55 Node tests passed, real PG16 sibling passed. Owner guard correctly held before deployment. I136/T130 fetches exact immutable predecessor only when needed, verifies blob, never substitutes current helper. Successor CI pending."
+      "closureEvidence": "Superseded V0112 predecessor mismatch 45796497453; seven workflows on 6572192 failed same TS18048; two on 41d5d38f failed synthetic Phase7 digest shape. Successor #976 exact 454349c9 passed 46/46, including TypeScript, focused proof/registration, PG16 and full offline safety. Production install separate. Four #977 runs on 427411f4 failed one TS2345 legacy-child union mismatch; 433082ba focused diagnostics and V0094 PG16 passed, full offline pending at 03:50 PST. Recurrence exact 88188823: four workflows 45895855329/45895855211/45895855254/45895855318 failed the same TS18048 optional response wire type narrowing; no production fault. Exact 6be1b51a T076 shell mock JSON overwritten by real RELAY variable; fixture repair within I082/T076. Exact 61f677b6 full safety 45916151587 failed only ESLint no-regex-spaces in T087 line64; corrected quantifier, no production impact. #981 exact 2eeefa6b run 46097363166 job 140831697381 failed only when T126 tried reading historical blob absent from shallow checkout; full suite 4621 passed, focused 198 passed, earlier 51 and 55 Node tests passed, real PG16 sibling passed. Owner guard correctly held before deployment. I136/T130 fetches exact immutable predecessor only when needed, verifies blob, never substitutes current helper. Successor CI pending. I136/T130 exact 2629a15f source diagnostics 46098079601 passed, actual #981 full CI 30/30; owner deployed."
     },
     {
       "id": "F026",
@@ -412,9 +414,11 @@
         "I126",
         "I127",
         "I128",
-        "I135"
+        "I135",
+        "I137",
+        "I138"
       ],
-      "next": "Verify exact witnessed-only combined PG16 regression, guarded worker release, actual protected Day5 commitment preview, authorized future-only commissioning and real source-linked PRE/Packet B. No retroactive markers or standalone exception.",
+      "next": "Exact #982 CI and guarded worker-only successor; actual protected exact prospective preview, six inactive staged values, separate actual staged readback, owner selector activation, active readback, genuine cutoff-safe PRE and atomic Packet B. No retroactive markers.",
       "closureStatus": "NOT_CLOSED",
       "scientificRisk": "P0_SCIENTIFIC",
       "workstream": "preservation_admission"
@@ -575,13 +579,14 @@
         "I096",
         "I112",
         "I132",
-        "I134"
+        "I134",
+        "I139"
       ],
       "next": "Preserve exact reviewed pins and natural-drain/quiet helper; future overlaps still require fresh guard",
       "closureStatus": "CLOSED",
       "scientificRisk": "OPERATIONAL",
       "workstream": "release_reliability",
-      "closureEvidence": "Repeated cutovers previously held on ACTIVE_RELAY_NO_CANCEL / ACTIVE_PARENT_OR_CHILD_NO_CANCEL; never cancel or treat unreadable metadata as quiet. On Nov27 the fixed-base/target one-shot wait completed its exact read-only drain, original helper passed fresh CI/STOP/tasks/all-main-and-relay quiet/130-minute checks, #980 merged as 24df876fc612c0e4fdfb6f69585ed90bcc56f9b8, owner pins converged, and both primary-FIDS/Phase7 expiry jobs passed in 46061597861. This closes that bounded cutover hold only; future overlaps still require the same guard. No scientific PRE or paid capture inferred. [Post-#980 checkpoint](../phase5b/checkpoints/2026-11-27_PHASE5B_POST980_DEPLOYMENT_AND_CUSTODY_READBACK.md)"
+      "closureEvidence": "Repeated cutovers previously held on ACTIVE_RELAY_NO_CANCEL / ACTIVE_PARENT_OR_CHILD_NO_CANCEL; never cancel or treat unreadable metadata as quiet. On Nov27 the fixed-base/target one-shot wait completed its exact read-only drain, original helper passed fresh CI/STOP/tasks/all-main-and-relay quiet/130-minute checks, #980 merged as 24df876fc612c0e4fdfb6f69585ed90bcc56f9b8, owner pins converged, and both primary-FIDS/Phase7 expiry jobs passed in 46061597861. This closes that bounded cutover hold only; future overlaps still require the same guard. No scientific PRE or paid capture inferred. [Post-#980 checkpoint](../phase5b/checkpoints/2026-11-27_PHASE5B_POST980_DEPLOYMENT_AND_CUSTODY_READBACK.md) Actual #981 exact 2629a15f 30/30, owner guarded merge 697501b9443837018414082434cbe798ab835f92 and pin convergence; relay unchanged, full retention 46098589962 both jobs passed. No scientific closure inferred."
     },
     {
       "id": "F041",

@@ -68,3 +68,8 @@ At20:46:08Z protected read-only custody verified the existing base policy digest
 4. Keep collecting F/I/T/C evidence in the register and dated checkpoint; maintain the fixed draw, rights, budget/STOP, original expiry, same-flight grouping and20/5/6 split.
 
 No Replit AI Agent, owner database shell, provider, secret export, policy installation or paid replay was used in this session. The only production mutation was the owner-authorized, exact guarded #980 merge/pin/retention cutover shown in the pasted output.
+
+
+## Post-#981 actual deployment and next critical path
+
+Owner guarded exact #981 30/30 deployed main 697501b9, relay unchanged, full retention 46098589962 both jobs green. Actual protected Day5 custody 46098650637 verifies exact old policy/31 plans/public actors, conditional fields absent and zero prepared queries. Actual local Mac and Replit archive inventories both zero. #982 reconciles deployed tree and stages protected additive conditional successor implementation I137–I139/T131–T135; no private policy export, no old policy overwrite, no production install or PRE yet. [Checkpoint](../checkpoints/2026-11-27_POST981_DEPLOYMENT_AND_CONDITIONAL_CUSTODY.md). Existing 59/16/43 counts unchanged.

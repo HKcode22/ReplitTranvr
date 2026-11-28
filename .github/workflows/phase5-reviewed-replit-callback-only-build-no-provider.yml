@@ -99,7 +99,7 @@ jobs:
         id: callback-admission
         shell: bash
         env:
-          WORKER_ONLY_PR: ${{ github.event_name == 'pull_request' && github.event.pull_request.number == 981 && github.event.pull_request.head.repo.full_name == github.repository }}
+          WORKER_ONLY_PR: ${{ github.event_name == 'pull_request' && (github.event.pull_request.number == 981 || github.event.pull_request.number == 982) && github.event.pull_request.head.repo.full_name == github.repository }}
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
           EXACT_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
         run: |

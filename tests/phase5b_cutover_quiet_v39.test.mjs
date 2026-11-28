@@ -231,3 +231,18 @@ test("T128 #981 exact worker CI requires all scientific paths and verified skipp
  assert.match(sourceCutover,/DEPLOY_EXACT_REVIEWED_SOURCE_ONLY_TARGET_981/);
  assert.match(sourceCutover,/RECOVER_EXACT_MERGED_SOURCE_ONLY_TARGET_981/);
 });
+
+
+test("T135 #982 reuses the exact guarded release, with no new callback runtime inputs",()=>{
+ assert.match(sourceCutover,/DEPLOY_EXACT_REVIEWED_SOURCE_ONLY_TARGET_982/);
+ assert.match(sourceCutover,/RECOVER_EXACT_MERGED_SOURCE_ONLY_TARGET_982/);
+ assert.match(sourceCutover,/TARGET_PR=982\s+OLD=697501b9443837018414082434cbe798ab835f92/);
+ assert.match(sourceCutover,/if \[\[ "\$TARGET_PR" == 981 \|\| "\$TARGET_PR" == 982 \]\];then\s+target_981_ci_ok/);
+ assert.match(sourceCutover,/"\$num" == 980 \|\| "\$num" == 981 \|\| "\$num" == 982/);
+ const guard=readFileSync(new URL("../scripts/v39_phase5b_callback_worker_only_guard.sh",import.meta.url),"utf8");
+ assert.match(guard,/BASE_982=697501b9443837018414082434cbe798ab835f92/);
+ assert.match(guard,/git diff --quiet "\$BASE_982" HEAD -- "\$\{inputs\[@\]\}" \.replit/);
+ assert.match(guard,/PHASE5_CALLBACK_REVIEWED_SOURCE_BUILD_HOLD/);
+ const workflow=readFileSync(new URL("../.github/workflows/phase5-reviewed-replit-callback-only-build-no-provider.yml",import.meta.url),"utf8");
+ assert.match(workflow,/github.event.pull_request.number == 981 \|\| github.event.pull_request.number == 982/);
+});

@@ -145,3 +145,59 @@ test("T117 protected composite review binds actual predecessor, exact decision a
  const bad=buf({...decision,standaloneNoT24ProtocolSha256:h("unapproved")});
  assert.throws(()=>preview({...args,reviewBytes:bad,reviewSha256:sha(bad)}),/EXACT_PROSPECTIVE_REVIEW/);
 });
+
+
+import {prepareP6ConditionalSuccessorStageFromCommitment as prepareStage} from "../scripts/v39_phase5b_conditional_policy_candidate_v39.mjs";
+import {admitP6ConditionalInstallAction,buildP6ConditionalSuccessorStagePlan,stageP6ConditionalSuccessor,verifyP6ConditionalSuccessorReadback,P6_CONDITIONAL_INSTALL_ACTIONS as CA,P6_CONDITIONAL_SUCCESSOR_SECRET_NAMES,p6ConditionalCommitment} from "../scripts/v39_phase5b_conditional_policy_install_v39.mjs";
+test("T133 staged successor uses exact protected preview, retains native base and refuses unsafe or ambiguous activation",()=>{
+ const base=p6ConditionalCommitment("base",baseDigests),{baseDigests:unused,...rest}=review;
+ const decision={...rest,schema:"v39.phase5b.prospective-conditional-commissioning-commitment-review.v1",basePolicyCommitmentSha256:base};
+ const reviewBytes=buf(decision),reviewSha256=sha(reviewBytes);
+ const custody={status:"P6_ACTUAL_PROTECTED_CONDITIONAL_POLICY_CUSTODY_READONLY",prospective,observedDbClockUtc:now,basePolicyCommitmentSha256:base,
+  exactThreePolicyDigestsValidated:true,exact31PlanPinsValidated:true,canonicalNativePredecessorBytes:true,nativePolicyPresent:true,baseIntervalCoversRemainingStudy:true,publicActorsVerified:true,
+  conditionalPolicyFieldState:"ABSENT",signingOrPublishingCapabilityPresent:false,actualConditionalPolicyInstalledVerified:false,actualConditionalPreCommitVerified:false,
+  providerCalls:0,databaseWrites:0,githubWrites:0,signaturesIssued:0,phase6PaidGo:false};
+ const args={...inputs,custody,reviewBytes,reviewSha256},pv=preview(args),expected=pv.candidateCommitmentSha256;
+ assert.throws(()=>prepareStage(args,h("wrong")),/EXPECTED_CANDIDATE_COMMITMENT_DRIFT/);
+ const candidate=prepareStage(args,expected),plan=buildP6ConditionalSuccessorStagePlan(candidate,expected);
+ assert.equal(plan.secretCount,6);assert.deepEqual(plan.privateWrites.map(x=>x.name),P6_CONDITIONAL_SUCCESSOR_SECRET_NAMES);
+ assert.doesNotMatch(JSON.stringify(plan),/privateWrites/);
+ assert.throws(()=>buildP6ConditionalSuccessorStagePlan(pv,expected),/SECRET_BYTES_CAPACITY/);
+ const env={GITHUB_REPOSITORY:"HKcode22/ReplitTranvr",GITHUB_REF:"refs/heads/main",GITHUB_EVENT_NAME:"workflow_dispatch",GITHUB_ACTOR:"HKcode22",GITHUB_RUN_ATTEMPT:"1",GITHUB_SHA:"a".repeat(40),P6_PHASE5B_RUNTIME_EXECUTABLE_SHA:"a".repeat(40),
+  P6_PHASE5B_CONDITIONAL_INSTALL_ACTION:CA.STAGE,P6_PHASE5B_CONDITIONAL_INSTALL_TOKEN:"github_pat_"+"a".repeat(64),
+  P6_PHASE5B_CONDITIONAL_EXPECTED_CANDIDATE_SHA256:expected,P6_PHASE5B_CONDITIONAL_REVIEW_PROTOCOL_SHA256:decision.protocolSha256,
+  P6_CONDITIONAL_COMMITMENT_REVIEW_SHA256:reviewSha256,P6_CONDITIONAL_COMMITMENT_REVIEW_BASE64:reviewBytes.toString("base64")};
+ const names=P6_CONDITIONAL_SUCCESSOR_SECRET_NAMES.map(n=>n.replace("P6_PHASE5B_CONDITIONAL_","P6_NONPAID_")),writes=[];
+ const transportFactory=()=>({owner:()=>"HKcode22",repoNames:()=>names,environmentNames:()=>[],set:(n,v)=>writes.push([n,v])});
+ const run=(e=env,f=transportFactory)=>stageP6ConditionalSuccessor({env:e,candidate,review:decision,transportFactory:f});
+ for(const change of [{GITHUB_ACTOR:"other"},{P6_PHASE5B_CONDITIONAL_ACTIVE_PROTOCOL_SHA256:decision.protocolSha256},
+  {P6_CONDITIONAL_SERVICE_PROTOCOL_SHA256:decision.protocolSha256},{P6_CONDITIONAL_LATER_METADATA_READ_ENABLED:"1"},
+  {P6_PHASE5B_CONDITIONAL_INSTALL_TOKEN:"ghp_fixture"},{P6_PHASE5B_CONDITIONAL_EXPECTED_CANDIDATE_SHA256:h("wrong")}])
+  assert.throws(()=>run({...env,...change}),/HOLD_P6_CONDITIONAL_INSTALL_/);
+ assert.equal(writes.length,0);
+ assert.throws(()=>run(env,()=>({...transportFactory(),environmentNames:()=>[names[0]]})),/SECRET_SCOPE_CAPACITY_OR_SHADOW/);
+ assert.equal(writes.length,0);
+ const partial=run(env,()=>({...transportFactory(),set:(n,v)=>{if(writes.length===2)throw Error("private failure");writes.push([n,v]);}}));
+ assert.equal(partial.acknowledgedSecretWrites,2);assert.equal(partial.activeSelectorChanged,false);
+ assert.match(partial.status,/HOLD_/);assert.doesNotMatch(JSON.stringify(partial),/private failure/);
+ writes.length=0;const complete=run();assert.equal(complete.acknowledgedSecretWrites,6);
+ assert.deepEqual(writes.map(x=>x[0]),P6_CONDITIONAL_SUCCESSOR_SECRET_NAMES);assert.equal(complete.actualConditionalPolicyInstalledVerified,false);
+ const cp=JSON.parse(candidate.privatePolicyBytes.daily),cq=JSON.parse(candidate.privatePolicyBytes.signing);
+ const readbackEnv={...env,P6_PHASE5B_CONDITIONAL_INSTALL_ACTION:CA.VERIFY_STAGED,P6_PHASE5B_CONDITIONAL_INSTALL_TOKEN:"",
+  P6_NONPAID_DAILY_POLICY_SHA256:sha(candidate.privatePolicyBytes.daily),P6_NONPAID_SIGNING_POLICY_SHA256:sha(candidate.privatePolicyBytes.signing),
+  P6_NONPAID_TRANSPORT_TRUST_SHA256:sha(candidate.privatePolicyBytes.transport),
+  P6_PHASE5B_BASE_DAILY_SHA256:baseDigests.daily,P6_PHASE5B_BASE_SIGNING_SHA256:baseDigests.signing,P6_PHASE5B_BASE_TRANSPORT_SHA256:baseDigests.transport,
+  P6_CONDITIONAL_LATER_METADATA_READ_ENABLED:"1",P6_CONDITIONAL_SERVICE_PROTOCOL_SHA256:decision.protocolSha256,
+  P6_PHASE7_PRE_LANE_EVIDENCE_AUTHORITY_PUBLIC_KEY_BASE64:publicPins.lanePublicKeyBase64,
+  P6_PHASE7_PRE_LANE_EVIDENCE_AUTHORITY_FINGERPRINT_SHA256:publicPins.laneFingerprintSha256,
+  P6_PHASE7_PRE_PROOF_REVIEWER_FINGERPRINT_SHA256:publicPins.proofFingerprintSha256};
+ const receipt={...custody,conditionalPolicyFieldState:"ALL_FIELDS_PRESENT_NOT_COMMISSIONED_PROOF",conditionalProtocolVarMatchesPolicy:true,conditionalMetadataEnabled:true};
+ const read=(e=readbackEnv,patch={})=>verifyP6ConditionalSuccessorReadback({ctx:{p:cp,q:cq,trust,...patch},receipt,review:decision,env:e});
+ assert.equal(read().actualConditionalPolicyStagedVerified,true);assert.equal(read().actualConditionalPolicyInstalledVerified,false);
+ assert.equal(read({...readbackEnv,P6_PHASE5B_CONDITIONAL_INSTALL_ACTION:CA.VERIFY_ACTIVE,P6_PHASE5B_CONDITIONAL_ACTIVE_PROTOCOL_SHA256:decision.protocolSha256}).actualConditionalPolicyInstalledVerified,true);
+ assert.throws(()=>read({...readbackEnv,P6_PHASE5B_CONDITIONAL_INSTALL_ACTION:CA.VERIFY_ACTIVE}),/ACTIVE_SELECTOR_DRIFT/);
+ assert.throws(()=>read({...readbackEnv,P6_NONPAID_SIGNING_POLICY_SHA256:h("wrong")}),/READBACK_COMMITMENT_OR_SCOPE_DRIFT/);
+ assert.throws(()=>read({...readbackEnv,P6_PHASE5B_BASE_DAILY_SHA256:h("wrong")}),/READBACK_COMMITMENT_OR_SCOPE_DRIFT/);
+ assert.throws(()=>read({...readbackEnv,P6_PHASE5B_CONDITIONAL_INSTALL_TOKEN:env.P6_PHASE5B_CONDITIONAL_INSTALL_TOKEN}),/READBACK_WRITE_CAPABILITY_FORBIDDEN/);
+ assert.throws(()=>admitP6ConditionalInstallAction({...env,P6_PHASE5B_CONDITIONAL_INSTALL_ACTION:CA.PREVIEW},"conditional_custody"),/PREVIEW_SCOPE/);
+});

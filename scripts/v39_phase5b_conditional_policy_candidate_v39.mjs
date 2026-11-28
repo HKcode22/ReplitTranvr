@@ -125,7 +125,7 @@ export function prepareP6ConditionalPolicyCandidate({dailyBytes,signingBytes,tra
 
 /** Protected preview only: external review binds the composite commitment;
  * exact constituent digests are recomputed internally, never disclosed. */
-export function previewP6ConditionalCandidateFromCommitment({dailyBytes,signingBytes,transportBytes,trust,reviewBytes,reviewSha256,publicPins,custody,reviewedPlanBytes}){
+function compileP6ConditionalCandidateFromCommitment({dailyBytes,signingBytes,transportBytes,trust,reviewBytes,reviewSha256,publicPins,custody,reviewedPlanBytes}){
  if(custody?.status!=="P6_ACTUAL_PROTECTED_CONDITIONAL_POLICY_CUSTODY_READONLY"||
   !["exactThreePolicyDigestsValidated","exact31PlanPinsValidated","canonicalNativePredecessorBytes","nativePolicyPresent","baseIntervalCoversRemainingStudy","publicActorsVerified"].every(k=>custody[k]===true)||
   custody.conditionalPolicyFieldState!=="ABSENT"||custody.signingOrPublishingCapabilityPresent!==false||
@@ -142,9 +142,20 @@ export function previewP6ConditionalCandidateFromCommitment({dailyBytes,signingB
  const {basePolicyCommitmentSha256:unused,...rest}=d;
  const internal=Buffer.from(JSON.stringify({...rest,schema:"v39.phase5b.prospective-conditional-commissioning-review.v1",baseDigests}));
  const c=prepareP6ConditionalPolicyCandidate({dailyBytes,signingBytes,transportBytes,baseDigests,trust,reviewBytes:internal,reviewSha256:hash(internal),publicPins,prospective:custody.prospective,observedUtc:custody.observedDbClockUtc,reviewedPlanBytes});
- return Object.freeze({status:"CONDITIONAL_POLICY_CANDIDATE_PREVIEW_NOT_INSTALLED",reviewSha256,
+ const receipt=Object.freeze({status:"CONDITIONAL_POLICY_CANDIDATE_PREVIEW_NOT_INSTALLED",reviewSha256,
   basePolicyCommitmentSha256:commitment,candidateCommitmentSha256:hash(JSON.stringify({schema:"v39.phase5b.custody-candidate-commitment.v1",daily:c.dailySha256,signing:c.signingSha256,transport:c.transportSha256})),
   firstEligibleRunDayIndex:c.firstEligibleRunDayIndex,reviewedConditionalThroughUtc:c.reviewedConditionalThroughUtc,
   nativePolicyPreserved:true,standaloneNoT24Approved:false,actualConditionalPolicyInstalledVerified:false,actualConditionalPreCommitVerified:false,
   providerCalls:0,databaseWrites:0,githubWrites:0,signaturesIssued:0,phase6PaidGo:false});
+ return {receipt,privatePolicyBytes:c.privatePolicyBytes};
+}
+export function previewP6ConditionalCandidateFromCommitment(args){return compileP6ConditionalCandidateFromCommitment(args).receipt;}
+/** Only the separately owner-authorized protected staging path consumes these
+ * bytes. The ordinary read-only preview never returns them. */
+export function prepareP6ConditionalSuccessorStageFromCommitment(args,expectedCandidateCommitmentSha256){
+ const x=compileP6ConditionalCandidateFromCommitment(args);
+ if(!H.test(expectedCandidateCommitmentSha256??"")||x.receipt.candidateCommitmentSha256!==expectedCandidateCommitmentSha256)hold("EXPECTED_CANDIDATE_COMMITMENT_DRIFT");
+ const result={...x.receipt};
+ Object.defineProperty(result,"privatePolicyBytes",{value:x.privatePolicyBytes,enumerable:false,writable:false});
+ return Object.freeze(result);
 }

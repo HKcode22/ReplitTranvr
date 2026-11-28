@@ -117,5 +117,5 @@ test("complete synthetic protected T24 startup with the actual 31 checked-in cal
 });
 test("current T24 jobs project the protected conditional protocol marker into both execution scopes",()=>{
  const workflow=readFileSync(".github/workflows/phase5-cd-github-one-queued-t24-witness-main-manual.yml","utf8");
- assert.equal(workflow.split("P6_CONDITIONAL_SERVICE_PROTOCOL_SHA256: ${{ vars.P6_CONDITIONAL_SERVICE_PROTOCOL_SHA256 }}").length-1,2);
+ assert.equal(workflow.split("P6_CONDITIONAL_SERVICE_PROTOCOL_SHA256: ${{ (vars.P6_PHASE5B_CONDITIONAL_ACTIVE_PROTOCOL_SHA256 != '' && vars.P6_PHASE5B_CONDITIONAL_ACTIVE_PROTOCOL_SHA256 || vars.P6_CONDITIONAL_SERVICE_PROTOCOL_SHA256 || '') }}").length-1,2);
 });

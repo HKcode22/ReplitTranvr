@@ -280,7 +280,8 @@ test("T105 custody accounts for the nested day-append conditional scope",()=>{
 });
 test("custody workflow projects the prospective protocol marker only into read-only custody",()=>{
  const workflow=readFileSync(".github/workflows/phase6-nonpaid-source-day-prepare-publish.yml","utf8");
- assert.match(workflow,/P6_CONDITIONAL_SERVICE_PROTOCOL_SHA256: \$\{\{ inputs\.confirm == 'VERIFY_FUTURE_CONDITIONAL_POLICY_CUSTODY_NO_PROVIDER' && vars\.P6_CONDITIONAL_SERVICE_PROTOCOL_SHA256 \|\| '' \}\}/);
+ const protocolLine=workflow.split("\n").find(l=>l.includes("P6_CONDITIONAL_SERVICE_PROTOCOL_SHA256:"));
+ assert.ok(protocolLine.includes("inputs.confirm == 'VERIFY_FUTURE_CONDITIONAL_POLICY_CUSTODY_NO_PROVIDER'")&&protocolLine.includes("vars.P6_CONDITIONAL_SERVICE_PROTOCOL_SHA256")&&protocolLine.includes("vars.P6_PHASE5B_CONDITIONAL_ACTIVE_PROTOCOL_SHA256"));
 });
 
 test("T109 custody native readiness requires rights-bound actual feature review, not approved flag alone",()=>{
@@ -369,4 +370,43 @@ test("T132 public commitment survives numeric log masking without revealing cons
  assert.throws(()=>buildP6ConditionalCommitmentReviewArtifact({...args,ownerDelegatedTechnicalScopeReviewed:undefined}),/SCOPE/);
  assert.throws(()=>buildP6ConditionalCommitmentReviewArtifact({...args,effectiveUtc:x.preparationOpensUtc}),/WINDOW/);
  assert.throws(()=>buildP6ConditionalCommitmentReviewArtifact({...args,validUntilUtc:x.remainingServiceEndUtc}),/WINDOW/);
+});
+
+
+import {readdirSync} from "node:fs";
+test("T134 all workflow policy consumers choose an exact staged successor only by the same atomic selector",()=>{
+ const paths=readdirSync(".github/workflows").filter(x=>x.endsWith(".yml")||x.endsWith(".yaml"));
+ const consumers=[];
+ for(const name of paths){
+  const s=readFileSync(".github/workflows/"+name,"utf8");
+  let found=false;
+  for(const line of s.split("\n")){
+   const m=line.match(/secrets\.P6_NONPAID_(DAILY_POLICY|SIGNING_POLICY|TRANSPORT_TRUST)_(BASE64|SHA256)\b/);
+   if(!m)continue;
+   // The three explicitly named readback-only predecessor digests are
+   // not effective policy selectors and never enter the live consumer.
+   if(/P6_PHASE5B_BASE_(DAILY|SIGNING|TRANSPORT)_SHA256:/.test(line)){
+    assert.equal(name,"phase6-nonpaid-source-day-prepare-publish.yml");
+    assert.match(line,/VERIFY_FUTURE_CONDITIONAL_POLICY_CUSTODY_NO_PROVIDER/);continue;
+   }
+   found=true;
+   assert.ok(line.includes("vars.P6_PHASE5B_CONDITIONAL_ACTIVE_PROTOCOL_SHA256 != ''"),name+":"+m[0]);
+   assert.ok(line.includes("vars.P6_PHASE5B_CONDITIONAL_ACTIVE_PROTOCOL_SHA256 == '' && "+m[0]),name+":"+m[0]);
+   assert.ok(line.includes("secrets.P6_PHASE5B_CONDITIONAL_"+m[1]+"_"+m[2]),name+":"+m[0]);
+  }
+  if(found)consumers.push(name);
+  if(name!=="phase6-nonpaid-source-day-prepare-publish.yml")assert(!s.includes("secrets.P6_PHASE5B_CONDITIONAL_INSTALL_TOKEN"),name);
+ }
+ assert.equal(consumers.length,8,consumers.join(","));
+ const wf=readFileSync(".github/workflows/phase6-nonpaid-source-day-prepare-publish.yml","utf8");
+ const token=wf.split("\n").find(l=>l.includes("secrets.P6_PHASE5B_CONDITIONAL_INSTALL_TOKEN"));
+ assert.match(token,/VERIFY_FUTURE_CONDITIONAL_POLICY_CUSTODY_NO_PROVIDER.*STAGE_EXACT_REVIEWED_CONDITIONAL_SUCCESSOR/);
+ assert.match(wf,/github.actor == 'HKcode22'/);
+ assert.match(wf,/environment: phase6-protected-runtime/);
+});
+
+test("T134 a nonempty selector cannot sign a conditional day under the native predecessor",()=>{
+ const f=fixture();
+ assert.throws(()=>admitP6NonpaidSourceDayGithub({...f.env,P6_PHASE5B_CONDITIONAL_ACTIVE_PROTOCOL_SHA256:sha("a")}),/ACTIVE_CONDITIONAL_SELECTOR_POLICY_DRIFT/);
+ assert.throws(()=>admitP6NonpaidSourceDayGithub({...f.env,P6_PHASE5B_CONDITIONAL_ACTIVE_PROTOCOL_SHA256:"typo"}),/ACTIVE_CONDITIONAL_SELECTOR_POLICY_DRIFT/);
 });

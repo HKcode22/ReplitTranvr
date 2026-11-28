@@ -30,6 +30,8 @@ on:
       - 'tests/phase5b_conditional_query_scope_owner_v39.test.mjs'
       - 'tests/phase5b_conditional_query_scope_real_pg16_v39.mjs'
       - 'scripts/v39_phase5b_conditional_policy_candidate_v39.mjs'
+      - 'scripts/v39_phase5b_conditional_policy_install_v39.mjs'
+      - 'scripts/v39_phase5b_conditional_review_metadata_v39.mjs'
       - 'scripts/v39_phase5b_owner_local_policy_predecessor.mjs'
       - 'tests/phase5b_owner_local_policy_predecessor_v39.test.mjs'
       - 'tests/phase5b_conditional_policy_candidate_v39.test.mjs'
