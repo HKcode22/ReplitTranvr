@@ -26,11 +26,28 @@ async function assertPhase7PostScopedActor(c:import("pg").PoolClient,expectedRol
      !(x.at instanceof Date)||!Number.isFinite(x.at.getTime())||x.at.getTime()>=expiryMs)hold("READER_SCOPE_OR_CLOCK");
  return x;
 }
+/** F048 cleanup parity: a successful read is not returned before an
+ * acknowledged rollback; never recycle a session of uncertain state. */
+async function withScopedRead<T>(reader:Pick<Pool,"connect">,read:(c:import("pg").PoolClient)=>Promise<T>):Promise<T>{
+ const c=await reader.connect();
+ let rollbackAttempted=false,discard=false;
+ try{
+  await c.query("BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY");
+  await c.query("SET LOCAL statement_timeout='12000ms'");
+  const result=await read(c);
+  rollbackAttempted=true;
+  try{await c.query("ROLLBACK");}catch{discard=true;hold("ROLLBACK_UNACKNOWLEDGED");}
+  return result;
+ }catch(e){
+  if(!rollbackAttempted){
+   try{await c.query("ROLLBACK");}catch{discard=true;}
+  }
+  throw e;
+ }finally{c.release(discard);}
+}
 /** Check the same exact scoped-reader grants before a paid POST. */
 export async function preflightPhase7PostScopedReader(reader:Pick<Pool,"connect">,expectedRole:string,contract:Phase7DerivedReleaseContract){
- const c=await reader.connect();
- try{await c.query("BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY");await c.query("SET LOCAL statement_timeout='12000ms'");const x=await assertPhase7PostScopedActor(c,expectedRole,Date.parse(contract.researchExpiryUtc));return (x.at as Date).toISOString();}
- finally{await c.query("ROLLBACK").catch(()=>{});c.release();}
+ return withScopedRead(reader,async c=>{const x=await assertPhase7PostScopedActor(c,expectedRole,Date.parse(contract.researchExpiryUtc));return (x.at as Date).toISOString();});
 }
 export async function readPhase7PostScopedGroup(reader:Pick<Pool,"connect">,expectedRole:string,contract:Phase7DerivedReleaseContract,profile:Phase7ReviewedTransformationProfile,a:P6PostPreservationAnchor):Promise<{fragments:Phase7StoredPreFragment[];observedAtUtc:string}>{
  return readScopedGroup(reader,expectedRole,contract,profile,a);
@@ -46,10 +63,7 @@ async function readScopedGroup(reader:Pick<Pool,"connect">,expectedRole:string,c
   ![a.manifestSha256,a.rightsSha256,a.queryDigestSha256,a.frameSha256].every(v=>H.test(v))||
   !Number.isSafeInteger(a.runDayIndex)||a.runDayIndex<1||a.runDayIndex>31||!(/^[A-Z0-9]{4}$/).test(a.airportIcao)||
   !Number.isFinite(Date.parse(a.sourceExpiresAtUtc))||!Number.isFinite(Date.parse(contract.researchExpiryUtc)))hold("BAD_ANCHOR");
- const c=await reader.connect();
- try{
-  await c.query("BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY");
-  await c.query("SET LOCAL statement_timeout='12000ms'");
+ return withScopedRead(reader,async c=>{
   const x=await assertPhase7PostScopedActor(c,expectedRole,Math.min(Date.parse(a.sourceExpiresAtUtc),Date.parse(contract.researchExpiryUtc)),protocolSha256===undefined?fn:conditionalFn);
   const args=[a.manifestSha256,a.snapshotId,a.rightsSha256,a.queryDigestSha256,a.runDayIndex,a.airportIcao,a.frameSha256];
   const q2=protocolSha256===undefined?await c.query(P7_POST_SCOPED_GROUP_SQL,args):await c.query(P7_POST_CONDITIONAL_T6_GROUP_SQL,[...args,protocolSha256]);
@@ -66,9 +80,8 @@ async function readScopedGroup(reader:Pick<Pool,"connect">,expectedRole:string,c
    !fragments.some(f=>f.packet.rows[0].horizon===a.horizon))hold("ANCHOR_GROUP_DRIFT");
   const at=(await c.query("SELECT clock_timestamp() AS at")).rows[0]?.at;
   if(!(at instanceof Date)||!Number.isFinite(at.getTime())||at<x.at||at.getTime()>=Math.min(Date.parse(a.sourceExpiresAtUtc),Date.parse(contract.researchExpiryUtc)))hold("EXPIRED_DURING_READ");
-  await c.query("ROLLBACK");
   return {fragments,observedAtUtc:at.toISOString()};
- }finally{await c.query("ROLLBACK").catch(()=>{});c.release();}
+ });
 }
 /** The external reviewer must authenticate settlement and exact same-leg
  * evidence, including any expired comparator, before returning this scope.

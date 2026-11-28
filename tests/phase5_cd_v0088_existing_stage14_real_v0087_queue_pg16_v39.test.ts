@@ -1008,6 +1008,29 @@ active("Phase5 C+D actual Stage14 source-bound parallel PRE on disposable PG16",
       const anchor=verified.privateDecisions[0].anchor;
       await expect(readPhase7PostScopedGroup(p7Scoped,P7SCOPED,p7.contract,p7.profile,anchor)).rejects.toMatchObject({code:"P0002"});
       await expect(readPhase7ConditionalT6ScopedGroup(p7Scoped,P7SCOPED,p7.contract,p7.profile,anchor,sha("wrong protocol"))).rejects.toMatchObject({code:"P0002"});
+      // F048/T146: exercise the real restricted session and simulate a lost
+      // ROLLBACK acknowledgement at its adapter boundary. No positive receipt
+      // and no reuse of the uncertain connection, on success or refusal.
+      for(const protocolToRead of [protocol,sha("wrong protocol")]){
+       let rollbackCount=0;const releases:(boolean|Error|undefined)[]=[];
+       const lostRollback={connect:async()=>{
+        const client=await p7Scoped!.connect();
+        return new Proxy(client,{get(target,key){
+         if(key==="query")return (sql:string,...args:unknown[])=>{
+          if(sql==="ROLLBACK"){rollbackCount++;return Promise.reject(Error("CI_ROLLBACK_ACK_LOST"));}
+          return Reflect.apply(target.query,target,[sql,...args]);
+         };
+         if(key==="release")return (err?:boolean|Error)=>{releases.push(err);target.release(err);};
+         const val=Reflect.get(target,key);return typeof val==="function"?val.bind(target):val;
+        }});
+       }};
+       const attempt=readPhase7ConditionalT6ScopedGroup(lostRollback,P7SCOPED,p7.contract,p7.profile,anchor,protocolToRead);
+       if(protocolToRead===protocol)await expect(attempt).rejects.toThrow("ROLLBACK_UNACKNOWLEDGED");
+       else await expect(attempt).rejects.toMatchObject({code:"P0002"});
+       expect(rollbackCount).toBe(1);expect(releases).toEqual([true]);
+      }
+      // A fresh independent session remains usable after discarded sessions.
+      await expect(readPhase7ConditionalT6ScopedGroup(p7Scoped,P7SCOPED,p7.contract,p7.profile,anchor,protocol)).resolves.toMatchObject({fragments:expect.any(Array)});
       // Leave the fixture link expired for the existing due-only sweep below.
       // Never extend or resurrect a link, even in this regression.
       await admin.query("UPDATE phase7_private.pre_source_link_v39 SET expires_at_utc=clock_timestamp()-interval '1 second' WHERE snapshot_id=$1",[saved.committedSnapshotId]);

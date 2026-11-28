@@ -36,6 +36,8 @@ const worker982Inputs=[
  "server/lib/disruption/phase6StoredSourceNativeCandidateAudit_v39.mjs"
 ];
 const fullInputs=[...new Set([...priorInputs,...worker982Inputs])];
+const postInputs=[MATCHER,"server/lib/disruption/phase5ConditionalSignedSchedulePair_v39.ts","server/lib/disruption/phase5ProspectiveProviderScheduleRevisionPrimary_v39.ts","server/lib/disruption/phase5V0083FuturePostOriginalDb_v39.ts","server/lib/disruption/phase6PostNativePreCandidateReadOnce_v39.mjs"];
+const postUnion=[...new Set([...fullInputs,...postInputs])];
 const repositoryRoot=fileURLToPath(new URL("../",import.meta.url));
 const holdMarker="PHASE5B_WORKER_ONLY_CALLBACK_SCOPE_HOLD";
 const passMarker="PHASE5B_WORKER_ONLY_CALLBACK_PUBLICATION_REFUSED_AS_REQUIRED";
@@ -210,8 +212,7 @@ test("T136 refuses unknown metadata, wrong head/ancestry, clean runtime PIN and 
 });
 
 test("T142 exact POST-worker successor refuses callback publication and unreviewed drift",()=>{
- const post=[MATCHER,"server/lib/disruption/phase5ConditionalSignedSchedulePair_v39.ts","server/lib/disruption/phase5ProspectiveProviderScheduleRevisionPrimary_v39.ts","server/lib/disruption/phase5V0083FuturePostOriginalDb_v39.ts","server/lib/disruption/phase6PostNativePreCandidateReadOnce_v39.mjs"];
- const full=[...new Set([...fullInputs,...post])];
+ const post=postInputs,full=postUnion;
  const changes={[BASE]:full,[BASE_982]:worker982Inputs,[BASE_POST]:post,[PIN]:full};
  const result=runGuard({base:BASE_POST,fixture:{changes}});
  assert.equal(result.status,0,result.stdout+result.stderr);
@@ -222,11 +223,15 @@ test("T142 exact POST-worker successor refuses callback publication and unreview
 });
 
 test("T146 conditional Packet B worker successor preserves callback publication refusal",()=>{
- const base="a02e3d6eddc378871f030848235746de160b71e5",scoped="server/lib/disruption/phase7PostScopedGroup_v39.ts",union=[...fullInputs,scoped];
+ const base="a02e3d6eddc378871f030848235746de160b71e5",scoped="server/lib/disruption/phase7PostScopedGroup_v39.ts",union=[...postUnion,scoped];
+ assert.equal(union.length,14);
  const changes={[BASE]:union,[base]:[scoped],[PIN]:union};
  const result=runGuard({base,fixture:{changes}});
  assert.equal(result.status,0,result.stdout+result.stderr);
  assert.equal(result.stdout.trim(),passMarker);
+ assert.equal(wrapperReadCount(result),1);
+ for(const incomplete of union.map(path=>union.filter(x=>x!==path)))
+  assertHold(runGuard({base,fixture:{changes:{...changes,[BASE]:incomplete}}}));
  assertHold(runGuard({base,fixture:{changes:{...changes,[base]:[]}}}));
  assertHold(runGuard({base,fixture:{changes:{...changes,[base]:[scoped,"server/index.ts"]}}}));
 });

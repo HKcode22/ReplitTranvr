@@ -881,3 +881,7 @@ At ~16:09 PST, existing protected preparation run `46086290077` returned `NO_ELI
 ## Nov27 continuation — worker successor and combined P7 acceptance
 
 [Checkpoint](../phase5b/checkpoints/2026-11-27_WORKER_SUCCESSOR_AND_WITNESSED_P7.md). I134/T128 and I135/T129 added; all existing F/C IDs and binary closures preserved. No production release or collection inferred.
+
+## Nov28 #984 exact CI and scoped group cleanup parity
+
+I149/T146 at exact 5294b642: real PG16 46141044167 and aggregate 46141044285 passed, source diagnostics 46141044291 failed only on incomplete 14-file callback fixture (F025 CI family). Extend existing F048/I109/T103 rollback custody invariant to the I149 scoped POST group reader and native role preflight: no positive receipt without acknowledged rollback, discard uncertain session, no duplicate rollback. Real restricted PG16 adapter fault regression within T146; exact successor CI required. No distinct incident/new IDs or closure promotion; no production or paid effects. [Checkpoint](../phase5b/checkpoints/2026-11-28_POST983_ACTUAL_PREVIEW_AND_PACKET_B_POST_INTEGRATION.md).
