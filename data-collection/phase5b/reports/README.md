@@ -1,5 +1,7 @@
 # Phase5B recovery report — Nov27 post-#980 deployment
 
+For canonical protocol navigation and the latest near-expiry F026 evidence, see the [plan directory](../../plans/README.md) and [Nov27 16:11 PST checkpoint](../../phase6/checkpoints/2026-11-27_1611_PST_PLANS_INDEX_AND_NEAR_EXPIRY_P0.md). The checkpoint records the 16:05 PST due-only retention readback and the 16:09 PST no-due preparation/PRE results; this report's original counts below remain timestamped historical snapshots.
+
 **Engineering reliability and evidence visibility improved; scientific output remains unproven.** The guarded #980 release is now on production main. The latest owner source/storage census (13:58Z, before cutover) showed 134 timely bindings, zero linked/cutoff-safe PRE and zero global Packet B fragments/bundles/links. The later protected Day5 read-only custody check also found zero prepared queries and no conditional policy installation. We have no positive PRE, Packet B, POST or physical-label evidence.
 
 **59 permanent failure families:16 narrowly CLOSED,43 NOT_CLOSED.** F040 now closes only for the exact guarded #980 cutover; F058/F059 remain narrow reporting/test corrections. The other 43 open families were not closed or reopened. All six scientific P0 families and all ten complete component objectives remain outstanding. These are registered causes and gaps, not 43 newly active incidents.

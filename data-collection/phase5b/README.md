@@ -11,7 +11,9 @@ Phase5B simplifies recovery operations alongside Phase6. It does not restart the
 
 ## Start here
 
+- [Plan directory / Phase 5B–Phase 6 recovery map](../plans/README.md): canonical f.8 and amendments, Packet A/B, Amendment E, C+D/V0087 and live P0 evidence.
 - [Latest dated checkpoint](checkpoints/2026-11-27_PHASE5B_POST980_DEPLOYMENT_AND_CUSTODY_READBACK.md) is the current release and owner-evidence state. Earlier checkpoints below are historical snapshots, not live instructions.
+- [Nov27 near-expiry F026 checkpoint](../phase6/checkpoints/2026-11-27_1611_PST_PLANS_INDEX_AND_NEAR_EXPIRY_P0.md): exact 16:05 PST four-original retention readback and next owner-only evidence needed.
 - [P0 scientific bottleneck and exact CI checkpoint](checkpoints/2026-11-27_P0_SCIENTIFIC_BOTTLENECK_AND_EXACT_CI.md) records the immediate Packet A→PRE→Packet B gap, targeted verification, exact callback source-build hold and owner-only prerequisites.
 - [Owner report](reports/README.md) explains evidence of change and remaining scientific blockers.
 - [Current progress and failure-family report](reports/2026-11-27_RECOVERY_PROGRESS.md) orders all open F IDs by priority.
