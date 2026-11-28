@@ -6,6 +6,8 @@ on:
       - 'data-collection/phase5b/closure-matrix.json'
       - 'scripts/v39_phase5b_retention_p7_inventory_owner.mjs'
       - 'tests/phase5b_retention_p7_inventory_v39.test.mjs'
+      - 'server/lib/disruption/phase5ConditionalPostOutcomeMatcher_v39.ts'
+      - 'tests/phase5_conditional_post_outcome_matcher_v39.test.ts'
       - 'scripts/v39_phase5b_progress_report_v39.mjs'
       - 'tests/phase5b_progress_report_v39.test.mjs'
       - 'tests/phase5b_paid_audit_cli_transport_v39.test.mjs'

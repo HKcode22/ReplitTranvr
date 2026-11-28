@@ -105,6 +105,11 @@ export function projectNearExpiryRows(rows,observedAtUtc,globalNextHourCount){
   status:"P5B_NEAR_EXPIRY_STUDY_RECONCILIATION_READONLY",
   observedAtUtc:observed,globalEligibleNextHour:global,
   candidates,studyScopedCandidates:candidates.filter(x=>x.studyScope==="ACTIVE_STUDY_SCOPE").length,
+  // Same-record intersection only. This is a necessary-condition screen,
+  // never a count of finally eligible originals or approved Packet B links.
+  approachingExpiryWithNativePreScreenOriginals:candidates.filter(x=>
+   x.studyScope==="ACTIVE_STUDY_SCOPE"&&x.cutoffLeadPreScreenMembers>0&&
+   x.cutoffSafeSourceLinkedPreRows===0).length,
   nativeCutoffLeadPreScreenMembers:candidates.reduce((n,x)=>n+x.cutoffLeadPreScreenMembers,0),
   finalScientificEligibilityCertified:false,stage14PermitIssued:false,
   conditionalPolicyStateRead:false,packetBSourceLinkageForCandidates:false,

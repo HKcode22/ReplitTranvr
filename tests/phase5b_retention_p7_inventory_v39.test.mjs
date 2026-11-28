@@ -44,8 +44,19 @@ test("T127 reconciles each next-hour original to study scope and existing work w
  assert.equal(x.candidates[0].privatePacketsForStudyDay.sourceLinkedToThisOriginal,false);
  assert.equal(x.finalScientificEligibilityCertified,false);
  assert.equal(x.stage14PermitIssued,false);
+ assert.equal(x.approachingExpiryWithNativePreScreenOriginals,0);
  assert.equal(x.databaseWrites,0);
  assert.equal("population_query_id" in x.candidates[0],false);
+});
+test("T127 no scoped open prescreen member cannot become a pending near-expiry original",()=>{
+ const first={...near,global_count:2,access_deadline_utc:"2026-11-28T00:40:00.000Z"};
+ const second={...near,candidate_ordinal:2,global_count:2,study_scope_status:"OTHER_MANIFEST",
+  run_day_index:null,slot_id:null,horizon:null,query_state:null,expected_members:null,
+  observed_members:0,native_shape_pass_members:0,cutoff_lead_prescreen_members:0,
+  access_deadline_utc:"2026-11-28T01:20:00.000Z"};
+ const x=projectNearExpiryRows([first,second],"2026-11-28T00:30:00.000Z",2);
+ assert.equal(x.approachingExpiryWithNativePreScreenOriginals,0);
+ assert.equal(x.nativeCutoffLeadPreScreenMembers,0);
 });
 test("T127 rejects a denominator mismatch, expired candidate, malformed scope, and unsafe row identity",()=>{
  assert.throws(()=>projectNearExpiryRows([near],"2026-11-28T00:30:00.000Z",2),/COUNT_OR_CLOCK/);
