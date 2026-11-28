@@ -363,3 +363,13 @@ test("paused #985 requires exact #984 base, full prior mandatory CI and no paid 
  assert.match(sourceCutover,/"\$TARGET_PR" == 984 \|\| "\$TARGET_PR" == 985 \]\];then target_980_pins_ok/);
  assert.doesNotMatch(sourceCutover,/DEPLOY_EXACT_REVIEWED_SOURCE_ONLY_TARGET_985|RECOVER_EXACT_MERGED_SOURCE_ONLY_TARGET_985/);
 });
+
+test("F026 paused 984/985 actual owner mode selection resolves the exact predecessor, never the earlier PR",()=>{
+ const admission=sourceCutover.slice(0,sourceCutover.indexOf('\nH="${2:-}"'));
+ assert.ok(admission.includes("TARGET_PR=985"));
+ for(const [pr,old] of [[984,"a02e3d6eddc378871f030848235746de160b71e5"],[985,"f441a5e6cde2a6bf8d3ca4be6b5b3219aa1c04fe"]])
+  for(const mode of ["DEPLOY_EXACT_REVIEWED_PAUSED_TARGET_","RECOVER_EXACT_MERGED_PAUSED_TARGET_"]){
+   const r=spawnSync("bash",["-c",admission+'\nprintf "%s %s %s %s\\n" "$TARGET_ONLY" "$TARGET_PR" "$OLD" "$ROUTE_MODE"',"fixture",mode+pr],{encoding:"utf8",timeout:5000});
+   assert.equal(r.status,0,r.stderr);assert.equal(r.stdout.trim(),"1 "+pr+" "+old+" PAUSED");
+  }
+});
