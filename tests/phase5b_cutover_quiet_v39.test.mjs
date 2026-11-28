@@ -246,3 +246,11 @@ test("T135 #982 reuses the exact guarded release, with no new callback runtime i
  const workflow=readFileSync(new URL("../.github/workflows/phase5-reviewed-replit-callback-only-build-no-provider.yml",import.meta.url),"utf8");
  assert.match(workflow,/github.event.pull_request.number == 981 \|\| github.event.pull_request.number == 982/);
 });
+
+test("T135 commissioning worker successor explicitly triggers all three scientific sibling checks",()=>{
+ for(const name of ["phase5-v0088-real-queue-stage14-disposable-pg16.yml","phase5-v0091-source-bound-registration-disposable-pg16.yml","phase5-amendment-e-endpoint-evidence-review-offline.yml"]){
+  const yaml=readFileSync(new URL("../.github/workflows/"+name,import.meta.url),"utf8");
+  const pr=yaml.split("  pull_request:\n")[1]?.split(/\n  [a-z_]+:/)[0];
+  assert.ok(pr,name);assert.match(pr,/^      - 'scripts\/v39_phase5b_source_only_successor_owner\.sh'$/m,name);
+ }
+});

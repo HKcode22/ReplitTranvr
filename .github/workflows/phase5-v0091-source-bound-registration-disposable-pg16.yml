@@ -3,6 +3,7 @@ on:
   pull_request:
     branches: [main]
     paths:
+      - 'scripts/v39_phase5b_source_only_successor_owner.sh'
       - '.github/workflows/phase5-v0091-source-bound-registration-disposable-pg16.yml'
       - 'migrations/staged/V0091__phase5_cd_source_bound_flight_registration_prepare_only_v39.sql'
       - 'migrations/staged/V0112__phase5b_prospective_conditional_queue_registration_v39.sql'

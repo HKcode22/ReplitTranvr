@@ -720,7 +720,8 @@
       "id": "F052",
       "classification": "NARROW_CORRECTION_RECORDED",
       "implementations": [
-        "I114"
+        "I114",
+        "I139"
       ],
       "next": "Preserve narrow correction; reopen only on material new evidence",
       "closureStatus": "CLOSED",
