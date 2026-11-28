@@ -220,6 +220,8 @@ jobs:
           psql "$DATABASE_URL" -X -v ON_ERROR_STOP=1 <<'SQL'
           CREATE ROLE neondb_owner LOGIN CREATEROLE PASSWORD 'ci-only-day-real';
           ALTER DATABASE neondb OWNER TO neondb_owner;
+          -- Metadata-only legacy-schema presence checks used by the exact owner chain.
+          GRANT USAGE ON SCHEMA clean TO neondb_owner;
           SQL
           CUSTODY_OWNER='postgresql://neondb_owner:ci-only-day-real@localhost:5432/neondb?sslmode=disable'
           psql "$CUSTODY_OWNER" -X -v ON_ERROR_STOP=1 -f migrations/staged/V0094__phase6_private_frozen_packet_transport_inert_v39.sql
