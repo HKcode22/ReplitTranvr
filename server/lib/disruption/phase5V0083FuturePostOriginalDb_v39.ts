@@ -579,3 +579,138 @@ export async function auditP5FuturePostActualPriorPreBatch(pool:Pick<Pool,"conne
    {readonly privateDecisions:readonly (typeof decisions)[number][]};
  }finally{if(tx)await db.query("ROLLBACK").catch(()=>{});db.release();}
 }
+
+/** Separate conditional T6 planning read. Never use native physical POST
+ * eligibility as conditional authority. Only retained T6 SOURCE metadata
+ * is read; T24 raw contents are NOT required or resurrected. The independent
+ * T24 receipt, Packet B anchor, separate POST issuer and rights review still
+ * must be verified before any POST packet can be signed or paid. */
+export interface P5ConditionalPostT6BatchScope {
+ manifestSha256:string;runDayIndex:number;airportIcao:string;reviewedFrameSha256:string;
+ queryDigestSha256:string;rightsSha256:string;protocolSha256:string;
+ releaseSha256:string;providerContractSha256:string;slot:string;
+ serviceWindowStartUtc:string;serviceWindowEndUtc:string;cohortStartUtc:string;
+ candidates:readonly {flightInstanceId:string;expectedSelectedTNativeUtc:string;
+  expectedPacketSha256:string;boundSourceQueryDigests:readonly string[]}[];
+}
+export const P5_FUTURE_CONDITIONAL_POST_ACTUAL_T6_SQL=
+ "SELECT s.flight_instance_id,s.id::text AS snapshot_id,s.horizon,q.query_digest,"+
+ " s.created_at,s.prediction_cutoff_utc,s.selected_t_milestone_utc,s.fids_response_hash,"+
+ " r.available_at AS original_available_at,b.population_query_id::text AS population_query_id,"+
+ " b.source_expires_at_utc,b.response_hash AS binding_response_hash,"+
+ " fp.available_at AS member_available_at,fp.dep_scheduled_utc AS reported_departure_utc"+
+ " FROM clean.flight_snapshots s"+
+ " JOIN clean.phase5_fids_original_binding_v39 b ON b.population_query_id::text=s.population_query_id"+
+ " JOIN clean.phase5_fids_allowed_query_v39 q ON q.query_digest=b.query_digest AND q.manifest_sha256=b.manifest_sha256"+
+ " JOIN clean.fids_query_response r ON r.population_query_id=b.population_query_id AND r.response_hash=b.response_hash"+
+ " JOIN clean.flight_population fp ON fp.population_query_id=b.population_query_id"+
+ " AND fp.population_member_id=s.population_member_id AND fp.canonical_flight_instance_id=s.flight_instance_id"+
+ " WHERE q.manifest_sha256=$1 AND q.run_day_index=$2 AND q.airport_icao=$3"+
+ " AND s.flight_instance_id=ANY($4::text[]) AND s.frame_hash=$5 AND q.query_digest=$6"+
+ " AND q.rights_review_sha256=$7 AND b.rights_review_sha256=$7"+
+ " AND r.raw_payload#>>'{fidsRequestContract,phase5ConditionalService,protocolSha256}'=$8"+
+ " AND q.reviewed_release_sha256=$9 AND q.provider_contract_sha256=$10 AND q.slot_id=$11"+
+ " AND q.service_window_start_utc=$12::timestamptz AND q.service_window_end_utc=$13::timestamptz"+
+ " AND r.raw_payload#>>'{fidsRequestContract,phase5ConditionalService,cohortStartUtc}'=$14"+
+ " AND q.state='ACTIVE' AND q.horizon='T-6h' AND s.horizon='T-6h' AND s.prediction_state='PRE_DEPARTURE'"+
+ " AND s.flight_instance_id ~ '^leg:g5a:[a-f0-9]{64}$'"+
+ " AND fp.scope_classification='unknown' AND fp.codeshare_resolution_status='g5a_conditional_operator_composite_no_native_id'"+
+ " AND fp.source_airport_icao=q.airport_icao AND fp.dep_airport_icao=q.airport_icao"+
+ " AND fp.arr_airport_icao ~ '^[A-Z]{4}$' AND fp.arr_airport_icao<>q.airport_icao"+
+ " AND fp.flight_number ~ '^[A-Z0-9]{2}[0-9]{1,4}$'"+
+ " AND fp.population_role='requested_airport_primary' AND fp.source_type='fids' AND fp.query_direction='Departure'"+
+ " AND r.source_airport_icao=q.airport_icao AND r.query_direction='Departure'"+
+ " AND r.raw_payload->>'phase5PopulationIdentityVersion'='P5_CANONICAL_SHA256_V1'"+
+ " AND (r.raw_payload->'fidsRequestContract') @> '{\"schema\":\"v39.fids-request-frame.application-intent.v1\",\"endpointKind\":\"airport_local_fids\",\"direction\":\"Departure\",\"withLeg\":true,\"withCargo\":false,\"withPrivate\":false,\"withCancelled\":true,\"withCodeshared\":true,\"withLocation\":false}'::jsonb"+
+ " AND r.raw_payload#>>'{fidsRequestContract,airportIcao}'=q.airport_icao"+
+ " AND r.raw_payload#>>'{fidsRequestContract,openapiSha256}'=q.provider_contract_sha256"+
+ " AND fp.response_hash=b.response_hash AND s.fids_response_hash=b.response_hash"+
+ " AND fp.provider_content_expired_at_utc IS NULL AND r.raw_expired_at_utc IS NULL AND r.raw_payload IS NOT NULL"+
+ " AND b.source_expires_at_utc>transaction_timestamp()"+
+ " ORDER BY s.flight_instance_id,s.id LIMIT $15";
+const conditionalPostId=(x:unknown):x is string=>typeof x==="string"&&/^leg:g5a:[a-f0-9]{64}$/.test(x);
+const conditionalPostHash=(x:unknown):x is string=>typeof x==="string"&&H.test(x);
+const conditionalPostUuid=(x:unknown):x is string=>typeof x==="string"&&/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i.test(x);
+function conditionalDbClock(x:unknown){
+ if(x instanceof Date){if(!Number.isFinite(x.getTime()))fail("CONDITIONAL_POST_DB_CLOCK");return x.getTime();}
+ if(typeof x!=="string")fail("CONDITIONAL_POST_DB_CLOCK");
+ return Date.parse(utc(x));
+}
+export async function auditP5ConditionalPostActualT6Batch(pool:Pick<Pool,"connect">,scope:P5ConditionalPostT6BatchScope){
+ if(!scope||![scope.manifestSha256,scope.reviewedFrameSha256,scope.queryDigestSha256,
+  scope.rightsSha256,scope.protocolSha256,scope.releaseSha256,scope.providerContractSha256].every(conditionalPostHash)||
+  !Number.isSafeInteger(scope.runDayIndex)||scope.runDayIndex<1||scope.runDayIndex>31||
+  typeof scope.airportIcao!=="string"||!ICAO.test(scope.airportIcao)||
+  !["HUB","MID_A","MID_B","REGIONAL"].includes(scope.slot)||
+  !Array.isArray(scope.candidates)||scope.candidates.length<1||scope.candidates.length>384||typeof pool?.connect!=="function")
+  fail("CONDITIONAL_POST_T6_SCOPE");
+ const start=Date.parse(utc(scope.serviceWindowStartUtc)),end=Date.parse(utc(scope.serviceWindowEndUtc)),cohort=Date.parse(utc(scope.cohortStartUtc));
+ if(start>=end||cohort>start||end>cohort+21600000)fail("CONDITIONAL_POST_T6_GEOMETRY");
+ const ids=new Set<string>();
+ for(const p of scope.candidates){
+  if(!p||!conditionalPostId(p.flightInstanceId)||ids.has(p.flightInstanceId)||
+   !conditionalPostHash(p.expectedPacketSha256)||!Array.isArray(p.boundSourceQueryDigests)||
+   p.boundSourceQueryDigests.length!==1||p.boundSourceQueryDigests[0]!==scope.queryDigestSha256)
+   fail("CONDITIONAL_POST_T6_CANDIDATE");
+  const T=Date.parse(utc(p.expectedSelectedTNativeUtc));if(T<start||T>=end)fail("CONDITIONAL_POST_T6_GEOMETRY");
+  ids.add(p.flightInstanceId);
+ }
+ const c=await pool.connect();let tx=false,discard=false;
+ try{
+  tx=true;await c.query("BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY");
+  await c.query("SET LOCAL statement_timeout='12000ms'");await c.query("SET LOCAL lock_timeout='2000ms'");
+  const who=await c.query("SELECT current_user AS role,session_user AS login,current_database() AS db,"+
+   "current_setting('transaction_read_only') AS ro,current_setting('server_version_num')::integer AS version,"+
+   "pg_is_in_recovery() AS replica,clock_timestamp() AS now");
+  const w=who.rows[0];
+  if(who.rowCount!==1||w?.role!=="phase5_fids_source_prod_20261107"||
+   w.login!=="phase5_p5_source_login_20261108"||w.db!=="neondb"||w.ro!=="on"||
+   Number(w.version)<160000||Number(w.version)>=170000||w.replica!==false)
+   fail("CONDITIONAL_POST_T6_RESTRICTED_SOURCE_SESSION");
+  const now=conditionalDbClock(w.now),limit=scope.candidates.length*2+1;
+  const q=await c.query(P5_FUTURE_CONDITIONAL_POST_ACTUAL_T6_SQL,[scope.manifestSha256,scope.runDayIndex,
+   scope.airportIcao,[...ids],scope.reviewedFrameSha256,scope.queryDigestSha256,scope.rightsSha256,
+   scope.protocolSha256,scope.releaseSha256,scope.providerContractSha256,scope.slot,
+   scope.serviceWindowStartUtc,scope.serviceWindowEndUtc,scope.cohortStartUtc,limit]);
+  if(!Array.isArray(q.rows)||q.rowCount!==q.rows.length||q.rows.length>=limit)fail("CONDITIONAL_POST_T6_UNBOUNDED_ROWS");
+  const by=new Map<string,Record<string,any>[]>();
+  for(const x of q.rows){
+   if(!conditionalPostId(x.flight_instance_id)||!ids.has(x.flight_instance_id))fail("CONDITIONAL_POST_T6_CROSS_FLIGHT");
+   const a=by.get(x.flight_instance_id)??[];a.push(x);by.set(x.flight_instance_id,a);
+  }
+  const observed=await c.query("SELECT clock_timestamp() AS now"),completed=conditionalDbClock(observed.rows[0]?.now);
+  if(observed.rowCount!==1||completed<now||completed-now>120000)fail("CONDITIONAL_POST_T6_CLOCK_DRIFT");
+  const decisions=scope.candidates.map(p=>{
+   const a=by.get(p.flightInstanceId)??[],T=Date.parse(p.expectedSelectedTNativeUtc),W=T+7200000;
+   const unavailable=(reason:string)=>Object.freeze({flightInstanceId:p.flightInstanceId,status:"CONDITIONAL_T6_UNAVAILABLE_OR_AMBIGUOUS" as const,reason});
+   if(a.length!==1)return unavailable(a.length?"DUPLICATE_T6":"NO_ACTUAL_RETAINED_T6");
+   const x=a[0];
+   if(typeof x.snapshot_id!=="string"||! /^[1-9][0-9]{0,17}$/.test(x.snapshot_id)||
+    x.horizon!=="T-6h"||x.query_digest!==scope.queryDigestSha256||!conditionalPostHash(x.fids_response_hash)||
+    x.fids_response_hash!==x.binding_response_hash||!conditionalPostUuid(x.population_query_id))
+    return unavailable("T6_SOURCE_BINDING");
+   const native=conditionalDbClock(x.selected_t_milestone_utc),cutoff=conditionalDbClock(x.prediction_cutoff_utc),
+    issued=conditionalDbClock(x.created_at),available=conditionalDbClock(x.original_available_at),
+    member=conditionalDbClock(x.member_available_at),expiry=conditionalDbClock(x.source_expires_at_utc),
+    reported=conditionalDbClock(x.reported_departure_utc);
+   if(native!==T||cutoff!==T-21600000||available>member||member>issued||issued>cutoff||issued>now||
+    reported<start||reported>=end||issued>=expiry||expiry<=completed||expiry<=W||completed>=W)
+    return unavailable("T6_CLOCK_RETENTION_OR_WATERMARK");
+   return Object.freeze({flightInstanceId:p.flightInstanceId,status:"ACTUAL_RETAINED_CONDITIONAL_T6_FOR_POST_REVIEW" as const,
+    snapshotId:x.snapshot_id,queryDigestSha256:scope.queryDigestSha256,expectedSignedPacketSha256:p.expectedPacketSha256,
+    originalPopulationQueryId:x.population_query_id,originalSourceResponseSha256:x.fids_response_hash,
+    originalSourceAvailableAtUtc:new Date(available).toISOString(),preIssuedAtUtc:new Date(issued).toISOString(),
+    selectedScheduledDepartureUtc:new Date(T).toISOString(),reportedScheduledDepartureUtc:new Date(reported).toISOString(),
+    predictionCutoffUtc:new Date(cutoff).toISOString(),sourceExpiresAtUtc:new Date(expiry).toISOString(),
+    assessmentWatermarkUtc:new Date(W).toISOString()});
+  });
+  try{await c.query("ROLLBACK");tx=false;}catch(e){discard=true;throw e;}
+  const eligible=decisions.filter(x=>x.status==="ACTUAL_RETAINED_CONDITIONAL_T6_FOR_POST_REVIEW").length;
+  const out={status:"ACTUAL_CONDITIONAL_T6_POST_CANDIDATE_BATCH_NO_GO",runDayIndex:scope.runDayIndex,
+   observedDbClockUtc:new Date(now).toISOString(),completedDbClockUtc:new Date(completed).toISOString(),
+   candidateCount:decisions.length,eligibleCount:eligible,unavailableCount:decisions.length-eligible,
+   independentT24WitnessVerified:false,packetBAnchorVerified:false,providerCalls:0,databaseWrites:0,phase6PaidGo:false};
+  return Object.freeze(Object.defineProperty(out,"privateDecisions",{value:Object.freeze(decisions),enumerable:false})) as typeof out&
+    {readonly privateDecisions:readonly (typeof decisions)[number][]};
+ }finally{if(tx&&!discard){try{await c.query("ROLLBACK");}catch{discard=true;}}c.release(discard);}
+}

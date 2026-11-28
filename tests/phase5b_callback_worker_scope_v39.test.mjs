@@ -210,7 +210,7 @@ test("T136 refuses unknown metadata, wrong head/ancestry, clean runtime PIN and 
 });
 
 test("T142 exact POST-worker successor refuses callback publication and unreviewed drift",()=>{
- const post=[MATCHER,"server/lib/disruption/phase5ConditionalSignedSchedulePair_v39.ts","server/lib/disruption/phase5ProspectiveProviderScheduleRevisionPrimary_v39.ts"];
+ const post=[MATCHER,"server/lib/disruption/phase5ConditionalSignedSchedulePair_v39.ts","server/lib/disruption/phase5ProspectiveProviderScheduleRevisionPrimary_v39.ts","server/lib/disruption/phase5V0083FuturePostOriginalDb_v39.ts","server/lib/disruption/phase6PostNativePreCandidateReadOnce_v39.mjs"];
  const full=[...new Set([...fullInputs,...post])];
  const changes={[BASE]:full,[BASE_982]:worker982Inputs,[BASE_POST]:post,[PIN]:full};
  const result=runGuard({base:BASE_POST,fixture:{changes}});

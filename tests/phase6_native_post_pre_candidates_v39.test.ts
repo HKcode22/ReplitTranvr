@@ -88,7 +88,7 @@ function pendingFixture(){
  return {a:build(audit),audit,build,index,selector,trust:f.trust};
 }
 
-import {selectP6PostNativePreCandidatePage,readP6ActualNativePostPreCandidatePage,proposeP6NativePostPhysicalWindow}
+import {selectP6PostNativePreCandidatePage,selectP6PostConditionalT6CandidatePage,readP6ActualNativePostPreCandidatePage,readP6ActualConditionalT6PostPreCandidatePage,proposeP6NativePostPhysicalWindow}
  from "../server/lib/disruption/phase6PostNativePreCandidateReadOnce_v39.mjs";
 describe("native POST candidate pages require exact signed SOURCE and later PRE scope",()=>{
  it("projects signed permit candidates only, never counts them as actual PRE or leaks flight IDs",()=>{
@@ -109,25 +109,36 @@ describe("native POST candidate pages require exact signed SOURCE and later PRE 
  it("isolates conditional later PRE from native anchor selection without losing valid peers",()=>{
   const f=pendingFixture(),old=f.index.privateParsedIndex.entries[1],later=JSON.parse(f.index.getFrozen(old.filePath).toString());
   const original=later.entries[0],conditional="leg:g5a:"+H("4");
-  function run(id:string){
+  function run(id:string,separate=false,marker=true){
    const bytes=Buffer.from(JSON.stringify({...later,entries:[original,{...original,expectedFlightInstanceId:id,expectedPacketSha256:H("9")}]}));
    const parsed={...f.index.privateParsedIndex,entries:[f.index.privateParsedIndex.entries[0],{...old,fileSha256:h(bytes)}]};
    const raw=Buffer.from(JSON.stringify(parsed)),selector={...f.selector,indexSha256:h(raw)};
    const index:any={redactedSummary:{...f.index.redactedSummary,indexSha256:h(raw)}};
    Object.defineProperties(index,{privateParsedIndex:{value:parsed},privateCurrentIndexBytes:{value:raw},
     getFrozen:{value:(path:string)=>path===old.filePath?bytes:f.index.getFrozen(path)}});
-   return selectP6PostNativePreCandidatePage({index,selector,trust:f.trust,sourceScope:f.a.privateSourceScope});
+   const sourceScope={...f.a.privateSourceScope,...(marker?{conditionalServiceScope:{reviewedConditionalServiceScope:true,protocolSha256:H("a")}}:{})};
+   return (separate?selectP6PostConditionalT6CandidatePage:selectP6PostNativePreCandidatePage)({index,selector,trust:f.trust,sourceScope});
   }
   const out=run(conditional);expect(out.conditionalCandidatesExcludedFromNativeCount).toBe(1);
   expect(out.privateCandidates.map((c:any)=>c.flightInstanceId)).toEqual(["flight_existing"]);
   expect(JSON.stringify(out)).not.toContain(conditional);
   expect(()=>run("leg:g5a:malformed")).toThrow("CONDITIONAL_IDENTITY_NAMESPACE_DRIFT");
+  const sep=run(conditional,true);
+  expect(sep).toMatchObject({status:"SIGNED_CONDITIONAL_T6_POST_CANDIDATE_PAGE_NOT_ACTUAL_PRE",totalCandidateCount:1,nativeCandidatesExcludedFromConditionalCount:1,phase6PaidGo:false});
+  expect(sep.privateCandidates).toEqual([{flightInstanceId:conditional,expectedSelectedTNativeUtc:original.expectedSelectedTNativeUtc,
+   expectedPacketSha256:H("9"),boundSourceQueryDigests:[f.selector.queryDigestSha256]}]);
+  expect(JSON.stringify(sep)).not.toContain(conditional);
+  expect(()=>run(conditional,true,false)).toThrow("CONDITIONAL_T6_SIGNED_SCOPE_REQUIRED");
+  expect(()=>proposeP6NativePostPhysicalWindow({page:sep,policyBytes:Buffer.alloc(0),expectedPolicySha256:H("1"),trust:f.trust})).toThrow("UNAPPROVED_PHYSICAL_WINDOW_SCOPE");
  });
  it("refuses unapproved runtime before a restricted SQL read",async()=>{
   const f=pendingFixture();let calls=0;
   await expect(readP6ActualNativePostPreCandidatePage({
    readerClient:{query:async()=>{calls++;throw Error("NO")}},sourcePool:{},
    trust:f.trust,selector:f.selector,policy:{}})).rejects.toThrow("NO_EXACT_NONPAID_SCOPE");
+  expect(calls).toBe(0);
+  await expect(readP6ActualConditionalT6PostPreCandidatePage({readerClient:{query:async()=>{calls++;throw Error("NO")}},
+   sourcePool:{},trust:f.trust,selector:f.selector,policy:{}})).rejects.toThrow("NO_SEPARATE_CONDITIONAL_POST_READ_SCOPE");
   expect(calls).toBe(0);
  });
 });
@@ -369,4 +380,53 @@ describe("nonpaid POST producer explicit handoff",()=>{
 import {P5_FUTURE_POST_ACTUAL_PRE_SQL,P5_FUTURE_POST_ACTUAL_PRE_BATCH_SQL} from "../server/lib/disruption/phase5V0083FuturePostOriginalDb_v39";
 it("native single and batched POST lineage SQL exclude conditional service namespace",()=>{
  for(const sql of [P5_FUTURE_POST_ACTUAL_PRE_SQL,P5_FUTURE_POST_ACTUAL_PRE_BATCH_SQL])expect(sql).toContain("s.flight_instance_id NOT LIKE 'leg:g5a:%'");
+});
+
+import {auditP5ConditionalPostActualT6Batch,P5_FUTURE_CONDITIONAL_POST_ACTUAL_T6_SQL,P5_FUTURE_POST_ACTUAL_PRE_SQL} from "../server/lib/disruption/phase5V0083FuturePostOriginalDb_v39";
+describe("separate conditional actual T6 metadata read preserves frozen reference",()=>{
+ const at=(hm:string)=>"2027-02-10T"+hm+":00.000Z";
+ const id="leg:g5a:"+H("4"),T=at("11:20");
+ const scope={manifestSha256:H("a"),runDayIndex:5,airportIcao:"WSSS",reviewedFrameSha256:H("b"),
+  queryDigestSha256:H("c"),rightsSha256:H("d"),protocolSha256:H("e"),releaseSha256:H("f"),providerContractSha256:H("1"),
+  slot:"HUB",serviceWindowStartUtc:at("11:00"),serviceWindowEndUtc:at("12:00"),cohortStartUtc:at("11:00"),
+  candidates:[{flightInstanceId:id,expectedSelectedTNativeUtc:T,expectedPacketSha256:H("2"),boundSourceQueryDigests:[H("c")]}]};
+ const row={flight_instance_id:id,snapshot_id:"1001",horizon:"T-6h",query_digest:H("c"),created_at:at("05:19"),
+  prediction_cutoff_utc:at("05:20"),selected_t_milestone_utc:T,fids_response_hash:H("3"),original_available_at:at("05:10"),
+  population_query_id:"12345678-1234-4123-8123-123456789abc",source_expires_at_utc:"2027-02-11T04:10:00.000Z",
+  binding_response_hash:H("3"),member_available_at:at("05:11"),reported_departure_utc:at("11:35")};
+ function fixture(rows:any[]=[row],clock=at("11:00"),rollbackFails=false){
+  const calls:string[]=[],released:boolean[]=[];
+  const client={query:async(sql:string,args?:any[])=>{
+   calls.push(sql);
+   if(sql.startsWith("SELECT current_user"))return {rowCount:1,rows:[{role:"phase5_fids_source_prod_20261107",login:"phase5_p5_source_login_20261108",db:"neondb",ro:"on",version:160000,replica:false,now:clock}]};
+   if(sql===P5_FUTURE_CONDITIONAL_POST_ACTUAL_T6_SQL){expect(args).toEqual([scope.manifestSha256,5,"WSSS",[id],scope.reviewedFrameSha256,scope.queryDigestSha256,scope.rightsSha256,scope.protocolSha256,scope.releaseSha256,scope.providerContractSha256,"HUB",scope.serviceWindowStartUtc,scope.serviceWindowEndUtc,scope.cohortStartUtc,3]);return {rows,rowCount:rows.length};}
+   if(sql==="SELECT clock_timestamp() AS now")return {rowCount:1,rows:[{now:clock}]};
+   if(sql==="ROLLBACK"&&rollbackFails)throw Error("ROLLBACK_UNCERTAIN");
+   return {rowCount:null,rows:[]};
+  },release:(discard:boolean)=>released.push(discard)};
+  return {pool:{connect:async()=>client} as any,calls,released};
+ }
+ it("reads actual same-query T6 metadata with retimed schedule, never certifies witness, Packet B or outcome",async()=>{
+  const f=fixture(),out=await auditP5ConditionalPostActualT6Batch(f.pool,scope);
+  expect(out).toMatchObject({status:"ACTUAL_CONDITIONAL_T6_POST_CANDIDATE_BATCH_NO_GO",eligibleCount:1,independentT24WitnessVerified:false,packetBAnchorVerified:false,providerCalls:0,databaseWrites:0,phase6PaidGo:false});
+  expect(out.privateDecisions[0]).toMatchObject({status:"ACTUAL_RETAINED_CONDITIONAL_T6_FOR_POST_REVIEW",selectedScheduledDepartureUtc:T,reportedScheduledDepartureUtc:at("11:35"),predictionCutoffUtc:at("05:20"),assessmentWatermarkUtc:at("13:20")});
+  expect(JSON.stringify(out)).not.toContain(id);expect(JSON.stringify(out)).not.toContain(at("11:35"));
+  expect(f.released).toEqual([false]);expect(f.calls.at(-1)).toBe("ROLLBACK");
+  expect(P5_FUTURE_CONDITIONAL_POST_ACTUAL_T6_SQL).toContain("g5a_conditional_operator_composite_no_native_id");
+  expect(P5_FUTURE_CONDITIONAL_POST_ACTUAL_T6_SQL).toContain("protocolSha256}'=$8");
+  expect(P5_FUTURE_POST_ACTUAL_PRE_SQL).toContain("NOT LIKE 'leg:g5a:%'");
+ });
+ it("censors missing, duplicate, late, wrong source, expired-at-watermark and changed frozen T",async()=>{
+  for(const rows of [[],[row,row],[{...row,created_at:at("05:21")}],[{...row,query_digest:H("9")}],
+   [{...row,source_expires_at_utc:at("13:20")}],[{...row,selected_t_milestone_utc:at("11:35")}],
+   [{...row,reported_departure_utc:at("12:00")}],[{...row,member_available_at:at("05:20")}]])
+   expect((await auditP5ConditionalPostActualT6Batch(fixture(rows).pool,scope)).eligibleCount).toBe(0);
+  expect((await auditP5ConditionalPostActualT6Batch(fixture([row],at("13:20")).pool,scope)).eligibleCount).toBe(0);
+ });
+ it("refuses cross-flight rows, missing exact scope and uncertain rollback",async()=>{
+  const f=fixture([{...row,flight_instance_id:"leg:g5a:"+H("5")}]);
+  await expect(auditP5ConditionalPostActualT6Batch(f.pool,scope)).rejects.toThrow("CONDITIONAL_POST_T6_CROSS_FLIGHT");
+  const bad=fixture();await expect(auditP5ConditionalPostActualT6Batch(bad.pool,{...scope,protocolSha256:"bad"})).rejects.toThrow("CONDITIONAL_POST_T6_SCOPE");expect(bad.calls).toHaveLength(0);
+  const unknown=fixture([row],at("11:00"),true);await expect(auditP5ConditionalPostActualT6Batch(unknown.pool,scope)).rejects.toThrow("ROLLBACK_UNCERTAIN");expect(unknown.released).toEqual([true]);
+ });
 });

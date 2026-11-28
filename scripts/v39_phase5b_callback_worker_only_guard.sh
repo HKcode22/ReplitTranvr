@@ -9,6 +9,8 @@ WORKER_POST_INPUTS=(
  server/lib/disruption/phase5ConditionalPostOutcomeMatcher_v39.ts
  server/lib/disruption/phase5ConditionalSignedSchedulePair_v39.ts
  server/lib/disruption/phase5ProspectiveProviderScheduleRevisionPrimary_v39.ts
+ server/lib/disruption/phase5V0083FuturePostOriginalDb_v39.ts
+ server/lib/disruption/phase6PostNativePreCandidateReadOnce_v39.mjs
 )
 WORKER_982_INPUTS=(
  server/lib/disruption/phase5ConditionalPostOutcomeMatcher_v39.ts
