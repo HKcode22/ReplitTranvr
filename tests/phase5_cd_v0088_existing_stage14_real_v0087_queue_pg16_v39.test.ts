@@ -238,7 +238,7 @@ active("Phase5 C+D actual Stage14 source-bound parallel PRE on disposable PG16",
      await admin.query("ALTER SCHEMA phase7_private OWNER TO neondb_owner");
      await admin.query("ALTER FUNCTION phase7_private.read_bound_pre_group_v39(text,bigint,text,text,integer,text,text) OWNER TO neondb_owner");
      await admin.query("GRANT SELECT ON ALL TABLES IN SCHEMA phase7_private TO neondb_owner");
-     await admin.query("GRANT SELECT ON clean.flight_snapshots,clean.flight_population,clean.fids_query_response,clean.phase5_fids_original_binding_v39,clean.phase5_fids_allowed_query_v39 TO neondb_owner");
+     await admin.query("GRANT SELECT ON clean.flight_snapshots,clean.flight_population,clean.fids_query_response,clean.phase5_fids_original_binding_v39,clean.phase5_fids_allowed_query_v39,clean.phase5_cd_pre_task_v39 TO neondb_owner");
      const open=async()=>{const c=new Client({connectionString:"postgresql://neondb_owner:ci-only-day-real@localhost:5432/neondb?sslmode=disable"});await c.connect();return c;};
      const bytes=readFileSync(V0115_PATH),nativeBytes=readFileSync(NATIVE_PATH),args={open,bytes,nativeBytes};
      expect((await inspectV0115(args)).status).toBe("V0115_ABSENT_EXACT_NATIVE_AND_READER_NO_GO");
@@ -1029,10 +1029,15 @@ active("Phase5 C+D actual Stage14 source-bound parallel PRE on disposable PG16",
       const verified=await readP6ConditionalPostT6PreservationBatch(scoped,scope,input);
       expect(verified).toMatchObject({status:"ACTUAL_CONDITIONAL_POST_T6_AND_PACKET_B_GROUP_READ_NO_GO",candidateCount:1,
        verifiedPacketBGroupCount:1,unavailableCount:0,independentT24WitnessVerified:false,postIssuerCommissioned:false,
-       physicalGateOutCertified:false,signedPacketCommitVerified:false,providerCalls:0,databaseWrites:0,postPacketsIssued:0,phase6PaidGo:false});
+       physicalGateOutCertified:false,signedPacketCommitVerified:true,verifiedTaskPacketBindingCount:1,providerCalls:0,databaseWrites:0,postPacketsIssued:0,phase6PaidGo:false});
       expect(verified.privateDecisions[0].anchor).toMatchObject({snapshotId:saved.committedSnapshotId,flightInstanceId:flight,
        selectedNativeTUtc:t.toISOString(),sourceResponseSha256:response});
       expect(verified.privateDecisions[0].fragments.some(f=>f.packet.rows[0].horizon==="T-6h")).toBe(true);
+      const taskProof=(await admin.query("SELECT packet_sha256,verified_receipt_sha256 FROM clean.phase5_cd_pre_task_v39 WHERE task_id=$1",[c.task_id])).rows[0];
+      expect(taskProof.packet_sha256).toBe(packetSha);
+      expect(verified.privateDecisions[0].verifiedTaskReceiptSha256).toBe(taskProof.verified_receipt_sha256);
+      expect(JSON.stringify(verified)).not.toContain(taskProof.verified_receipt_sha256);
+      await expect(readP6ConditionalPostT6PreservationBatch(scoped,{...scope,candidates:[{...scope.candidates[0],expectedPacketSha256:sha("wrong signed packet for same actual snapshot")}]},input)).rejects.toThrow("SIGNED_TASK_PACKET_OR_RECEIPT_MISMATCH");
       const census=async()=>{
        const c=await admin.connect();
        try{await c.query("BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY");
@@ -1130,7 +1135,7 @@ active("Phase5 C+D actual Stage14 source-bound parallel PRE on disposable PG16",
       // expired. Never plan a POST from a standalone T6 row without Packet B.
       const anchor=verified.privateDecisions[0].anchor;
       await expect(readPhase7PostScopedGroup(p7Scoped,P7SCOPED,p7.contract,p7.profile,anchor)).rejects.toMatchObject({code:"P0002"});
-      await expect(readPhase7ConditionalT6ScopedGroup(p7Scoped,P7SCOPED,p7.contract,p7.profile,anchor,sha("wrong protocol"))).rejects.toMatchObject({code:"P0002"});
+      await expect(readPhase7ConditionalT6ScopedGroup(p7Scoped,P7SCOPED,p7.contract,p7.profile,anchor,sha("wrong protocol"),packetSha)).rejects.toMatchObject({code:"P0002"});
       // F048/T146: exercise the real restricted session and simulate a lost
       // ROLLBACK acknowledgement at its adapter boundary. No positive receipt
       // and no reuse of the uncertain connection, on success or refusal.
@@ -1147,12 +1152,12 @@ active("Phase5 C+D actual Stage14 source-bound parallel PRE on disposable PG16",
          const val=Reflect.get(target,key);return typeof val==="function"?val.bind(target):val;
         }});
        }};
-       const attempt=readPhase7ConditionalT6ScopedGroup(lostRollback,P7SCOPED,p7.contract,p7.profile,anchor,protocolToRead);
+       const attempt=readPhase7ConditionalT6ScopedGroup(lostRollback,P7SCOPED,p7.contract,p7.profile,anchor,protocolToRead,packetSha);
        await expect(attempt).rejects.toThrow("ROLLBACK_UNACKNOWLEDGED");
        expect(rollbackCount).toBe(1);expect(releases).toEqual([true]);
       }
       // A fresh independent session remains usable after discarded sessions.
-      await expect(readPhase7ConditionalT6ScopedGroup(p7Scoped,P7SCOPED,p7.contract,p7.profile,anchor,protocol)).resolves.toMatchObject({fragments:expect.any(Array)});
+      await expect(readPhase7ConditionalT6ScopedGroup(p7Scoped,P7SCOPED,p7.contract,p7.profile,anchor,protocol,packetSha)).resolves.toMatchObject({fragments:expect.any(Array)});
       // Leave the fixture link expired for the existing due-only sweep below.
       // Never extend or resurrect a link, even in this regression.
       await admin.query("UPDATE phase7_private.pre_source_link_v39 SET expires_at_utc=clock_timestamp()-interval '1 second' WHERE snapshot_id=$1",[saved.committedSnapshotId]);

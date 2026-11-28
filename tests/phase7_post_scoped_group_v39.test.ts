@@ -52,7 +52,9 @@ it("preflight uses the same restricted actor and does not read private rows or w
 it("conditional preflight checks the V0115 signature, not the existing native grant, without reading a group",async()=>{
  const f=fake();
  await expect(preflightPhase7ConditionalT6ScopedReader(f.pool,role,contract)).resolves.toBe("2027-02-02T12:00:00.000Z");
- expect(f.query.mock.calls.find(([sql])=>sql.startsWith("SELECT current_user"))?.[1]).toEqual(["phase7_private.read_bound_conditional_t6_group_v39(text,bigint,text,text,integer,text,text,text)"]);
+ const args=f.query.mock.calls.find(([sql])=>sql.startsWith("SELECT current_user"))?.[1];
+ expect(args?.[0]).toBe("phase7_private.read_bound_conditional_t6_group_v39(text,bigint,text,text,integer,text,text,text)");
+ expect(args?.[1]).toEqual(expect.arrayContaining(["clean.phase5_cd_pre_task_v39","clean.phase5_fids_allowed_query_v39"]));
  expect(f.query).not.toHaveBeenCalledWith(P7_POST_SCOPED_GROUP_SQL,expect.anything());
  const denied=fake({can_scope:false});
  await expect(preflightPhase7ConditionalT6ScopedReader(denied.pool,role,contract)).rejects.toThrow("READER_SCOPE_OR_CLOCK");

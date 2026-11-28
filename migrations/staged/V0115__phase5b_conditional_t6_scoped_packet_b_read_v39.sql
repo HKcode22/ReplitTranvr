@@ -5,19 +5,32 @@
 CREATE FUNCTION phase7_private.read_bound_conditional_t6_group_v39(
  p_manifest text,p_snapshot bigint,p_rights text,p_query text,p_day integer,
  p_airport text,p_frame text,p_protocol text)
- RETURNS TABLE(group_id uuid,contract_sha256 text,profile_sha256 text,packet_sha256 text,packet_bytes bytea)
+ RETURNS TABLE(group_id uuid,contract_sha256 text,profile_sha256 text,packet_sha256 text,packet_bytes bytea,
+ verified_task_packet_sha256 text,verified_task_receipt_sha256 text)
  LANGUAGE plpgsql VOLATILE SECURITY DEFINER SET search_path=pg_catalog,pg_temp AS $read$
  DECLARE v_at timestamptz; v_group uuid; v_contract text; v_profile text;
+ v_task_packet text; v_task_receipt text;
  BEGIN
  IF current_setting('transaction_read_only')<>'on' OR current_setting('transaction_isolation') NOT IN ('repeatable read','serializable') THEN
   RAISE EXCEPTION 'P7_CONDITIONAL_GROUP_REQUIRES_STABLE_READONLY'; END IF;
  IF p_protocol IS NULL OR p_protocol !~ '^[a-f0-9]{64}$' THEN
   RAISE EXCEPTION 'P7_CONDITIONAL_GROUP_PROTOCOL'; END IF;
  v_at:=clock_timestamp();
- SELECT f.group_id,f.contract_sha256,f.profile_sha256 INTO STRICT v_group,v_contract,v_profile
+ SELECT f.group_id,f.contract_sha256,f.profile_sha256,t.packet_sha256,t.verified_receipt_sha256
+ INTO STRICT v_group,v_contract,v_profile,v_task_packet,v_task_receipt
  FROM phase7_private.pre_source_link_v39 l
  JOIN phase7_private.pre_fragment_v39 f ON f.row_id=l.row_id
  JOIN clean.flight_snapshots s ON s.id=l.snapshot_id
+ -- Reuse the existing verified task for this exact live T6 snapshot.
+ JOIN clean.phase5_cd_pre_task_v39 t ON t.verified_snapshot_id=s.id
+  AND t.manifest_sha256=p_manifest AND t.flight_instance_id=s.flight_instance_id
+  AND t.horizon='T-6h' AND t.state='VERIFIED_ON_TIME'
+  AND t.selected_native_t_utc=s.selected_t_milestone_utc
+  AND t.prediction_cutoff_utc=s.prediction_cutoff_utc
+  AND t.source_population_query_id=s.population_query_id::text
+  AND t.source_response_sha256=s.fids_response_hash
+  AND t.reviewed_source_rights_sha256=p_rights
+  AND t.verified_at_utc>=s.created_at AND t.verified_at_utc<=v_at
  JOIN clean.phase5_fids_original_binding_v39 b ON b.population_query_id::text=s.population_query_id AND b.response_hash=s.fids_response_hash
  JOIN phase7_private.pre_preservation_policy_v39 pol ON pol.manifest_sha256=b.manifest_sha256 AND pol.contract_sha256=f.contract_sha256 AND pol.profile_sha256=f.profile_sha256
  JOIN clean.phase5_fids_allowed_query_v39 q ON q.query_digest=b.query_digest AND q.manifest_sha256=b.manifest_sha256
@@ -46,8 +59,10 @@ CREATE FUNCTION phase7_private.read_bound_conditional_t6_group_v39(
  AND fp.provider_content_expired_at_utc IS NULL AND r.raw_expired_at_utc IS NULL AND r.raw_payload IS NOT NULL
  AND s.id=p_snapshot AND s.prediction_state='PRE_DEPARTURE' AND b.manifest_sha256=p_manifest AND b.rights_review_sha256=p_rights AND pol.rights_sha256=p_rights
  AND l.expires_at_utc>v_at AND b.source_expires_at_utc>s.selected_t_milestone_utc+interval '2 hours'
+ AND t.source_expires_at_utc=b.source_expires_at_utc
+ AND t.packet_sha256 ~ '^[a-f0-9]{64}$' AND t.verified_receipt_sha256 ~ '^[a-f0-9]{64}$'
  AND f.research_expiry_utc>v_at AND pol.valid_from_utc<=v_at AND pol.valid_until_utc>v_at;
- RETURN QUERY SELECT f.group_id,f.contract_sha256,f.profile_sha256,f.packet_sha256,f.packet_bytes
+ RETURN QUERY SELECT f.group_id,f.contract_sha256,f.profile_sha256,f.packet_sha256,f.packet_bytes,v_task_packet,v_task_receipt
  FROM phase7_private.pre_fragment_v39 f
  WHERE f.group_id=v_group AND f.contract_sha256=v_contract AND f.profile_sha256=v_profile AND f.research_expiry_utc>v_at
  ORDER BY CASE f.horizon WHEN 'T-24h' THEN 1 WHEN 'T-6h' THEN 2 ELSE 3 END;

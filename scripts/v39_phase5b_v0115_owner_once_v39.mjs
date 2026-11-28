@@ -12,11 +12,12 @@ import {execFileSync} from "node:child_process";
 export const V0115_PATH="migrations/staged/V0115__phase5b_conditional_t6_scoped_packet_b_read_v39.sql";
 export const NATIVE_PATH="data-collection/phase5/review-tools/p7_pre_fragment_storage_candidate_NOT_FOR_INSTALL.sql";
 const SELF="scripts/v39_phase5b_v0115_owner_once_v39.mjs";
-const V0115_BLOB="8216a3e3dc4667cfa13739d58bcb4ed1202508fa",NATIVE_BLOB="8d202ec52729100343f721da66a46a761e1a0101";
+const V0115_BLOB="e8e8341379347115825e34e37c5c6faeccae64c3",NATIVE_BLOB="8d202ec52729100343f721da66a46a761e1a0101";
 const OWNER="neondb_owner",READER="phase7_post_scoped_prod20261120";
 const NATIVE="phase7_private.read_bound_pre_group_v39(text,bigint,text,text,integer,text,text)";
 const CONDITIONAL="phase7_private.read_bound_conditional_t6_group_v39(text,bigint,text,text,integer,text,text,text)";
-const RESULT="TABLE(group_id uuid, contract_sha256 text, profile_sha256 text, packet_sha256 text, packet_bytes bytea)";
+const NATIVE_RESULT="TABLE(group_id uuid, contract_sha256 text, profile_sha256 text, packet_sha256 text, packet_bytes bytea)";
+const CONDITIONAL_RESULT="TABLE(group_id uuid, contract_sha256 text, profile_sha256 text, packet_sha256 text, packet_bytes bytea, verified_task_packet_sha256 text, verified_task_receipt_sha256 text)";
 const repo="HKcode22/ReplitTranvr",relay="2d96b22345908aa4334335aa899aec71b2fec2cb",parent="f441a5e6cde2a6bf8d3ca4be6b5b3219aa1c04fe";
 const pauseBlob="c47c4d688d746f3e7c8f3119d3eb9068c3840c30";
 const need=(x,code)=>{if(!x)throw Error("HOLD_P5B_V0115_"+code);};
@@ -36,7 +37,8 @@ const contextSQL=`SELECT current_database() db,current_user actor,session_user l
  WHERE m.roleid=r.oid AND NOT(member.rolname=$1 AND grantor.rolsuper AND m.admin_option AND NOT m.inherit_option AND NOT m.set_option)) unexpected_member,
  has_schema_privilege(r.oid,n.oid,'USAGE') can_use,has_schema_privilege(r.oid,n.oid,'CREATE') can_create,
  (SELECT count(*)::int FROM pg_class c JOIN pg_namespace ns ON ns.oid=c.relnamespace
- WHERE (ns.nspname||'.'||c.relname)=ANY(ARRAY['phase7_private.pre_fragment_v39','phase7_private.pre_source_link_v39','phase7_private.pre_preservation_policy_v39','phase7_private.derived_release_bundle_v39','clean.flight_snapshots','clean.flight_population','clean.fids_query_response','clean.phase5_fids_original_binding_v39','clean.phase5_fids_allowed_query_v39'])) relation_count,
+ WHERE (ns.nspname||'.'||c.relname)=ANY(ARRAY['phase7_private.pre_fragment_v39','phase7_private.pre_source_link_v39','phase7_private.pre_preservation_policy_v39','phase7_private.derived_release_bundle_v39','clean.flight_snapshots','clean.flight_population','clean.fids_query_response','clean.phase5_fids_original_binding_v39','clean.phase5_fids_allowed_query_v39','clean.phase5_cd_pre_task_v39'])) relation_count,
+ has_table_privilege(current_user,'clean.phase5_cd_pre_task_v39','SELECT') owner_task_read,
  (SELECT count(*)::int FROM pg_class c JOIN pg_namespace ns ON ns.oid=c.relnamespace
  WHERE ns.nspname IN ('phase7_private','phase6_private','clean','public') AND c.relkind IN ('r','p','v','m','f')
  AND (has_any_column_privilege(r.oid,c.oid,'SELECT,INSERT,UPDATE,REFERENCES') OR has_table_privilege(r.oid,c.oid,'DELETE,TRUNCATE,TRIGGER'))) direct_access
@@ -51,16 +53,16 @@ const functionSQL=`SELECT pg_get_userbyid(p.proowner) owner,p.prosecdef definer,
 async function catalog(c,p,ro){
  const a=await c.query(contextSQL,[OWNER,READER]),x=a.rows[0];
  need(a.rowCount===1&&x.db==="neondb"&&x.actor===OWNER&&x.login===OWNER&&x.schema_owner===OWNER&&x.owner_super===false&&x.version>=160000&&x.version<170000&&x.replica===false&&x.ro===ro,"EXACT_NONSUPERUSER_OWNER_PG16");
- need(x.reader_login===true&&x.can_use===true&&x.relation_count===9&&x.direct_access===0&&["rolsuper","rolcreaterole","rolcreatedb","rolreplication","rolbypassrls","rolinherit","reader_member","unexpected_member","can_create"].every(k=>x[k]===false),"EXISTING_SCOPED_READER_BOUNDARY");
- const inspect=async(sig,body,required)=>{
+ need(x.reader_login===true&&x.can_use===true&&x.relation_count===10&&x.owner_task_read===true&&x.direct_access===0&&["rolsuper","rolcreaterole","rolcreatedb","rolreplication","rolbypassrls","rolinherit","reader_member","unexpected_member","can_create"].every(k=>x[k]===false),"EXISTING_SCOPED_READER_BOUNDARY");
+ const inspect=async(sig,body,required,result)=>{
   const q=await c.query(functionSQL,[sig,READER]);
   if(q.rowCount===0&&!required)return null;
-  const z=q.rows[0];need(q.rowCount===1&&z.owner===OWNER&&z.definer===true&&z.volatility==="v"&&z.retset===true&&z.language==="plpgsql"&&JSON.stringify(z.config)===JSON.stringify(["search_path=pg_catalog, pg_temp"])&&z.result===RESULT&&z.body===body&&z.can_execute===true,"EXACT_FUNCTION_BODY_OR_ROLE_DRIFT");
+  const z=q.rows[0];need(q.rowCount===1&&z.owner===OWNER&&z.definer===true&&z.volatility==="v"&&z.retset===true&&z.language==="plpgsql"&&JSON.stringify(z.config)===JSON.stringify(["search_path=pg_catalog, pg_temp"])&&z.result===result&&z.body===body&&z.can_execute===true,"EXACT_FUNCTION_BODY_OR_ROLE_DRIFT");
   need(Array.isArray(z.acl)&&z.acl.length===2&&[OWNER,READER].every(role=>z.acl.filter(v=>v.grantee===role&&v.grantor===OWNER&&v.privilege==="EXECUTE"&&(role===OWNER||v.grantable===false)).length===1),"EXACT_FUNCTION_ACL");
   return z;
  };
- await inspect(NATIVE,p.nativeBody,true);
- return await inspect(CONDITIONAL,p.conditionalBody,false)?"V0115_INSTALLED_EXACT_NO_GO":"V0115_ABSENT_EXACT_NATIVE_AND_READER_NO_GO";
+ await inspect(NATIVE,p.nativeBody,true,NATIVE_RESULT);
+ return await inspect(CONDITIONAL,p.conditionalBody,false,CONDITIONAL_RESULT)?"V0115_INSTALLED_EXACT_NO_GO":"V0115_ABSENT_EXACT_NATIVE_AND_READER_NO_GO";
 }
 async function close(c){await c.end();}
 async function read(open,p){

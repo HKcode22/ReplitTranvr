@@ -122,3 +122,8 @@ Actual #981 deployed 697501b9; do not repeat. Both local archives absent; use pr
 ## Nov28 follow-on scoped repair (candidate, not deployed)
 
 See [latest checkpoint](checkpoints/2026-11-28_CONDITIONAL_POST_EMPTY_PAGE_AND_WITNESS_CLEANUP.md). No new activation; #985 exact successor CI, coordinated paused cutover, exact owner V0115 installation/readback, fresh budget and prospective independent actor/issuer acceptance remain required. Empty conditional pages cannot certify readiness from a native grant. Registry packet SHA is not verified V0087 receipt evidence. No change to original clocks, expiry, signed scope or endpoints.
+
+
+## Nov28 V0115 task-binding successor (staged, not commissioned)
+
+**Staged V0115 task-binding correction (not deployed):** the previous conditional group read matched live snapshot/Packet B but only echoed the signed registry digest. The still-staged V0115 candidate is prospectively revised to bind the existing V0087 VERIFIED_ON_TIME task to the exact snapshot, source, rights, frozen clock and expiry; the restricted reader verifies the actual task packet against the signed registry and returns the verified receipt digest privately. No new role, function, direct table grant, alternate queue or migration. Previous SQL blob 8216a3e3dc4667cfa13739d58bcb4ed1202508fa remains historical; new candidate blob e8e8341379347115825e34e37c5c6faeccae64c3 requires exact independent review/CI and coordinated owner commissioning. If the old function is unexpectedly present, the installer HOLDs on exact body/result drift, never replaces it. This is stored task evidence, not separate POST issuer, physical outcome or training eligibility. See [task-binding checkpoint](checkpoints/2026-11-28_CONDITIONAL_POST_V0087_TASK_BINDING.md).

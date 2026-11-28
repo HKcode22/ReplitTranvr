@@ -77,7 +77,7 @@ async function join(input:Reader,base:BaseScope,actual:{status:string;privateDec
   // after acknowledged rollback. All other faults (including duplicate
   // rows, ACL, malformed bytes, uncertain cleanup) remain page-wide HOLD.
   let result:Awaited<ReturnType<typeof readPhase7ConditionalT6ScopedGroup>>;
-  try{result=await readPhase7ConditionalT6ScopedGroup(input.reader,input.readerRole,input.contract,input.profile,anchor,base.protocolSha256);}
+  try{result=await readPhase7ConditionalT6ScopedGroup(input.reader,input.readerRole,input.contract,input.profile,anchor,base.protocolSha256,d.expectedSignedPacketSha256);}
   catch(e){if((e as {code?:string})?.code!=="P0002")throw e;
    unresolvedGroups.push(Object.freeze({flightInstanceId:d.flightInstanceId,reason:"SCOPED_GROUP_UNAVAILABLE_OR_EXPIRED"}));continue;
   }
@@ -95,6 +95,7 @@ async function join(input:Reader,base:BaseScope,actual:{status:string;privateDec
   }
   decisions.push(Object.freeze({flightInstanceId:d.flightInstanceId,status:"ACTUAL_T6_AND_PACKET_B_GROUP_VERIFIED_FOR_SEPARATE_POST_REVIEW" as const,
    anchor:Object.freeze(anchor),expectedSignedPacketSha256:d.expectedSignedPacketSha256,
+   verifiedTaskReceiptSha256:result.conditionalTaskProof.postCommitReceiptSha256,
    originalPopulationQueryId:d.originalPopulationQueryId,reportedScheduledDepartureUtc:d.reportedScheduledDepartureUtc,
    configSha256:d.configSha256,selectedTVersion:d.selectedTVersion,
    assessmentWatermarkUtc:d.assessmentWatermarkUtc,groupId,fragments:Object.freeze(result.fragments)}));
@@ -112,9 +113,10 @@ async function join(input:Reader,base:BaseScope,actual:{status:string;privateDec
   candidateCount:actual.candidateCount,sourceEligibleCount:sourceEligible,verifiedPacketBGroupCount:decisions.length,
   unresolvedPacketBGroupCount:unresolvedGroups.length,
   unavailableCount:actual.candidateCount-decisions.length,observedDbClockUtc:new Date(observed).toISOString(),
-  // A registry packet digest and a matching snapshot/group are distinct
-  // evidence. This restricted query does not read the V0087 task receipt.
-  signedPacketCommitVerified:false,
+  // Exact existing V0087 verified task -> same snapshot -> live Packet B.
+  // This verifies the stored receipt digest, not new independent POST authority.
+  verifiedTaskPacketBindingCount:decisions.length,
+  signedPacketCommitVerified:decisions.length>0&&decisions.length===sourceEligible,
   independentT24WitnessVerified:false,postIssuerCommissioned:false,physicalGateOutCertified:false,
   providerCalls:0,databaseWrites:0,postPacketsIssued:0,phase6PaidGo:false};
  return Object.freeze(Object.defineProperties(result,{privateDecisions:{value:Object.freeze(decisions),enumerable:false},privateUnresolvedGroups:{value:Object.freeze(unresolvedGroups),enumerable:false}})) as typeof result&
