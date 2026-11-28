@@ -700,10 +700,14 @@ active("Phase5 C+D actual Stage14 source-bound parallel PRE on disposable PG16",
    "SELECT clock_timestamp() AS at")).rows[0].at).getTime();
   const ownCutoff=dbNow+150_000, t=new Date(ownCutoff+(horizon==="T-6h"?21600000:5400000));
   const end=new Date(t.getTime()+4*3600_000);
+  // I143/T139 downstream contract: a witnessed service may be reported
+  // 15 minutes later in its current original; its original T stays frozen.
+  const reportedT=new Date(t.getTime()+(witnessed?15*60_000:0));
   const caseKey=horizon+(witnessed?"-witnessed":"-standalone"),suffix=(witnessed?3:1)+(horizon==="T-90m"?1:0);
   const q2=sha("conditional later query "+caseKey),r2=sha("conditional reservation "+caseKey),qid2="a23e4567-e89b-42d3-a456-42661417400"+suffix;
   const stable=sha("conditional service "+caseKey),flight="leg:g5a:"+stable,protocol=sha("CI conditional protocol"),standalone=sha("CI-only standalone protocol"),content=sha("CI content review");
-  const payload=Buffer.from(JSON.stringify({departures:[{flight:"CI300",status:"Boarding"}]})),bodyHash=sha(payload.toString("utf8"));
+  const payload=Buffer.from(JSON.stringify({departures:[{flight:"CI300",status:"Boarding",
+   ...(witnessed?{departure:{scheduledTime:{utc:reportedT.toISOString()}}}:{})}]})),bodyHash=sha(payload.toString("utf8"));
   const dispatch=new Date(dbNow-15*60_000);
   await admin.query("INSERT INTO clean.phase5_fids_utc_charge_budget_v39(manifest_sha256,charge_day_utc,daily_api_ceiling,daily_other_reserved_units) VALUES($1,$2,1900,100) ON CONFLICT DO NOTHING",[manifest,dispatch.toISOString().slice(0,10)]);
   await admin.query(
@@ -764,7 +768,7 @@ active("Phase5 C+D actual Stage14 source-bound parallel PRE on disposable PG16",
    "clock_timestamp(),$7,'CI300','Departure',"+
    "'2027-01-01T00:00','2027-01-01T04:00','Asia/Singapore',"+
    "'g5a_conditional_operator_composite_no_native_id',clock_timestamp(),'1.15.4','v39',$8)",
-   [t,t,end,new Date(ownCutoff),qid2,flight,response,contract]);
+   [reportedT,t,end,new Date(ownCutoff),qid2,flight,response,contract]);
   await admin.query(
    "INSERT INTO clean.phase5_fids_original_binding_v39"+
    "(population_query_id,reservation_sha256,query_digest,manifest_sha256,"+
@@ -856,8 +860,29 @@ active("Phase5 C+D actual Stage14 source-bound parallel PRE on disposable PG16",
    const saved=await persistP5V0079SingleBoundFlightPre(writer,entry.permit,{...options,...laterApproval,...(p7?{phase7PrePreservation:p7}:{})});
    expect(saved).toMatchObject({horizon,identityEvidenceTier:"CONDITIONAL_QUERY_FILTERED_SERVICE",conditionalServiceCertifiedPhysicalLeg:false,authenticPersistedT24WitnessAnchoredForLaterHorizon:witnessed,missingT24ExplicitlyRecordedWithoutBackfill:!witnessed,postCommitDatabaseReadbackVerified:true,preSnapshotsInserted:1,providerCalls:0,...(p7?{phase7DerivedPreFragmentIndependentlyVerified:true}:{})});
    expect((await admin.query("SELECT clean.phase5_cd_ack_verified_v39($1::bigint,$2,$3::bigint,$4::bigint,$5) ok",[c.task_id,c.lease_owner,c.lease_generation,saved.committedSnapshotId,sha("CI conditional ACK "+horizon)])).rows[0].ok).toBe(true);
-   expect((await admin.query("SELECT state,verified_snapshot_id::text AS snapshot FROM clean.phase5_cd_pre_task_v39 WHERE task_id=$1",[c.task_id])).rows[0]).toEqual({state:"VERIFIED_ON_TIME",snapshot:saved.committedSnapshotId});
-   expect((await admin.query("SELECT horizon,features_json FROM clean.flight_snapshots WHERE flight_instance_id=$1 AND horizon=$2",[flight,horizon])).rows).toEqual([{horizon,features_json:[{name:"origin_icao",value:"WSSS"},{name:"destination_icao",value:"YSSY"},{name:"reported_pre_departure_status",value:"Boarding"}]}]);
+   const queued=(await admin.query("SELECT state,verified_snapshot_id::text AS snapshot,selected_native_t_utc,prediction_cutoff_utc FROM clean.phase5_cd_pre_task_v39 WHERE task_id=$1",[c.task_id])).rows[0];
+   expect(queued).toEqual({state:"VERIFIED_ON_TIME",snapshot:saved.committedSnapshotId,selected_native_t_utc:t,prediction_cutoff_utc:new Date(ownCutoff)});
+   const snapshots=(await admin.query("SELECT horizon,selected_t_milestone_utc,prediction_cutoff_utc,features_json FROM clean.flight_snapshots WHERE flight_instance_id=$1 AND horizon=$2",[flight,horizon])).rows;
+   expect(snapshots).toEqual([{horizon,selected_t_milestone_utc:t,prediction_cutoff_utc:new Date(ownCutoff),features_json:[{name:"origin_icao",value:"WSSS"},{name:"destination_icao",value:"YSSY"},{name:"reported_pre_departure_status",value:"Boarding"}]}]);
+   if(witnessed){
+    // Independent persisted readback, not the permit or fixture object.
+    // The synthetic original's own decoded-body integrity stays bound.
+    const current=(await admin.query(
+     "SELECT p.dep_scheduled_utc,r.raw_payload->'originalDecodedEntityBodyEvidence' AS body_evidence,b.decoded_original_body_sha256"+
+     " FROM clean.flight_population p JOIN clean.fids_query_response r ON r.population_query_id=p.population_query_id"+
+     " JOIN clean.phase5_fids_original_binding_v39 b ON b.population_query_id=r.population_query_id"+
+     " WHERE p.analytic_identity_id=$1 AND p.population_query_id=$2",[flight,qid2])).rows;
+    expect(current).toHaveLength(1);
+    const observed=current[0],decoded=Buffer.from(observed.body_evidence.bodyBase64,"base64");
+    expect(observed.body_evidence.bodyLengthBytes).toBe(decoded.length);
+    expect(sha(decoded.toString("utf8"))).toBe(bodyHash);
+    expect(observed.body_evidence.bodySha256).toBe(bodyHash);expect(observed.decoded_original_body_sha256).toBe(bodyHash);
+    expect(JSON.parse(decoded.toString("utf8")).departures[0].departure.scheduledTime.utc).toBe(observed.dep_scheduled_utc.toISOString());
+    expect(observed.dep_scheduled_utc.toISOString()).toBe(reportedT.toISOString());
+    expect(observed.dep_scheduled_utc.getTime()-snapshots[0].selected_t_milestone_utc.getTime()).toBe(15*60_000);
+    expect(observed.dep_scheduled_utc.getTime()).toBeLessThan(end.getTime());
+    expect(queued.selected_native_t_utc.toISOString()).toBe(witness!.selectedTNativeUtc);
+   }
    expect((await admin.query("SELECT count(*)::int n FROM clean.phase5_t24_postcommit_witness_v39 WHERE flight_instance_id=$1",[flight])).rows[0].n).toBe(Number(witnessed));
    if(p7){
     // Durable Packet B fragment survives authorized temporary link sweep and real tombstone-gated raw FIDS expiry.

@@ -70,7 +70,7 @@ function parseIndependentReview(scope:P5SignedConditionalFeatureReadScope,flight
 }
 function constructFromBound(scope:P5SignedConditionalFeatureReadScope,read:Bound,p:Proposal|undefined,d:Draft|undefined,r:Review,pins:Pins){
  const at=time(r.reviewedAtUtc),frozen=time(r.builderFrozenAtUtc),q=scope.source;
- if(!p||!d||read.conditionalFeatureReview.actualPreIssued!==false)return hold("CURRENT_ELIGIBLE_MEMBER_REQUIRED");
+  if(!p||!d||read.conditionalFeatureReview.actualPreIssued!==false||read.report.predictionTimingReviewed!==true||p.forecastReferenceEvidence==="PENDING_T24_REVIEW")return hold("CURRENT_ELIGIBLE_MEMBER_REQUIRED");
  const cutoff=time(p.predictionCutoffUtc),now=time(read.observedDbClockUtc);
  if(digestP5ConditionalPermitEvidence(p,d,read.privateSourceBoundAtUtc)!==r.reviewedMemberEvidenceSha256||
   at<time(read.privateSourceBoundAtUtc)||at<time(p.sourceMemberAvailableUtc)||at>now||frozen>at||
@@ -114,7 +114,8 @@ function constructFromBound(scope:P5SignedConditionalFeatureReadScope,read:Bound
   if(Boolean(w)===Boolean(s))return hold("EXACT_T24_EVIDENCE_TIER");
   if(w){
    if(!H.test(pins.expectedT24ReceiptSha256??"")||pins.separatelyApprovedStandaloneProtocolSha256!==undefined||
-    w.receiptSha256!==pins.expectedT24ReceiptSha256||digestP5Stage24ReviewedReceipt(w)!==w.receiptSha256||
+     w.receiptSha256!==pins.expectedT24ReceiptSha256||digestP5Stage24ReviewedReceipt(w)!==w.receiptSha256||
+     p.forecastReferenceEvidence!=="REVIEWED_T24_REFERENCE"||p.referenceT24ReceiptSha256!==w.receiptSha256||
     w.flightInstanceId!==pre.flightInstanceId||w.selectedTNativeUtc!==pre.selectedTNativeUtc||
     w.frozenT24CutoffUtc!==new Date(time(pre.selectedTNativeUtc)-86400000).toISOString()||
     w.t24FrameSha256!==pre.reviewedFrameSha256||w.t24ConfigSha256!==pre.reviewedConfigSha256||
@@ -144,7 +145,8 @@ export async function prepareP5ConditionalPrePermitPageForIndependentSigning(poo
  if(!Array.isArray(inputs)||inputs.length<1||inputs.length>96||new Set(inputs.map(x=>x?.flightInstanceId)).size!==inputs.length)
   return hold("EXACT_PAGE_SCOPE");
  const parsed=inputs.map(x=>parseIndependentReview(scope,x.flightInstanceId,x.reviewBytes,x.pins));
- const read=await readP5SignedConditionalServiceReview(pool,scope);
+  const receipts=parsed.flatMap(r=>r.reviewedT24WitnessReceipt?[r.reviewedT24WitnessReceipt]:[]);
+  const read=await readP5SignedConditionalServiceReview(pool,scope,receipts.length?receipts:undefined);
  const proposals=new Map(read.memberReview.privateReviewProposals.map(p=>[p.flightInstanceId,p]));
  const drafts=new Map(read.privateFeatureDrafts.map(d=>[d.flightInstanceId,d]));
  if(proposals.size!==read.memberReview.privateReviewProposals.length||drafts.size!==read.privateFeatureDrafts.length)
@@ -480,7 +482,11 @@ export async function issueP5ConditionalLaterSignedReviewPage(
   expectedProtocolSha256:d.protocolSha256,expectedContentUseReviewSha256:d.externalContentUseReviewSha256,
   expectedFrameSha256:v.frameSha256,expectedConfigSha256:v.configSha256,expectedSelectedTVersion:cfg.milestone+":"+cfg.version+":"+cfg.artifactHash,
   ...(input.env.P6_CONDITIONAL_LATER_METADATA_READ_ENABLED==="1"?{conditionalMetadataReaderLogin:readerLogin}: {})},custody);
- const actual=await readP5SignedConditionalServiceReview(pool,scope),now=time(actual.observedDbClockUtc);
+ const witnessedIds=new Set(evidence.privateDecisions.filter(d=>d.status==="T24_PERSISTED_AND_SEPARATE_RECEIPT_MATCH_REVIEW_REQUIRED").map(d=>d.flightInstanceId));
+ const frozenReceipts=evidence.privateCustodyReceipts.filter(r=>witnessedIds.has(r.receipt.flightInstanceId)).map(r=>r.receipt);
+ // Re-read the authentic current original and member clocks after actual
+ // witness authentication, now applying all timing to the frozen reference.
+ const actual=await readP5SignedConditionalServiceReview(pool,scope,frozenReceipts.length?frozenReceipts:undefined),now=time(actual.observedDbClockUtc);
  if(now<time(evidence.observedDbClockUtc)||now<time(d.validFromUtc)||now>=time(d.validUntilUtc))return hold("CONDITIONAL_LATER_DELEGATION_CLOCK");
  const proposals=new Map(actual.memberReview.privateReviewProposals.map(x=>[x.flightInstanceId,x])),
   drafts=new Map(actual.privateFeatureDrafts.map(x=>[x.flightInstanceId,x])),
@@ -490,7 +496,9 @@ export async function issueP5ConditionalLaterSignedReviewPage(
  const reviews:P5ConditionalReviewPage["reviews"]=[];
  for(const decision of evidence.privateDecisions){
   const flightInstanceId=decision.flightInstanceId,member=proposals.get(flightInstanceId),draft=drafts.get(flightInstanceId);
-  if(!member||!draft||time(member.predictionCutoffUtc)>=Math.min(time(d.validUntilUtc),time(actual.privateSourceExpiresAtUtc)))continue;
+  // Preserve the existing runtime's three-hour review window, now checked
+  // against the authenticated reference rather than the reported retime.
+  if(!member||!draft||time(member.predictionCutoffUtc)>now+10800000||time(member.predictionCutoffUtc)>=Math.min(time(d.validUntilUtc),time(actual.privateSourceExpiresAtUtc)))continue;
   let tier:Partial<Review>,extra:Pick<Pins,"expectedT24ReceiptSha256"|"separatelyApprovedStandaloneProtocolSha256">;
   if(decision.status==="T24_PERSISTED_AND_SEPARATE_RECEIPT_MATCH_REVIEW_REQUIRED"){
    const w=receipts.get(flightInstanceId);

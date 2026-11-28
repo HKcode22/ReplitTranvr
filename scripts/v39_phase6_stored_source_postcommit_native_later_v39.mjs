@@ -273,6 +273,7 @@ export function p6NativeLaterReadbackDiagnostics(actual,handoff,features,t24Appr
  const conditionalMembers=count(conditional?.stage14MatchedMembershipCount);
  const conditionalDrafts=count(conditional?.featureReview?.featureDraftCount);
  const conditionalStatus=conditionalDrafts===null?"NOT_MEASURED":conditionalDrafts>0?
+  conditional?.predictionTimingReviewed===false?"CONDITIONAL_IDENTITY_DRAFTS_AWAIT_AUTHENTIC_T24_TIMING_REVIEW":
   "CONDITIONAL_DRAFTS_AWAIT_INDEPENDENT_PERMIT_REVIEW_AND_REGISTRY":"NO_CONDITIONAL_FEATURE_DRAFTS";
  const reason=review===0?(observed===0?"NO_OBSERVED_MEMBERS":native===0?"NO_ELIGIBLE_NATIVE_CANDIDATES":"NO_PENDING_REVIEW_ENTRIES"):
   matched===0?"NO_MATCHED_NATIVE_FEATURES":
@@ -307,8 +308,10 @@ export function selectP6ConditionalT24ReviewPage(actual,current,attempted=new Se
  if([...drafts].some(id=>!seen.has(id)))hold("CONDITIONAL_T24_PAGE_SCOPE");
  return ids.sort((a,b)=>a.cutoff-b.cutoff||a.id.localeCompare(b.id)).slice(0,96).map(x=>x.id);
 }
-/** Exact conditional candidates are selected independently of native
- * dossier entries, using signed current registry identity/cutoff metadata.
+/** Exact unsigned conditional identities are selected for actual T24
+ * lookup independently of native dossiers. The current reported schedule
+ * cannot supply later eligibility; the independent issuer authenticates
+ * the original witness and reruns source timing before any signed review.
  * Attempted/held members are never replayed in this child. */
 export function selectP6ConditionalLaterPage(actual,current,attempted=new Set()){
  const scope=actual?.privateConditionalSourceScope,review=actual?.privateConditionalSourceReview,
@@ -316,7 +319,8 @@ export function selectP6ConditionalLaterPage(actual,current,attempted=new Set())
  if(!scope||!["T-6h","T-90m"].includes(scope.source.horizon)||!Number.isFinite(now)||
     h?.runDayIndex!==scope.source.runDayIndex||z?.runDayIndex!==h.runDayIndex||h.manifestSha256!==scope.source.manifestSha256||
     !Array.isArray(h.entries)||!(attempted instanceof Set)||!Array.isArray(review?.privateFeatureDrafts)||
-    !Array.isArray(review?.memberReview?.privateReviewProposals))hold("CONDITIONAL_LATER_PAGE_SCOPE");
+     !Array.isArray(review?.memberReview?.privateReviewProposals))hold("CONDITIONAL_LATER_PAGE_SCOPE");
+  const inventory=review.report?.status==="CONDITIONAL_SERVICE_IDENTITY_INVENTORY_NOT_PRE_ELIGIBLE"&&review.report.predictionTimingReviewed===false;
  const used=new Set(),drafts=new Set(review.privateFeatureDrafts.map(d=>d.flightInstanceId)),seen=new Set();
  if(drafts.size!==review.privateFeatureDrafts.length)hold("CONDITIONAL_LATER_PAGE_SCOPE");
  for(const entry of h.entries.filter(e=>e.lane==="LATER_PRE")){
@@ -335,7 +339,8 @@ export function selectP6ConditionalLaterPage(actual,current,attempted=new Set())
   const id=m.flightInstanceId,cutoff=Date.parse(m.predictionCutoffUtc);
   if(seen.has(id)||!/^leg:g5a:[a-f0-9]{64}$/.test(id)||!iso(m.predictionCutoffUtc))hold("CONDITIONAL_LATER_PAGE_SCOPE");
   seen.add(id);
-  if(drafts.has(id)&&!attempted.has(id)&&!used.has(id+"|"+scope.source.horizon)&&cutoff>now+900000&&cutoff<=now+10800000)
+   if(inventory&&m.forecastReferenceEvidence!=="PENDING_T24_REVIEW")hold("CONDITIONAL_LATER_PAGE_SCOPE");
+   if(drafts.has(id)&&!attempted.has(id)&&!used.has(id+"|"+scope.source.horizon)&&(inventory||cutoff>now+900000&&cutoff<=now+10800000))
    ids.push({id,cutoff});
  }
  if([...drafts].some(id=>!seen.has(id)))hold("CONDITIONAL_LATER_PAGE_SCOPE");

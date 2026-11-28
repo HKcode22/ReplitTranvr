@@ -26,6 +26,15 @@ const priorInputs=[
  "server/lib/disruption/phase6PostNativePreCandidateReadOnce_v39.mjs",
  "server/lib/disruption/phase7LocalPrivatePreHandoff_v39.ts"
 ];
+const worker982Inputs=[
+ MATCHER,
+ "server/lib/disruption/phase5ConditionalFidsServiceRecovery_v39.ts",
+ "server/lib/disruption/phase5ConditionalBoundSourceReview_v39.ts",
+ "server/lib/disruption/phase6LaterT24EvidenceBatchReadOnly_v39.ts",
+ "server/lib/disruption/phase5ConditionalPrePermitPreparation_v39.ts",
+ "server/lib/disruption/phase6StoredSourceNativeCandidateAudit_v39.mjs"
+];
+const fullInputs=[...new Set([...priorInputs,...worker982Inputs])];
 const repositoryRoot=fileURLToPath(new URL("../",import.meta.url));
 const holdMarker="PHASE5B_WORKER_ONLY_CALLBACK_SCOPE_HOLD";
 const passMarker="PHASE5B_WORKER_ONLY_CALLBACK_PUBLICATION_REFUSED_AS_REQUIRED";
@@ -102,7 +111,7 @@ function runGuard(options={}){
   writeFileSync(join(root,"bin","npm"),'#!/usr/bin/env bash\nprintf "BUILD_ATTEMPTED\\n" >> "$P5B_CALLBACK_BUILD_TRACE"\nexit 97\n',{mode:0o700});
   const trace=join(root,"git-trace.jsonl"),fixturePath=join(root,"fixture.json"),unexpectedGit=join(root,"unexpected-git.jsonl");
   const fixture={root,pin:PIN,head:HEAD,oldReplit,missingAncestors:[],
-   changes:{[BASE]:priorInputs,[BASE_982]:[MATCHER],[PIN]:priorInputs},
+   changes:{[BASE]:fullInputs,[BASE_982]:worker982Inputs,[PIN]:fullInputs},
    unstaged:[],staged:[],untracked:[],wrapperFalseSuccess:false,...options.fixture};
   writeFileSync(fixturePath,JSON.stringify(fixture));
   const result=spawnSync("bash",[join(root,GUARD),options.base??BASE_982,options.head??HEAD],{
@@ -130,42 +139,58 @@ function assertHold(result,{wrapperRan=false}={}){
  assert.equal(wrapperReadCount(result),wrapperRan?1:0);
 }
 
-test("T136 worker-only #982 accepts exactly the reviewed matcher drift while the real wrapper refuses publication",()=>{
- const result=runGuard();
- assert.equal(result.status,0,result.stdout+result.stderr);
- assert.equal(result.stdout.trim(),passMarker);assert.equal(result.stderr,"");
- assert.equal(wrapperReadCount(result),1);
- const pinDiffs=result.calls.filter(a=>a[0]==="diff"&&a[1]==="--quiet"&&a[2]===PIN);
- assert.equal(pinDiffs.length,2,"both guard and real wrapper independently inspect the unchanged runtime PIN");
- assert.ok(result.calls.some(a=>a[0]==="cat-file"&&a[2]===PIN+"^{commit}"));
+test("T136/T139 worker-only #982 requires all six reviewed repairs and the twelve-file historical union while refusing publication",()=>{
+ assert.equal(priorInputs.length,8);assert.equal(worker982Inputs.length,6);assert.equal(fullInputs.length,12);
+ for(const changes of [
+  {[BASE]:fullInputs,[BASE_982]:worker982Inputs,[PIN]:fullInputs},
+  {[BASE]:[...fullInputs].reverse(),[BASE_982]:[...worker982Inputs].reverse(),[PIN]:fullInputs}
+ ]){
+  const result=runGuard({fixture:{changes}});
+  assert.equal(result.status,0,result.stdout+result.stderr);
+  assert.equal(result.stdout.trim(),passMarker);assert.equal(result.stderr,"");
+  assert.equal(wrapperReadCount(result),1);
+  const pinDiffs=result.calls.filter(a=>a[0]==="diff"&&a[1]==="--quiet"&&a[2]===PIN);
+  assert.equal(pinDiffs.length,2,"both guard and real wrapper independently inspect the unchanged runtime PIN");
+  assert.ok(result.calls.some(a=>a[0]==="cat-file"&&a[2]===PIN+"^{commit}"));
+ }
 });
 
-test("T136 #982 refuses a second executable input even when it is already inside the eight-file historical drift",()=>{
- const second="server/lib/disruption/phase5ConditionalSignedSchedulePair_v39.ts";
- for(const added of [[MATCHER,second],[second,MATCHER],[second],[]])
-  assertHold(runGuard({fixture:{changes:{[BASE]:priorInputs,[BASE_982]:added,[PIN]:priorInputs}}}));
+test("T139 #982 refuses every missing repair, the former matcher-only subset and any additional input",()=>{
+ const missing=worker982Inputs.map(path=>worker982Inputs.filter(x=>x!==path));
+ const historicalExtra="server/lib/disruption/phase5ConditionalSignedSchedulePair_v39.ts";
+ for(const changed of [...missing,[MATCHER],[],
+  [...worker982Inputs,historicalExtra],[historicalExtra,...worker982Inputs],
+  [...worker982Inputs,"server/unreviewed.ts"]])
+  assertHold(runGuard({fixture:{changes:{[BASE]:fullInputs,[BASE_982]:changed,[PIN]:fullInputs}}}));
+});
+
+test("T139 #982 independently requires every member of the full historical union and refuses extra drift",()=>{
+ for(const changed of [...fullInputs.map(path=>fullInputs.filter(x=>x!==path)),[...fullInputs,"server/unreviewed.ts"]])
+  assertHold(runGuard({fixture:{changes:{[BASE]:changed,[BASE_982]:worker982Inputs,[PIN]:fullInputs}}}));
 });
 
 test("T136 preserves the complete original eight-file scope and the legacy accepted base",()=>{
- const legacy=runGuard({base:BASE});
+ const legacy=runGuard({base:BASE,fixture:{changes:{[BASE]:priorInputs,[BASE_982]:[],[PIN]:priorInputs}}});
  assert.equal(legacy.status,0,legacy.stdout+legacy.stderr);assert.equal(legacy.stdout.trim(),passMarker);
  assert.equal(wrapperReadCount(legacy),1);
+ // The legacy selector cannot be used to waive the new successor scope.
+ assertHold(runGuard({base:BASE}));
  for(const changed of [priorInputs.slice(1),[...priorInputs,"server/unreviewed.ts"]])
-  assertHold(runGuard({fixture:{changes:{[BASE]:changed,[BASE_982]:[MATCHER],[PIN]:priorInputs}}}));
+  assertHold(runGuard({base:BASE,fixture:{changes:{[BASE]:changed,[BASE_982]:[],[PIN]:priorInputs}}}));
 });
 
 test("T136 refuses changed .replit or reviewed callback wrappers without executing the wrapper",()=>{
  for(const path of [".replit",WRAPPER,"scripts/v39_phase5_reviewed_source_build_v39.sh",
   "scripts/v39_phase5_callback_release_v4_reviewed_build_v39.sh"]){
-  assertHold(runGuard({fixture:{changes:{[BASE]:[...priorInputs,path],[BASE_982]:[MATCHER,path],[PIN]:priorInputs}}}));
+  assertHold(runGuard({fixture:{changes:{[BASE]:[...fullInputs,path],[BASE_982]:[...worker982Inputs,path],[PIN]:fullInputs}}}));
   // A contradictory base read must not let #982's independent protection go missing.
-  assertHold(runGuard({fixture:{changes:{[BASE]:priorInputs,[BASE_982]:[MATCHER,path],[PIN]:priorInputs}}}));
+  assertHold(runGuard({fixture:{changes:{[BASE]:fullInputs,[BASE_982]:[...worker982Inputs,path],[PIN]:fullInputs}}}));
  }
 });
 
 test("T136 refuses dirty tracked, staged and untracked executable/publication inputs",()=>{
  for(const key of ["unstaged","staged","untracked"])
-  for(const path of [MATCHER,".replit",WRAPPER])assertHold(runGuard({fixture:{[key]:[path]}}));
+  for(const path of [MATCHER,worker982Inputs[1],".replit",WRAPPER])assertHold(runGuard({fixture:{[key]:[path]}}));
 });
 
 test("T136 requires actual verify-only exit-2 HOLD and rejects a false successful real wrapper",()=>{
@@ -178,7 +203,7 @@ test("T136 requires actual verify-only exit-2 HOLD and rejects a false successfu
 test("T136 refuses unknown metadata, wrong head/ancestry, clean runtime PIN and code-identity override",()=>{
  assertHold(runGuard({head:"b".repeat(40)}));
  for(const missing of [BASE,BASE_982,PIN])assertHold(runGuard({fixture:{missingAncestors:[missing]}}));
- assertHold(runGuard({fixture:{failNameRead:BASE_982}}));
- assertHold(runGuard({fixture:{changes:{[BASE]:priorInputs,[BASE_982]:[MATCHER],[PIN]:[]}}}));
+ for(const base of [BASE,BASE_982])assertHold(runGuard({fixture:{failNameRead:base}}));
+ assertHold(runGuard({fixture:{changes:{[BASE]:fullInputs,[BASE_982]:worker982Inputs,[PIN]:[]}}}));
  assertHold(runGuard({override:PIN}));
 });

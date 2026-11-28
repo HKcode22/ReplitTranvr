@@ -13,6 +13,7 @@ Preserve the adopted V3.9 f.8 plan, Packet A/B boundaries, canonical Amendment E
 | I140 | T136 | Reject POST attribution to a different frozen departure reference or original source; keep candidate physical outcomes uncertified. |
 | I141 | T137 | Pause only the reviewed admission/preparation switches; verify effective overrides, preserve retention and refuse uncertain writes. |
 | I142 | T138 | Deploy into a verified paused and drained state without requiring an unrelated future paid-schedule gap; retain exact code, transaction, retention and pin checks. |
+| I143 | T139 | Keep the authentic original T24 reference when a later conditional service schedule changes. Authenticate custody and persisted witness before rechecking the current SOURCE, cutoff, lead, staleness and independent proof; keep native and conditional evidence paths separate. |
 
 These are candidate repairs. Existing failure closures do not change merely because a test passes. Canonical register and detailed runbook updates require their separate publication.
 
