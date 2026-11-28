@@ -821,14 +821,16 @@ active("Phase5 C+D actual Stage14 source-bound parallel PRE on disposable PG16",
    expect((await admin.query("SELECT horizon,features_json FROM clean.flight_snapshots WHERE flight_instance_id=$1",[flight])).rows).toEqual([{horizon,features_json:[{name:"origin_icao",value:"WSSS"},{name:"destination_icao",value:"YSSY"},{name:"reported_pre_departure_status",value:"Boarding"}]}]);
    expect((await admin.query("SELECT count(*)::int n FROM clean.phase5_t24_postcommit_witness_v39 WHERE flight_instance_id=$1",[flight])).rows[0].n).toBe(0);
    if(p7){
-    // Durable Packet B fragment survives authorized temporary link sweep and raw FIDS expiry.
+    // Durable Packet B fragment survives authorized temporary link sweep and real tombstone-gated raw FIDS expiry.
     const linked=(await admin.query("SELECT f.row_id,f.packet_bytes FROM phase7_private.pre_source_link_v39 l JOIN phase7_private.pre_fragment_v39 f ON f.row_id=l.row_id WHERE l.snapshot_id=$1",[saved.committedSnapshotId])).rows;
     expect(linked).toHaveLength(1);
     expect(linked[0].packet_bytes.toString("utf8")).not.toMatch(/WSSS|YSSY|leg:g5a:|CI300|Boarding/);
     await admin.query("UPDATE phase7_private.pre_source_link_v39 SET expires_at_utc=clock_timestamp()-interval '1 second' WHERE snapshot_id=$1",[saved.committedSnapshotId]);
     expect((await admin.query("SELECT phase7_private.sweep_due_pre_links_v39(10) n")).rows[0].n).toBe(1);
+    await admin.query("INSERT INTO clean.retention_tombstone(surface,record_id,content_hash,expired_at,plan_hash) VALUES('primary','fids_query_response:'||$1::text||':raw_payload',$2,clock_timestamp(),$3)",[qid2,bodyHash,manifest]);
     await admin.query("UPDATE clean.fids_query_response SET raw_payload=NULL,raw_expired_at_utc=clock_timestamp() WHERE population_query_id=$1",[qid2]);
-    expect((await admin.query("SELECT count(*)::int n FROM phase7_private.pre_fragment_v39 WHERE row_id=$1",[linked[0].row_id])).rows[0].n).toBe(1);
+    expect((await admin.query("SELECT count(*)::int n FROM clean.fids_query_response WHERE population_query_id=$1 AND raw_payload IS NULL AND raw_expired_at_utc IS NOT NULL",[qid2])).rows[0].n).toBe(1);
+    expect((await p7Reader!.query("SELECT count(*)::int n FROM phase7_private.pre_fragment_v39 WHERE row_id=$1",[linked[0].row_id])).rows[0].n).toBe(1);
    }
    // P0-D real PG16 worker interruption / lease expiry recovery: unstarted CLAIMED -> READY, WRITE_STARTED_UNKNOWN -> QUARANTINED.
    const crashFlight="leg:g5a:"+sha("CI crash recovery "+horizon),crashPacket=sha("CI crash packet "+horizon);
@@ -840,13 +842,13 @@ active("Phase5 C+D actual Stage14 source-bound parallel PRE on disposable PG16",
    expect(c1).toHaveLength(1);expect(c1[0].flight_instance_id).toBe(crashFlight);
    await admin.query("UPDATE clean.phase5_cd_pre_task_v39 SET lease_until_utc=clock_timestamp()-interval '1 second' WHERE task_id=$1",[c1[0].task_id]);
    const r1=(await admin.query("SELECT * FROM clean.phase5_cd_reap_once_v39(16)")).rows;
-   expect(r1.find((x:any)=>String(x.task_id)===String(c1[0].task_id))?.state).toBe("READY");
+   expect(r1.find((x:any)=>String(x.task_id)===String(c1[0].task_id))?.new_state).toBe("READY");
    const c2=(await admin.query("SELECT * FROM clean.phase5_cd_claim_due_v39('ci-crash-w2',1,90)")).rows;
    expect(c2).toHaveLength(1);expect(Number(c2[0].lease_generation)).toBeGreaterThan(Number(c1[0].lease_generation));
    expect((await admin.query("SELECT clean.phase5_cd_mark_write_started_v39($1::bigint,$2,$3::bigint) ok",[c2[0].task_id,c2[0].lease_owner,c2[0].lease_generation])).rows[0].ok).toBe(true);
    await admin.query("UPDATE clean.phase5_cd_pre_task_v39 SET lease_until_utc=clock_timestamp()-interval '1 second' WHERE task_id=$1",[c2[0].task_id]);
    const r2=(await admin.query("SELECT * FROM clean.phase5_cd_reap_once_v39(16)")).rows;
-   expect(r2.find((x:any)=>String(x.task_id)===String(c2[0].task_id))?.state).toBe("QUARANTINED");
+   expect(r2.find((x:any)=>String(x.task_id)===String(c2[0].task_id))?.new_state).toBe("QUARANTINED");
   }finally{delete process.env.V39_P5_E_SUPPLEMENT_CI;}
   console.log("T070_CONDITIONAL_REGISTRY_V0100_V0087_STAGE14_P7_CRASH_RECOVERY_REAL_PG16_ACK_"+horizon+"_CI_ONLY_NO_PROVIDER");
  });
