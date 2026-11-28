@@ -13,6 +13,9 @@
 - Permanent matrix on deployed main: 59 failure families, 23 narrow implementation closures, 36 not closed (34 partial/open, 2 historical-loss classification). All six scientific P0 acceptance families open. Seven newly scoped closures still need live paid-path validation in a genuine future prospective canary.
 - Paid SOURCE and POST and automatic future SOURCE preparation paused all weekend Nov28–29 Pacific, no automatic restart. Day5 scheduled Sunday T24 will be missed under that decision; no retrospectively shifted study dates/cutoffs or replay. Actual protected nonpaid commissioning, lawful retention and repairs continue.
 
+
+**Nov28 follow-on candidate (not deployed):** [paused preparation / pre-spend signer repair](../phase5b/checkpoints/2026-11-28_PAUSED_DAILY_PREPARE_AND_PRE_SPEND_ROLE_POLICY.md) and [conditional scoped readiness / T24 transaction cleanup](../phase5b/checkpoints/2026-11-28_CONDITIONAL_POST_EMPTY_PAGE_AND_WITNESS_CLEANUP.md) are on the single #985 draft. F027 checks the projected independent conditional signer policy before SOURCE; F042 checks the V0115 scoped reader even on empty pages; F048 reconciles uncertain BEGIN/ROLLBACK. Exact registry packet digest is not actual V0087 verified-task/receipt proof. No conditional POST issuer or production scientific closure. Exact new CI, coordinated paused cutover, V0115 owner readback and fresh budget/account read remain necessary.
+
 ### Current scientific completion sequence
 
 | Family | Next evidence required |

@@ -6,7 +6,7 @@
 import type {Pool} from "pg";
 import {auditP5ConditionalPostActualT6Batch,type P5ConditionalPostT6BatchScope} from "../server/lib/disruption/phase5V0083FuturePostOriginalDb_v39";
 import {readP6ActualConditionalT6PostPreCandidatePage} from "../server/lib/disruption/phase6PostNativePreCandidateReadOnce_v39.mjs";
-import {readPhase7ConditionalT6ScopedGroup} from "../server/lib/disruption/phase7PostScopedGroup_v39";
+import {preflightPhase7ConditionalT6ScopedReader,readPhase7ConditionalT6ScopedGroup} from "../server/lib/disruption/phase7PostScopedGroup_v39";
 import type {P6PostPreservationAnchor} from "../server/lib/disruption/phase6ActualPostOutcomeObservability_v39";
 import type {Phase7DerivedReleaseContract} from "../server/lib/disruption/phase6DerivedTrainingReleaseContract_v39";
 import type {Phase7ReviewedTransformationProfile} from "../server/lib/disruption/phase7ReviewedSourceTransformation_v39";
@@ -100,10 +100,21 @@ async function join(input:Reader,base:BaseScope,actual:{status:string;privateDec
    assessmentWatermarkUtc:d.assessmentWatermarkUtc,groupId,fragments:Object.freeze(result.fragments)}));
  }
  if(sourceEligible!==actual.eligibleCount||decisions.length+unresolvedGroups.length!==sourceEligible)hold("ELIGIBLE_DENOMINATOR_DRIFT");
+ // An empty or all-ineligible SOURCE page must not silently bypass actual
+ // conditional scoped-reader admission. For eligible rows the same
+ // admission is already checked inside each exact scoped group read.
+ if(sourceEligible===0){
+  const at=utc(await preflightPhase7ConditionalT6ScopedReader(input.reader,input.readerRole,input.contract));
+  if(at<observed||at-start>120000)hold("GROUP_READ_CLOCK_OR_WINDOW_DRIFT");
+  observed=at;
+ }
  const result={status:"ACTUAL_CONDITIONAL_POST_T6_AND_PACKET_B_GROUP_READ_NO_GO",runDayIndex:base.runDayIndex,
   candidateCount:actual.candidateCount,sourceEligibleCount:sourceEligible,verifiedPacketBGroupCount:decisions.length,
   unresolvedPacketBGroupCount:unresolvedGroups.length,
   unavailableCount:actual.candidateCount-decisions.length,observedDbClockUtc:new Date(observed).toISOString(),
+  // A registry packet digest and a matching snapshot/group are distinct
+  // evidence. This restricted query does not read the V0087 task receipt.
+  signedPacketCommitVerified:false,
   independentT24WitnessVerified:false,postIssuerCommissioned:false,physicalGateOutCertified:false,
   providerCalls:0,databaseWrites:0,postPacketsIssued:0,phase6PaidGo:false};
  return Object.freeze(Object.defineProperties(result,{privateDecisions:{value:Object.freeze(decisions),enumerable:false},privateUnresolvedGroups:{value:Object.freeze(unresolvedGroups),enumerable:false}})) as typeof result&

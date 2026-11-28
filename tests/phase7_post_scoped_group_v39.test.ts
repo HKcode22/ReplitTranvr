@@ -1,5 +1,5 @@
 import {describe,it,expect,vi} from "vitest";
-import {readPhase7PostScopedGroup,P7_POST_SCOPED_GROUP_SQL,finalizeReviewedPhase7PostGroup,preflightPhase7PostScopedReader} from "../server/lib/disruption/phase7PostScopedGroup_v39";
+import {readPhase7PostScopedGroup,P7_POST_SCOPED_GROUP_SQL,finalizeReviewedPhase7PostGroup,preflightPhase7PostScopedReader,preflightPhase7ConditionalT6ScopedReader} from "../server/lib/disruption/phase7PostScopedGroup_v39";
 import {createHash,randomUUID} from "node:crypto";
 import {buildPhase7DerivedReleasePacket} from "../server/lib/disruption/phase7DerivedReleaseWriter_v39";
 import {serializePhase7DerivedReleasePacket} from "../server/lib/disruption/phase6DerivedTrainingReleasePacket_v39";
@@ -47,4 +47,14 @@ it("preflight uses the same restricted actor and does not read private rows or w
  expect(f.query).not.toHaveBeenCalledWith(P7_POST_SCOPED_GROUP_SQL,expect.anything());
  expect(f.query.mock.calls.some(([sql])=>/INSERT|UPDATE|DELETE/.test(sql)&&!sql.startsWith("SELECT current_user"))).toBe(false);
  const denied=fake({can_scope:false});await expect(preflightPhase7PostScopedReader(denied.pool,role,contract)).rejects.toThrow("READER_SCOPE_OR_CLOCK");expect(denied.release).toHaveBeenCalledOnce();
+});
+
+it("conditional preflight checks the V0115 signature, not the existing native grant, without reading a group",async()=>{
+ const f=fake();
+ await expect(preflightPhase7ConditionalT6ScopedReader(f.pool,role,contract)).resolves.toBe("2027-02-02T12:00:00.000Z");
+ expect(f.query.mock.calls.find(([sql])=>sql.startsWith("SELECT current_user"))?.[1]).toEqual(["phase7_private.read_bound_conditional_t6_group_v39(text,bigint,text,text,integer,text,text,text)"]);
+ expect(f.query).not.toHaveBeenCalledWith(P7_POST_SCOPED_GROUP_SQL,expect.anything());
+ const denied=fake({can_scope:false});
+ await expect(preflightPhase7ConditionalT6ScopedReader(denied.pool,role,contract)).rejects.toThrow("READER_SCOPE_OR_CLOCK");
+ expect(denied.release).toHaveBeenCalledOnce();
 });

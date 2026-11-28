@@ -1,4 +1,5 @@
 import {auditP5ConditionalPostActualT6Batch} from "../server/lib/disruption/phase5V0083FuturePostOriginalDb_v39";
+import {preflightPhase7ConditionalT6ScopedReader} from "../server/lib/disruption/phase7PostScopedGroup_v39";
 import {readP6ConditionalPostT6PreservationBatch} from "../scripts/v39_phase6_conditional_post_preservation_read_v39";
 import {readP6ConditionalPostT24WitnessPage} from "../server/lib/disruption/phase6LaterT24EvidenceBatchReadOnly_v39";
 import {P6_T24_CUSTODY_SCHEMA,p6T24WitnessCustodyPath,p6T24WitnessCustodyPreimage,publishP6T24WitnessCustodyOnce} from "../server/lib/disruption/phase6PrivateT24WitnessReceiptTransport_v39.mjs";
@@ -1018,10 +1019,17 @@ active("Phase5 C+D actual Stage14 source-bound parallel PRE on disposable PG16",
        scope:{independentConditionalPostPreservationReadApproved:true as const,existingPaidDispatchApproved:false as const,
         noProviderCredentialsInAudit:true as const,manifestSha256:manifest,rightsSha256:rights,
         expectedContractSha256:hashPhase7DurableCandidate(p7.contract),expectedProfileSha256:hashPhase7DurableCandidate(p7.profile)}};
+      // Exact conditional reader readiness is required even when the source
+      // has no eligible PRE. A native-only or owner connection is not enough.
+      await expect(preflightPhase7ConditionalT6ScopedReader(p7Scoped,P7SCOPED,p7.contract)).resolves.toMatch(/^\d{4}-/);
+      const emptyScope={...scope,candidates:[{...scope.candidates[0],flightInstanceId:"leg:g5a:"+sha("no actual PRE for conditional scoped-reader preflight")}]};
+      const empty=await readP6ConditionalPostT6PreservationBatch(scoped,emptyScope,input);
+      expect(empty).toMatchObject({candidateCount:1,sourceEligibleCount:0,verifiedPacketBGroupCount:0,unavailableCount:1,signedPacketCommitVerified:false,phase6PaidGo:false});
+      await expect(readP6ConditionalPostT6PreservationBatch(scoped,emptyScope,{...input,reader:admin})).rejects.toThrow("READER_SCOPE_OR_CLOCK");
       const verified=await readP6ConditionalPostT6PreservationBatch(scoped,scope,input);
       expect(verified).toMatchObject({status:"ACTUAL_CONDITIONAL_POST_T6_AND_PACKET_B_GROUP_READ_NO_GO",candidateCount:1,
        verifiedPacketBGroupCount:1,unavailableCount:0,independentT24WitnessVerified:false,postIssuerCommissioned:false,
-       physicalGateOutCertified:false,providerCalls:0,databaseWrites:0,postPacketsIssued:0,phase6PaidGo:false});
+       physicalGateOutCertified:false,signedPacketCommitVerified:false,providerCalls:0,databaseWrites:0,postPacketsIssued:0,phase6PaidGo:false});
       expect(verified.privateDecisions[0].anchor).toMatchObject({snapshotId:saved.committedSnapshotId,flightInstanceId:flight,
        selectedNativeTUtc:t.toISOString(),sourceResponseSha256:response});
       expect(verified.privateDecisions[0].fragments.some(f=>f.packet.rows[0].horizon==="T-6h")).toBe(true);
@@ -1088,6 +1096,31 @@ active("Phase5 C+D actual Stage14 source-bound parallel PRE on disposable PG16",
         }else expect(got.privateDecisions[0].status).toBe("T24_SIGNED_WITNESS_BINDING_UNAVAILABLE");
         await expect(readP6ConditionalPostT24WitnessPage(admin,[anchor],ws,custody)).rejects.toThrow("CONDITIONAL_METADATA_ROLE_OR_ACL");
         await expect(readP6ConditionalPostT24WitnessPage(metadata,[{...anchor,configSha256:sha("changed config")}],ws,custody)).rejects.toThrow("CONDITIONAL_POST_WITNESS_ANCHOR");
+        // F048: real restricted connection starts the actual transaction,
+        // then simulate loss of BEGIN acknowledgement at the adapter.
+        // Acknowledged cleanup can reuse the session; uncertain cleanup
+        // must destroy it. Never return a witness receipt on either failure.
+        for(const loseRollback of [false,true]){
+         let rollbackCount=0;const releases:(boolean|Error|undefined)[]=[];
+         const lostBegin={connect:async()=>{
+          const c=await metadata.connect();
+          return new Proxy(c,{get(target,key){
+           if(key==="query")return async(sql:string,...args:unknown[])=>{
+            if(sql==="BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY"){
+             await Reflect.apply(target.query,target,[sql,...args]);throw Error("CI_BEGIN_ACK_LOST");
+            }
+            if(sql==="ROLLBACK"){rollbackCount++;if(loseRollback)throw Error("CI_ROLLBACK_ACK_LOST");}
+            return Reflect.apply(target.query,target,[sql,...args]);
+           };
+           if(key==="release")return (err?:boolean|Error)=>{releases.push(err);target.release(err);};
+           const val=Reflect.get(target,key);return typeof val==="function"?val.bind(target):val;
+          }});
+         }};
+         await expect(readP6ConditionalPostT24WitnessPage(lostBegin,[anchor],ws,custody)).rejects.toThrow(loseRollback?"ROLLBACK_UNACKNOWLEDGED":"CI_BEGIN_ACK_LOST");
+         expect(rollbackCount).toBe(1);expect(releases).toEqual([loseRollback?true:undefined]);
+        }
+        const afterCleanup=await readP6ConditionalPostT24WitnessPage(metadata,[anchor],ws,custody);
+        expect(afterCleanup.verifiedT24WitnessCount).toBe(Number(witnessed));
         console.log("S007_REAL_RESTRICTED_CONDITIONAL_T6_PACKET_B_SIGNED_T24_WITNESS_PASS");
        }finally{pub.release(true);reader.release(true);await Promise.all([pubPool.end(),readPool.end()]);}
       }

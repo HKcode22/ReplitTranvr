@@ -117,3 +117,8 @@ See [checkpoint](checkpoints/2026-11-27_WORKER_SUCCESSOR_AND_WITNESSED_P7.md). I
 ## Post-#981 commissioning recovery
 
 Actual #981 deployed 697501b9; do not repeat. Both local archives absent; use protected policy custody. I137/T131–T132 public composite commitment and review package, I138/T133–T134 six inactive successor secrets and one exact owner selector, I139/T135 safe #982 successor. Stage only via owner-created repository-limited short-lived fine-grained secret-management credential injected only in existing protected main stage step; never reuse broad gh token, never paste token in chat, remove/revoke after stage. Before activation require exact preview, actual independent staged readback, next unsigned day zero prepared rows and before preparation, exact selector/secret scope. Do not undo after signed conditional day without reconciliation. Existing native secrets preserved and existing paid/STOP/retention/signed study unchanged. [Checkpoint](checkpoints/2026-11-27_POST981_DEPLOYMENT_AND_CONDITIONAL_CUSTODY.md).
+
+
+## Nov28 follow-on scoped repair (candidate, not deployed)
+
+See [latest checkpoint](checkpoints/2026-11-28_CONDITIONAL_POST_EMPTY_PAGE_AND_WITNESS_CLEANUP.md). No new activation; #985 exact successor CI, coordinated paused cutover, exact owner V0115 installation/readback, fresh budget and prospective independent actor/issuer acceptance remain required. Empty conditional pages cannot certify readiness from a native grant. Registry packet SHA is not verified V0087 receipt evidence. No change to original clocks, expiry, signed scope or endpoints.

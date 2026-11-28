@@ -49,6 +49,11 @@ async function withScopedRead<T>(reader:Pick<Pool,"connect">,read:(c:import("pg"
 export async function preflightPhase7PostScopedReader(reader:Pick<Pool,"connect">,expectedRole:string,contract:Phase7DerivedReleaseContract){
  return withScopedRead(reader,async c=>{const x=await assertPhase7PostScopedActor(c,expectedRole,Date.parse(contract.researchExpiryUtc));return (x.at as Date).toISOString();});
 }
+/** Separate conditional reader readiness, even on an empty candidate page.
+ * Native function access is not evidence that V0115 is installed or granted. */
+export async function preflightPhase7ConditionalT6ScopedReader(reader:Pick<Pool,"connect">,expectedRole:string,contract:Phase7DerivedReleaseContract){
+ return withScopedRead(reader,async c=>{const x=await assertPhase7PostScopedActor(c,expectedRole,Date.parse(contract.researchExpiryUtc),conditionalFn);return (x.at as Date).toISOString();});
+}
 export async function readPhase7PostScopedGroup(reader:Pick<Pool,"connect">,expectedRole:string,contract:Phase7DerivedReleaseContract,profile:Phase7ReviewedTransformationProfile,a:P6PostPreservationAnchor):Promise<{fragments:Phase7StoredPreFragment[];observedAtUtc:string}>{
  return readScopedGroup(reader,expectedRole,contract,profile,a);
 }
