@@ -1,6 +1,15 @@
 # Phase 5B single operational runbook
 
-## Current state — Nov27 after #980
+## Current state — Nov28 after #983 (supersedes all Nov27 commands below)
+
+- Production main a02e3d6eddc378871f030848235746de160b71e5; relay unchanged. #982 and #983 merged and runtime/retention pins converged by owner cutover. V0114 installed and independently verified once; do not repeat. Exact #983 PR CI 33/33, post-merge aggregate 46140269565, callback isolation 46140269459 and retention 46140308647 green. Latest protected recipe preview 46140377128 passed; installation/positive PRE not inferred.
+- **Paid SOURCE/POST and automatic SOURCE preparation paused through November 29 Pacific; no automatic restart.** Keep lawful retention and nonpaid reconciliation running. Do not follow the old instructions below to keep paid SOURCE enabled. No new token: use existing authenticated owner gh for only the reviewed nonsecret recipe after separate protected inactive readback, then active readback. Keep native predecessor and all existing private values unchanged. A readback HOLD is reconciled, not replayed.
+- Next: verify actual commissioned policy, actual conditional admission and PRE/Packet B, then protected separate POST issuer and independent actual outcome. Latest study-specific owner snapshot 180 timely, 66 live, 110 expired metadata-only, 4 unresolved, 10,998 historical members, zero linked/cutoff-safe PRE/Packet B. Do not repeat historical data rescue or backfill.
+- 23/59 narrow deployed defects closed; 36 not closed. Scientific P0s F005/F027/F026/F029/F042/F010 remain open. Seven narrow repairs need positive operational validation on the bounded future paid path; do not deliberately create paid faults. Preserve exact f.8, Packet A/B, Amendment E, C+D and signed calendar. See [plan navigation](../plans/README.md) and [current recovery map](../plans/PHASE5B_PHASE6_RECOVERY_MAP_2026-11-27.md).
+
+All sections below are preserved historical snapshots, not current executable steps.
+
+## Historical state — Nov27 after #980
 
 **17:55:36 PST actual owner inventory:** the previously requested I133/T127 readback succeeded; no repeat requested. 148 timely bindings, 86 live, 62 expired, 9,126 historical member observations, zero linked/cutoff-safe PRE/global Packet B objects. Six next-hour study originals all Day3 T6 native shape failed; zero tasks or lead pre-screen. Do not attempt historical rescue by changing signed scope or expiry. [Latest evidence](checkpoints/2026-11-27_1755_PST_ACTUAL_EXPIRY_AND_T075_DIGEST_PARITY.md). Next prioritize prospective commissioning, exact safe worker release and witnessed PRE/Packet B. The previous protected main readback lacks the new composite commitment; fresh protected successor readback, reviewed decision and exact installation path are required, not a repeat of the old no-commitment probe.
 

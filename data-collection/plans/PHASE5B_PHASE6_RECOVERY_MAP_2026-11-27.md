@@ -2,7 +2,27 @@
 
 **Purpose:** A short, non-normative navigation and status page for the active scientific recovery. It links to the canonical decisions and evidence; it does not create a new amendment, relax a gate, replace the runbook, or change the frozen study design. This page is additive. The source protocol, prior notes, and historical evidence remain in place.
 
-## Current production picture
+## Current production picture — November 28, 2026 (supersedes November 27 snapshot)
+
+- [#982](https://github.com/HKcode22/ReplitTranvr/pull/982) deployed at 9426eda5; owner V0114 receipt independently verified installed exact, original functions and queue preserved, zero provider calls. Do not repeat installation.
+- [#983](https://github.com/HKcode22/ReplitTranvr/pull/983) merged at a02e3d6eddc378871f030848235746de160b71e5; exact head be525c140cee04c3e605467ac925429407f13fdb 33/33 PR workflows passed, [aggregate](https://github.com/HKcode22/ReplitTranvr/actions/runs/46139716920) 4,677 passed / 243 skipped, schema/typecheck/lint/build/registry/traceability/scanner passed. [New-main aggregate](https://github.com/HKcode22/ReplitTranvr/actions/runs/46140269565), [callback isolation](https://github.com/HKcode22/ReplitTranvr/actions/runs/46140269459) and [retention](https://github.com/HKcode22/ReplitTranvr/actions/runs/46140308647) passed. The earlier callback red is historical, not current release failure.
+- [Protected tokenless preview](https://github.com/HKcode22/ReplitTranvr/actions/runs/46140377128) succeeded, validates existing native policies/public actors, unsigned Day 5 and deterministic recipe; no actual installed conditional policy, signatures, provider calls or DB/GitHub writes in that receipt. No new credential or copied secret required. Next: actual protected inactive readback, owner sets the single reviewed nonsecret approval, actual active readback. Do not repeat old custody or V0114/cutover.
+- Owner latest study inventory at Nov28 09:56Z reported 180 timely originals, 66 live, 110 expired metadata-only, 4 unresolved custody state, 10,998 historical members and zero linked/cutoff-safe PRE/global durable Packet B. This is a timestamped observation; not a live count or evidence of conditional eligibility. Prior 148-original snapshot below is historical. Do not reconstruct or extend expired Contents.
+- Permanent matrix on deployed main: 59 failure families, 23 narrow implementation closures, 36 not closed (34 partial/open, 2 historical-loss classification). All six scientific P0 acceptance families open. Seven newly scoped closures still need live paid-path validation in a genuine future prospective canary.
+- Paid SOURCE and POST and automatic future SOURCE preparation paused all weekend Nov28–29 Pacific, no automatic restart. Day5 scheduled Sunday T24 will be missed under that decision; no retrospectively shifted study dates/cutoffs or replay. Actual protected nonpaid commissioning, lawful retention and repairs continue.
+
+### Current scientific completion sequence
+
+| Family | Next evidence required |
+| --- | --- |
+| F005/F027 | Actual inactive then active derived policy readback and genuine conditional admission in a future eligible signed slot. |
+| F026 | Actual cutoff-safe PRE plus durable independently read-back Packet B; keep historical losses, preserve source expiry. |
+| F029/F042 | Actual source-bound T6 and independently verified Packet B group, exact T24 witness and separate protected conditional POST issuer/settlement; distinct actual gate-out truth required for E. New I149/T146 integrates existing scoped group read, exact CI/actual protected invocation pending. |
+| F010 | Repeated successful future prospective chain; account for paused and historical missed windows, not a repaired historical observation. |
+
+The November 27 text below is preserved only as historical context. Its owner actions and live deployment statements are superseded; do not execute them.
+
+## Historical production picture — November 27
 
 - Production `main` is `24df876fc612c0e4fdfb6f69585ed90bcc56f9b8`. [PR #981](https://github.com/HKcode22/ReplitTranvr/pull/981) is still an open draft at `e03ce20a9d827a7824ad23e176cd224560907f8d`; its scientific changes have not reached production.
 - The latest checked #981 matrix on that PR head has the offline-safety, PG16, runtime-compatibility, focused guard, admission, and metadata jobs passing; protected/provider-scoped jobs skip by design. The callback reviewed-source job is red after 8 test files / 30 cases pass because `PHASE5_CALLBACK_REVIEWED_SOURCE_BUILD_HOLD` finds guarded source differs from reviewed PIN `c3c3050e12c4e327f9c82c35c95f856f3c1cbd20` ([exact job](https://github.com/HKcode22/ReplitTranvr/actions/runs/46071585326)). This is a release hold, not an experiment incident; do not alter the pin or guard without the required exact-source review. The actual project plans are not yet visible from `main` because #981 is unmerged.

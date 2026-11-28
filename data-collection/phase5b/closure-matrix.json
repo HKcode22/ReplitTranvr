@@ -80,7 +80,7 @@
         "I143",
         "I144"
       ],
-      "next": "Deployed frozen-reference application and database repair; actual protected preview, separate stage/active readback, and genuine cutoff-safe PRE/Packet B required.",
+      "next": "Tokenless policy derivation deployed; actual protected preview 46140377128 passed. Verify inactive then active configuration, and genuine future conditional admission.",
       "closureStatus": "NOT_CLOSED",
       "scientificRisk": "P0_SCIENTIFIC",
       "workstream": "preservation_admission"
@@ -424,7 +424,7 @@
         "I144",
         "I148"
       ],
-      "next": "Tokenless eight-consumer wiring committed; exact CI, protected recipe preview, actual inactive readback, explicit owner activation and active readback before authentic PRE/Packet B.",
+      "next": "Tokenless policy derivation deployed; actual protected preview 46140377128 passed. Verify inactive then active configuration, and genuine future conditional admission.",
       "closureStatus": "NOT_CLOSED",
       "scientificRisk": "P0_SCIENTIFIC",
       "workstream": "preservation_admission"
@@ -452,7 +452,7 @@
         "I145",
         "I146"
       ],
-      "next": "Deployed attribution correction; PR #983 candidate fixes conditional source clock and retimed witness comparison. Actual protected POST issuer, authentic outcome and physical-label evidence remain open.",
+      "next": "Attribution and retimed witness comparison deployed. Authentic separate outcome and independently verified physical gate-out still open.",
       "closureStatus": "NOT_CLOSED",
       "scientificRisk": "P0_SCIENTIFIC",
       "workstream": "outcome_truth"
@@ -620,9 +620,10 @@
         "I089",
         "I093",
         "I146",
-        "I147"
+        "I147",
+        "I149"
       ],
-      "next": "Actual restricted PG16 T143 46139266207 passed both T6 cases; protected issuer, independently verified Packet B/witness, actual paid outcome and physical target remain open.",
+      "next": "Actual T6 reader deployed and restricted PG16 verified. Candidate integrates scoped Packet B group; verify final exact CI, signed custody/witness, protected issuer and actual separate POST settlement.",
       "closureStatus": "NOT_CLOSED",
       "scientificRisk": "P0_SCIENTIFIC",
       "workstream": "outcome_truth"

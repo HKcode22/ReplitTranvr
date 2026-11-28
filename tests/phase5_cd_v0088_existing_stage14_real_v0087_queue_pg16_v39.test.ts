@@ -1,4 +1,5 @@
 import {auditP5ConditionalPostActualT6Batch} from "../server/lib/disruption/phase5V0083FuturePostOriginalDb_v39";
+import {readP6ConditionalPostT6PreservationBatch} from "../scripts/v39_phase6_conditional_post_preservation_read_v39";
 import {digestP5Stage24ReviewedReceipt,type P5Stage24ReviewedT24Receipt} from "../server/lib/disruption/phase5T24WitnessedLaterHorizonGuard_v39";
 import {verifyP5SignedLaterPreDayRegistry,type P5SignedLaterPreDayRegistry} from "../server/lib/disruption/phase5SignedLaterPreDayRegistry_v39";
 import type {P5SignedSourceBatchRegistry} from "../server/lib/disruption/phase5SignedPerDaySourceBatchReadonly_v39";
@@ -983,6 +984,33 @@ active("Phase5 C+D actual Stage14 source-bound parallel PRE on disposable PG16",
        expect((await auditP5ConditionalPostActualT6Batch(scoped,altered)).eligibleCount).toBe(0);
      await expect(auditP5ConditionalPostActualT6Batch(admin,scope)).rejects.toThrow("CONDITIONAL_POST_T6_RESTRICTED_SOURCE_SESSION");
      console.log("I147_T143_REAL_RESTRICTED_CONDITIONAL_POST_T6_READER_PASS");
+     if(p7&&p7Scoped){
+      const input={reader:p7Scoped,readerRole:P7SCOPED,contract:p7.contract,profile:p7.profile,
+       scope:{independentConditionalPostPreservationReadApproved:true as const,existingPaidDispatchApproved:false as const,
+        noProviderCredentialsInAudit:true as const,manifestSha256:manifest,rightsSha256:rights,
+        expectedContractSha256:hashPhase7DurableCandidate(p7.contract),expectedProfileSha256:hashPhase7DurableCandidate(p7.profile)}};
+      const verified=await readP6ConditionalPostT6PreservationBatch(scoped,scope,input);
+      expect(verified).toMatchObject({status:"ACTUAL_CONDITIONAL_POST_T6_AND_PACKET_B_GROUP_READ_NO_GO",candidateCount:1,
+       verifiedPacketBGroupCount:1,unavailableCount:0,independentT24WitnessVerified:false,postIssuerCommissioned:false,
+       physicalGateOutCertified:false,providerCalls:0,databaseWrites:0,postPacketsIssued:0,phase6PaidGo:false});
+      expect(verified.privateDecisions[0].anchor).toMatchObject({snapshotId:saved.committedSnapshotId,flightInstanceId:flight,
+       selectedNativeTUtc:t.toISOString(),sourceResponseSha256:response});
+      expect(verified.privateDecisions[0].fragments.some(f=>f.packet.rows[0].horizon==="T-6h")).toBe(true);
+      expect(JSON.stringify(verified)).not.toContain(flight);expect(JSON.stringify(verified)).not.toContain(response);
+      await expect(readP6ConditionalPostT6PreservationBatch(scoped,scope,{...input,scope:{...input.scope,expectedProfileSha256:sha("wrong profile")}})).rejects.toThrow("EXACT_SEPARATE_READ_SCOPE");
+      await expect(readP6ConditionalPostT6PreservationBatch(scoped,scope,{...input,reader:admin})).rejects.toThrow("READER_SCOPE_OR_CLOCK");
+      // Original source still present, but the actual temporary mapping is
+      // expired. Never plan a POST from a standalone T6 row without Packet B.
+      const link=await admin.query("SELECT expires_at_utc FROM phase7_private.pre_source_link_v39 WHERE snapshot_id=$1",[saved.committedSnapshotId]);
+      expect(link.rows).toHaveLength(1);
+      try{
+       await admin.query("UPDATE phase7_private.pre_source_link_v39 SET expires_at_utc=clock_timestamp()-interval '1 second' WHERE snapshot_id=$1",[saved.committedSnapshotId]);
+       await expect(readP6ConditionalPostT6PreservationBatch(scoped,scope,input)).rejects.toThrow();
+      }finally{
+       await admin.query("UPDATE phase7_private.pre_source_link_v39 SET expires_at_utc=$2 WHERE snapshot_id=$1",[saved.committedSnapshotId,link.rows[0].expires_at_utc]);
+      }
+      console.log("I149_T146_REAL_RESTRICTED_CONDITIONAL_T6_PACKET_B_GROUP_PASS");
+     }
     }finally{await source.end();}
    }
    if(p7){
