@@ -6,6 +6,10 @@
 import {createHash,createPublicKey,verify,type KeyObject} from "node:crypto";
 import {measureP5FirstCycleScheduleRevision,type P5ScheduleHorizon} from "./phase5ProspectiveProviderScheduleRevisionPrimary_v39";
 const H=/^[a-f0-9]{64}$/,K=/^leg:g5a:[a-f0-9]{64}$/,U=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+// JSON receipts are runtime data, not validated TypeScript values. Require a
+// complete primitive-string match before comparing evidence identities.
+const exactMatch=(pattern:RegExp,value:unknown):value is string=>
+ typeof value==="string"&&pattern.exec(value)?.[0]===value;
 const fail=(x:string):never=>{throw Error("HOLD_P5_CONDITIONAL_PAIR_"+x);};
 const sha=(x:string|Buffer)=>createHash("sha256").update(x).digest("hex");
 function clock(x:unknown){if(typeof x!=="string"||!Number.isFinite(Date.parse(x))||new Date(x).toISOString()!==x)return fail("CLOCK");return Date.parse(x);}
@@ -19,16 +23,16 @@ function parseWire(w:Wire,key:KeyObject){
  const body=b64(w?.bodyBase64,32768),sig=b64(w?.signatureBase64,256);
  if(sig.length!==64||!verify(null,body,key,sig))return fail("SIGNATURE");
  let v:Observation;try{v=JSON.parse(body.toString("utf8"));}catch{return fail("WIRE_JSON");}
- if(!v||v.schema!=="v39.phase5.conditional-schedule-receipt.v1"||!H.test(v.manifestSha256)||!H.test(v.protocolSha256)||!H.test(v.rightsSha256)||!K.test(v.serviceKey)||!U.test(v.sourceQueryId)||!H.test(v.sourceResponseSha256)||!H.test(v.sourceBodySha256)||
- !Number.isSafeInteger(v.runDayIndex)||v.runDayIndex<1||v.runDayIndex>31||! /^[A-Z0-9]{2}[0-9]{1,4}$/.test(v.operatorFlightNumber)||! /^[A-Z]{4}$/.test(v.originIcao)||! /^[A-Z]{4}$/.test(v.destinationIcao)||v.originIcao===v.destinationIcao||
+ if(!v||v.schema!=="v39.phase5.conditional-schedule-receipt.v1"||!exactMatch(H,v.manifestSha256)||!exactMatch(H,v.protocolSha256)||!exactMatch(H,v.rightsSha256)||!exactMatch(K,v.serviceKey)||!exactMatch(U,v.sourceQueryId)||!exactMatch(H,v.sourceResponseSha256)||!exactMatch(H,v.sourceBodySha256)||
+ !Number.isSafeInteger(v.runDayIndex)||v.runDayIndex<1||v.runDayIndex>31||!exactMatch(/^[A-Z0-9]{2}[0-9]{1,4}$/,v.operatorFlightNumber)||!exactMatch(/^[A-Z]{4}$/,v.originIcao)||!exactMatch(/^[A-Z]{4}$/,v.destinationIcao)||v.originIcao===v.destinationIcao||
  v.positiveOperatorUnique!==true||v.nativeOperatingLegCertified!==false||!["T-24h","T-6h","T-90m"].includes(v.horizon))return fail("RECEIPT");
  return v;
 }
 export function measureP5ConditionalSignedSchedulePair(trust:Trust,preWire:Wire,postWire:Wire,dbObservedUtc:string){
- if(!trust||!H.test(trust.expectedPolicySha256)||!Buffer.isBuffer(trust.policyBytes)||trust.policyBytes.length>16384||sha(trust.policyBytes)!==trust.expectedPolicySha256)fail("PINNED_POLICY");
+ if(!trust||!exactMatch(H,trust.expectedPolicySha256)||!Buffer.isBuffer(trust.policyBytes)||trust.policyBytes.length>16384||sha(trust.policyBytes)!==trust.expectedPolicySha256)fail("PINNED_POLICY");
  let p:Policy;try{p=JSON.parse(trust.policyBytes.toString("utf8"));}catch{return fail("POLICY_JSON");}
  if(!p||p.schema!=="v39.phase5.conditional-schedule-pair-policy.v1"||p.endpoint!=="PROVIDER_SCHEDULE_REVISION_ABS_GE_15_MIN"||p.approvedSeparateTier!==true||
- ![p.manifestSha256,p.protocolSha256,p.rightsSha256,p.preSignerSpkiSha256,p.postSignerSpkiSha256].every(x=>H.test(x))||p.preSignerSpkiSha256===p.postSignerSpkiSha256)fail("POLICY");
+ ![p.manifestSha256,p.protocolSha256,p.rightsSha256,p.preSignerSpkiSha256,p.postSignerSpkiSha256].every(x=>exactMatch(H,x))||p.preSignerSpkiSha256===p.postSignerSpkiSha256)fail("POLICY");
  const a=createPublicKey(trust.preSignerPublicKeyPem),b=createPublicKey(trust.postSignerPublicKeyPem);
  if(a.asymmetricKeyType!=="ed25519"||b.asymmetricKeyType!=="ed25519"||keyHash(a)!==p.preSignerSpkiSha256||keyHash(b)!==p.postSignerSpkiSha256)fail("DISTINCT_SIGNER_PINS");
  const pre=parseWire(preWire,a),post=parseWire(postWire,b),now=clock(dbObservedUtc),effective=clock(p.effectiveUtc),policyExpiry=clock(p.expiresUtc);
@@ -36,9 +40,9 @@ export function measureP5ConditionalSignedSchedulePair(trust:Trust,preWire:Wire,
  if(effective>=policyExpiry||now>=policyExpiry||pre.lane!=="PRE"||post.lane!=="POST"||pre.horizon!=="T-6h"||post.horizon!==pre.horizon||pre.manifestSha256!==p.manifestSha256||post.manifestSha256!==p.manifestSha256||
  pre.protocolSha256!==p.protocolSha256||post.protocolSha256!==p.protocolSha256||pre.rightsSha256!==p.rightsSha256||post.rightsSha256!==p.rightsSha256||
  pre.runDayIndex!==post.runDayIndex||pre.serviceKey!==post.serviceKey||pre.operatorFlightNumber!==post.operatorFlightNumber||pre.originIcao!==post.originIcao||pre.destinationIcao!==post.destinationIcao||
- pre.firstScheduledDepartureUtc!==post.firstScheduledDepartureUtc||pre.sourceQueryId===post.sourceQueryId||pre.sourceResponseSha256===post.sourceResponseSha256||
- !H.test(pre.preIssueReceiptSha256??"")||pre.postReservationSha256!==null||post.preIssueReceiptSha256!==pre.preIssueReceiptSha256||
- post.preIssuedUtc!==pre.preIssuedUtc||!H.test(post.postReservationSha256??""))fail("PAIR_BINDING");
+ pre.firstScheduledDepartureUtc!==post.firstScheduledDepartureUtc||pre.sourceQueryId.toLowerCase()===post.sourceQueryId.toLowerCase()||pre.sourceResponseSha256===post.sourceResponseSha256||
+ !exactMatch(H,pre.preIssueReceiptSha256??"")||pre.postReservationSha256!==null||post.preIssueReceiptSha256!==pre.preIssueReceiptSha256||
+ post.preIssuedUtc!==pre.preIssuedUtc||!exactMatch(H,post.postReservationSha256??""))fail("PAIR_BINDING");
  const pa=clock(pre.sourceAvailableUtc),pr=clock(pre.reviewedAtUtc),pi=clock(pre.preIssuedUtc),pe=clock(pre.sourceExpiresUtc),pp=clock(pre.sourcePlannedUtc);
  const oa=clock(post.sourceAvailableUtc),orr=clock(post.reviewedAtUtc),oe=clock(post.sourceExpiresUtc),op=clock(post.sourcePlannedUtc);
  if(effective>pp||pp>pa||pa>pr||pr>pi||pi>cutoff||pi>=pe||pe>pa+23*3600000||

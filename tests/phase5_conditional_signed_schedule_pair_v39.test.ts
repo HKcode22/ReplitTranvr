@@ -50,3 +50,24 @@ describe("T075 conditional service comparison stays distinct from physical label
   expect(()=>pair(f.trust,pre,f.wire({...f.post,sourceResponseSha256:f.pre.sourceResponseSha256},f.b.privateKey),t("14:01"))).toThrow(/PAIR_BINDING/);
  });
 });
+
+
+describe("T075 runtime signed receipt digest identity",()=>{
+ it("rejects validly signed malformed receipt digests and same query aliases",()=>{
+  const f=fixture(),pre=f.wire(f.pre,f.a.privateKey);
+  for(const patch of [
+   {sourceResponseSha256:[f.pre.sourceResponseSha256]},
+   {sourceResponseSha256:f.pre.sourceResponseSha256+"\n"},
+   {sourceBodySha256:[f.post.sourceBodySha256]},
+   {postReservationSha256:[f.post.postReservationSha256]}
+  ])expect(()=>pair(f.trust,pre,f.wire({...f.post,...patch},f.b.privateKey),t("14:01"))).toThrow(/HOLD_P5_CONDITIONAL_PAIR_(RECEIPT|PAIR_BINDING)/);
+  expect(()=>pair(f.trust,pre,f.wire({...f.post,sourceQueryId:f.pre.sourceQueryId.toUpperCase()},f.b.privateKey),t("14:01"))).toThrow(/PAIR_BINDING/);
+ });
+ it("preserves a genuine zero revision when distinct response receipts have identical body digests",()=>{
+  const f=fixture(),post={...f.post,sourceBodySha256:f.pre.sourceBodySha256,scheduledDepartureUtc:f.pre.scheduledDepartureUtc};
+  const out=pair(f.trust,f.wire(f.pre,f.a.privateKey),f.wire(post,f.b.privateKey),t("14:01"));
+  expect(out.privateCandidate).toMatchObject({scheduledRevisionMinutes:0,primaryBinaryOutcome:0,physicalDepartureDelayLabel:false});
+  expect(out.physicalGateOutCertified).toBe(false);
+  expect(out.trainingPublicationAuthorized).toBe(false);
+ });
+});
