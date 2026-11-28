@@ -618,9 +618,10 @@
         "I088",
         "I089",
         "I093",
-        "I146"
+        "I146",
+        "I147"
       ],
-      "next": "Deployed attribution correction; PR #983 candidate fixes conditional source clock and retimed witness comparison. Actual protected POST issuer, authentic outcome and physical-label evidence remain open.",
+      "next": "Separate conditional T6 actual reader and matching candidate committed; real restricted PG16, protected issuer, independent Packet B/witness and actual outcome remain required.",
       "closureStatus": "NOT_CLOSED",
       "scientificRisk": "P0_SCIENTIFIC",
       "workstream": "outcome_truth"
@@ -727,7 +728,7 @@
       "implementations": [
         "I113"
       ],
-      "next": "Protected actual candidate preview and exact independent readback.",
+      "next": "Actual protected preview passed (46137334305); separate active commissioning remains outstanding. Owner declined new token creation.",
       "closureStatus": "NOT_CLOSED",
       "scientificRisk": "P1_SCIENTIFIC",
       "workstream": "preservation_admission"
@@ -751,7 +752,7 @@
       "implementations": [
         "I115"
       ],
-      "next": "Protected actual candidate preview and exact independent readback.",
+      "next": "Actual protected preview passed (46137334305); separate active commissioning remains outstanding. Owner declined new token creation.",
       "closureStatus": "NOT_CLOSED",
       "scientificRisk": "P1_SCIENTIFIC",
       "workstream": "preservation_admission"
