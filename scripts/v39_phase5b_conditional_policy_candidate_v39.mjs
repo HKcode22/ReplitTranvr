@@ -1,3 +1,6 @@
+import {buildConditionalDailyBytes,buildConditionalSigningBytes,buildConditionalTransportBytes,policyCommit,deriveP6ConditionalPolicyFromReviewedRecipe} from "./v39_phase5b_conditional_policy_derivation_v39.mjs";
+export {deriveP6ConditionalPolicyFromReviewedRecipe};
+const kinds=["daily","signing","transport"];
 import {hasP6NativePreFeatureReview} from "../server/lib/disruption/phase6NativePreFeaturePolicy_v39.mjs";
 /** Private candidate assembly only. No signing, provider, DB, GitHub
  * mutation or implicit scientific approval. Existing exact daily/signing/
@@ -48,6 +51,8 @@ function requirePlanCoverage(p,r,reviewedPlanBytes,prospective,decision){
  if(Date.parse(decision.validUntilUtc)<=last)hold("REVIEWED_PLAN_INTERVAL");
  return new Date(last).toISOString();
 }
+// Shared deterministic transform. The existing prospective compiler remains
+// responsible for actual custody, clocks, rights and actor admission.
 export function prepareP6ConditionalPolicyCandidate({dailyBytes,signingBytes,transportBytes,baseDigests,trust,reviewBytes,reviewSha256,publicPins,prospective,observedUtc,reviewedPlanBytes}){
  // A reviewed decision must name exact old policy hashes and a future,
  // still-unpublished study day. An owner generic GO is not this record.
@@ -98,18 +103,10 @@ export function prepareP6ConditionalPolicyCandidate({dailyBytes,signingBytes,tra
  if(![fp,proof,v.laterReviewerFingerprintSha256,trust.dayReviewerFingerprintSha256,trust.queryReviewerFingerprintSha256].every(x=>H.test(x??""))||
     new Set([fp,proof,v.laterReviewerFingerprintSha256,trust.dayReviewerFingerprintSha256,trust.queryReviewerFingerprintSha256]).size!==5||
     !publicKeyMatches(raw,fp)||!publicKeyMatches(proofRaw,proof))hold("EXISTING_PUBLIC_ACTOR_PINS");
- const scope={protocolSha256:decision.protocolSha256,externalContentUseReviewSha256:decision.externalContentUseReviewSha256};
- const interval={validFromUtc:decision.effectiveUtc,validUntilUtc:decision.validUntilUtc};
- const delegation={approved:true,...scope,reviewerFingerprintSha256:fp,reportedScheduleSemanticsSha256:v.selectedTConfig.semanticsEvidenceSha256,...interval};
- const nextDaily={...p,conditionalPreFeatureReview:{schema:"v39.phase5.conditional-pre-feature-review-policy.v1",approved:true,...scope,rightsSha256:p.rightsSha256},
-  conditionalT24PermitReview:{schema:"v39.phase5.conditional-t24-permit-review-delegation.v1",...delegation},
-  conditionalLaterPermitReview:{schema:"v39.phase5.conditional-later-permit-review-delegation.v1",...delegation,standaloneNoT24ProtocolSha256:null},
-  nativeLaterReview:{...v,conditionalT24Scope:scope,conditionalLaterDayAppendPolicy:{...day,...interval,conditionalLaterPreScope:scope},
-   nativeT24PolicyTransition:{schema:"v39.phase5b.native-t24-policy-transition.v1",previousDailyPolicySha256:baseDigests.daily,firstConditionalRunDayIndex:decision.firstEligibleRunDayIndex,conditionalEffectiveUtc:decision.effectiveUtc}}};
- const nextSigning={...q,conditionalServicePolicy:{schema:"v39.phase5.conditional-source-signing-policy.v1",protocolSha256:scope.protocolSha256,effectiveUtc:decision.effectiveUtc,
-  firstEligibleRunDayIndex:decision.firstEligibleRunDayIndex,reviewedConditionalServiceScope:true}};
- const b=Buffer.from(JSON.stringify(nextDaily)),s=Buffer.from(JSON.stringify(nextSigning));
- const nextTransport={...r,dailyPolicySha256:hash(b),signingPolicySha256:hash(s)},t=Buffer.from(JSON.stringify(nextTransport));
+ const b=buildConditionalDailyBytes(p,decision,fp,baseDigests.daily);
+ const s=buildConditionalSigningBytes(q,decision);
+ const t=buildConditionalTransportBytes(r,b,s);
+ const nextDaily=JSON.parse(b.toString("utf8"));
  if(b.length>35000||s.length>20000||t.length>8000)hold("CANDIDATE_SIZE");
  // Reuse the actual protected public reviewer admission, not a new
  // weaker replica. These calls have no database or signing capability.
@@ -158,4 +155,26 @@ export function prepareP6ConditionalSuccessorStageFromCommitment(args,expectedCa
  const result={...x.receipt};
  Object.defineProperty(result,"privatePolicyBytes",{value:x.privatePolicyBytes,enumerable:false,writable:false});
  return Object.freeze(result);
+}
+
+/** Tokenless commissioning building block. No secret writes, clock replay,
+ * output of individual secret digests, activation or runtime authorization.
+ * A future protected caller must authenticate its exact preview and owner
+ * approval independently before pinning this recipe. Per-kind one-way
+ * commitments permit existing least-privilege consumers to derive only
+ * the policy they already possess; no need to distribute all three.
+ */
+export function previewP6ConditionalDerivationRecipe(args){
+ const x=compileP6ConditionalCandidateFromCommitment(args),v=x.receipt;
+ const predecessor={daily:args.dailyBytes,signing:args.signingBytes,transport:args.transportBytes};
+ const commitments=Object.fromEntries(kinds.map(k=>[k,Object.freeze({
+  predecessor:policyCommit(k,"predecessor",hash(predecessor[k])),
+  successor:policyCommit(k,"successor",hash(x.privatePolicyBytes[k]))
+ })]));
+ const recipe=Object.freeze({schema:"v39.phase5b.conditional-derivation-recipe.v1",reviewSha256:v.reviewSha256,
+  basePolicyCommitmentSha256:v.basePolicyCommitmentSha256,candidateCommitmentSha256:v.candidateCommitmentSha256,
+  commitments:Object.freeze(commitments)});
+ return Object.freeze({status:"CONDITIONAL_DERIVATION_RECIPE_PREVIEW_NOT_ACTIVE",
+  recipe,recipeSha256:hash(JSON.stringify(recipe)),actualConditionalPolicyInstalledVerified:false,
+  actualConditionalPreCommitVerified:false,providerCalls:0,databaseWrites:0,githubWrites:0,signaturesIssued:0,phase6PaidGo:false});
 }

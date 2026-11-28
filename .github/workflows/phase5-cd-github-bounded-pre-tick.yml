@@ -137,6 +137,10 @@ jobs:
       P5_CD_GH_PRIVATE_CURRENT_APPROVED: ${{ ((github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.private_transport == 'PRIVATE_CURRENT_SCHEDULE' && inputs.current_dispatch_confirm == 'RUN_CURRENT_SIGNED_PRE_TICK_NO_PROVIDER')) && vars.P6_PRIVATE_CURRENT_PRE_SCHEDULE_ENABLED == '1') && secrets.P5_CD_GH_PRIVATE_CURRENT_APPROVED || '' }}
       P6_PRIVATE_CURRENT_PRE_SCHEDULE_ENABLED: ${{ vars.P6_PRIVATE_CURRENT_PRE_SCHEDULE_ENABLED }}
       P6_PRIVATE_LATER_ENROLL_SCHEDULE_ENABLED: ${{ ((github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.private_transport == 'PRIVATE_CURRENT_SCHEDULE' && inputs.current_dispatch_confirm == 'RUN_CURRENT_SIGNED_PRE_TICK_NO_PROVIDER')) && vars.P6_PRIVATE_CURRENT_PRE_SCHEDULE_ENABLED == '1') && vars.P6_PRIVATE_LATER_ENROLL_SCHEDULE_ENABLED || '' }}
+      P6_PHASE5B_DERIVATION_APPROVAL_BASE64: ${{ ((github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.private_transport == 'PRIVATE_CURRENT_SCHEDULE' && inputs.current_dispatch_confirm == 'RUN_CURRENT_SIGNED_PRE_TICK_NO_PROVIDER')) && vars.P6_PRIVATE_CURRENT_PRE_SCHEDULE_ENABLED == '1') && (vars.P6_PHASE5B_CONDITIONAL_DERIVATION_APPROVAL_BASE64 || '') || '' }}
+      P6_PHASE5B_DERIVATION_LEGACY_SELECTOR: ${{ vars.P6_PHASE5B_CONDITIONAL_ACTIVE_PROTOCOL_SHA256 || '' }}
+      P6_PHASE5B_DERIVATION_LANE_FINGERPRINT_SHA256: ${{ (vars.P6_PHASE5B_CONDITIONAL_DERIVATION_APPROVAL_BASE64 != '') && secrets.P6_PHASE7_PRE_LANE_EVIDENCE_AUTHORITY_FINGERPRINT_SHA256 || '' }}
+      P6_PHASE5B_DERIVATION_EXECUTABLE_SHA: ${{ vars.P6_PHASE5B_RUNTIME_EXECUTABLE_SHA || '' }}
       P6_NONPAID_DAILY_POLICY_BASE64: ${{ ((github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.private_transport == 'PRIVATE_CURRENT_SCHEDULE' && inputs.current_dispatch_confirm == 'RUN_CURRENT_SIGNED_PRE_TICK_NO_PROVIDER')) && vars.P6_PRIVATE_CURRENT_PRE_SCHEDULE_ENABLED == '1') && (vars.P6_PHASE5B_CONDITIONAL_ACTIVE_PROTOCOL_SHA256 != '' && secrets.P6_PHASE5B_CONDITIONAL_DAILY_POLICY_BASE64 || vars.P6_PHASE5B_CONDITIONAL_ACTIVE_PROTOCOL_SHA256 == '' && secrets.P6_NONPAID_DAILY_POLICY_BASE64 || '') || '' }}
       P6_NONPAID_DAILY_POLICY_SHA256: ${{ ((github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.private_transport == 'PRIVATE_CURRENT_SCHEDULE' && inputs.current_dispatch_confirm == 'RUN_CURRENT_SIGNED_PRE_TICK_NO_PROVIDER')) && vars.P6_PRIVATE_CURRENT_PRE_SCHEDULE_ENABLED == '1') && (vars.P6_PHASE5B_CONDITIONAL_ACTIVE_PROTOCOL_SHA256 != '' && secrets.P6_PHASE5B_CONDITIONAL_DAILY_POLICY_SHA256 || vars.P6_PHASE5B_CONDITIONAL_ACTIVE_PROTOCOL_SHA256 == '' && secrets.P6_NONPAID_DAILY_POLICY_SHA256 || '') || '' }}
       P6_CONDITIONAL_SERVICE_PROTOCOL_SHA256: ${{ (vars.P6_PHASE5B_CONDITIONAL_ACTIVE_PROTOCOL_SHA256 != '' && vars.P6_PHASE5B_CONDITIONAL_ACTIVE_PROTOCOL_SHA256 || vars.P6_CONDITIONAL_SERVICE_PROTOCOL_SHA256 || '') }}
@@ -263,7 +267,7 @@ jobs:
           set -Eeuo pipefail
           set +x
           if [ "$P5_CD_GH_PRIVATE_LATER_MODE" = PRIVATE_CURRENT_SCHEDULE ]; then
-            P5_CD_GH_PRE_EXECUTE=0 P6_PRIVATE_CURRENT_PRE_EXECUTE=1 npx --no-install tsx scripts/v39_phase6_private_current_later_pre_schedule_v39.ts
+            P5_CD_GH_PRE_EXECUTE=0 P6_PRIVATE_CURRENT_PRE_EXECUTE=1 node scripts/v39_phase5b_conditional_derived_exec_v39.mjs npx --no-install tsx scripts/v39_phase6_private_current_later_pre_schedule_v39.ts
           else
             npx --no-install tsx scripts/v39_phase5_cd_github_one_bounded_pre_tick_v39.ts
           fi

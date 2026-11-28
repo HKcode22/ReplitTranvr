@@ -21,7 +21,7 @@ import {runP6StoredSourceDayPublication} from "../server/lib/disruption/phase6St
 import {commitP6Day1LateFixedRegistration} from "../server/lib/disruption/phase5EarlyAdaptiveDrawOwner_v39.ts";
 import {verifyP6Day1CommittedLateScope} from "../server/lib/disruption/phase6Day1LateRegistrationScope_v39.mjs";
 import {verifyP5EarlyDrawReadonlyAcl} from "./v39_phase5_github_six_slot_early_draw_owner_v39.ts";
-import {previewP6ConditionalCandidateFromCommitment,prepareP6ConditionalSuccessorStageFromCommitment} from "./v39_phase5b_conditional_policy_candidate_v39.mjs";
+import {previewP6ConditionalCandidateFromCommitment,previewP6ConditionalDerivationRecipe,prepareP6ConditionalSuccessorStageFromCommitment} from "./v39_phase5b_conditional_policy_candidate_v39.mjs";
 import {admitP6ConditionalInstallAction,P6_CONDITIONAL_INSTALL_ACTIONS as CA,stageP6ConditionalSuccessor,verifyP6ConditionalSuccessorReadback} from "./v39_phase5b_conditional_policy_install_v39.mjs";
 import {encodeP6PublicPolicyCommitment} from "./v39_phase5b_conditional_review_metadata_v39.mjs";
 const SHA=/^[a-f0-9]{64}$/,CODE=/^[a-f0-9]{40}$/;
@@ -448,7 +448,20 @@ export async function runP6NonpaidSourceDayGithub(env){
    const action=admitP6ConditionalInstallAction(env,ctx.mode);
    if(!reviewBytes){if(action!==CA.PREVIEW)hold("EXACT_CONDITIONAL_REVIEW_REQUIRED");return receipt;}
    const review=JSON.parse(reviewBytes.toString("utf8"));
-   if(action===CA.VERIFY_STAGED||action===CA.VERIFY_ACTIVE)return verifyP6ConditionalSuccessorReadback({ctx,receipt,review,env});
+   if(action===CA.VERIFY_STAGED||action===CA.VERIFY_ACTIVE){
+    const verified=verifyP6ConditionalSuccessorReadback({ctx,receipt,review,env});
+    const derivedMode=env.P6_PHASE5B_DERIVATION_READBACK_MODE;
+    if(derivedMode){
+     const active=action===CA.VERIFY_ACTIVE;
+     if(derivedMode!==(active?"ACTIVE_RECIPE":"INACTIVE_RECIPE"))hold("CONDITIONAL_DERIVATION_READBACK_MODE");
+     return Object.freeze({...verified,
+      status:active?"P6_ACTUAL_ACTIVE_DERIVED_CONDITIONAL_POLICY_READBACK_NO_PROVIDER":"P6_ACTUAL_INACTIVE_CONDITIONAL_DERIVATION_READBACK_NO_PROVIDER",
+      conditionalPolicyCustodyMode:"DERIVED_RECIPE",actualConditionalDerivationVerified:true,
+      actualConditionalPolicyStagedVerified:false,actualConditionalPolicyInstalledVerified:active,
+      githubWrites:0,providerCalls:0,phase6PaidGo:false});
+    }
+    return verified;
+   }
    const candidateArgs={dailyBytes:ctx.policyBytes,signingBytes:ctx.signingPolicyBytes,
     transportBytes:raw64(env.P6_NONPAID_TRANSPORT_TRUST_BASE64,8000,"TRANSPORT_TRUST"),trust:ctx.trust,reviewBytes,reviewSha256,
     publicPins:{laneFingerprintSha256:env.P6_PHASE7_PRE_LANE_EVIDENCE_AUTHORITY_FINGERPRINT_SHA256,proofFingerprintSha256:env.P6_PHASE7_PRE_PROOF_REVIEWER_FINGERPRINT_SHA256,
@@ -459,7 +472,19 @@ export async function runP6NonpaidSourceDayGithub(env){
     return stageP6ConditionalSuccessor({env,candidate,review});
    }
    const candidatePreview=previewP6ConditionalCandidateFromCommitment(candidateArgs);
-   return Object.freeze({...receipt,candidatePreview:{...candidatePreview,candidatePublicCommitmentLetters:encodeP6PublicPolicyCommitment(candidatePreview.candidateCommitmentSha256)}});
+   const derivation=previewP6ConditionalDerivationRecipe(candidateArgs);
+   if(derivation.recipe.candidateCommitmentSha256!==candidatePreview.candidateCommitmentSha256)hold("CONDITIONAL_DERIVATION_PREVIEW_DRIFT");
+   return Object.freeze({...receipt,candidatePreview:{...candidatePreview,candidatePublicCommitmentLetters:encodeP6PublicPolicyCommitment(candidatePreview.candidateCommitmentSha256)},
+    derivationPreview:{...derivation,publicCommitmentLetters:{
+     review:encodeP6PublicPolicyCommitment(derivation.recipe.reviewSha256),
+     base:encodeP6PublicPolicyCommitment(derivation.recipe.basePolicyCommitmentSha256),
+     candidate:encodeP6PublicPolicyCommitment(derivation.recipe.candidateCommitmentSha256),
+     recipe:encodeP6PublicPolicyCommitment(derivation.recipeSha256),
+     commitments:Object.fromEntries(Object.entries(derivation.recipe.commitments).map(([k,v])=>[k,{
+      predecessor:encodeP6PublicPolicyCommitment(v.predecessor),successor:encodeP6PublicPolicyCommitment(v.successor)}]))
+    }}});
+
+
   }
   let selection,lateScope;
   if(ctx.mode==="day1_recovery"){

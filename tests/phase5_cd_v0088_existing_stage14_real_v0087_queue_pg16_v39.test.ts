@@ -1,3 +1,4 @@
+import {auditP5ConditionalPostActualT6Batch} from "../server/lib/disruption/phase5V0083FuturePostOriginalDb_v39";
 import {digestP5Stage24ReviewedReceipt,type P5Stage24ReviewedT24Receipt} from "../server/lib/disruption/phase5T24WitnessedLaterHorizonGuard_v39";
 import {verifyP5SignedLaterPreDayRegistry,type P5SignedLaterPreDayRegistry} from "../server/lib/disruption/phase5SignedLaterPreDayRegistry_v39";
 import type {P5SignedSourceBatchRegistry} from "../server/lib/disruption/phase5SignedPerDaySourceBatchReadonly_v39";
@@ -775,8 +776,10 @@ active("Phase5 C+D actual Stage14 source-bound parallel PRE on disposable PG16",
    "(population_query_id,reservation_sha256,query_digest,manifest_sha256,"+
    "response_hash,decoded_original_body_sha256,rights_review_sha256,"+
    "normalized_members_count,source_expires_at_utc)"+
-   " VALUES($1,$2,$3,$4,$5,$6,$7,1,clock_timestamp()+interval '1 hour')",
-   [qid2,r2,q2,manifest,response,bodyHash,rights]);
+   " VALUES($1,$2,$3,$4,$5,$6,$7,1,CASE WHEN $8::boolean THEN"+
+   " (SELECT available_at+interval '22 hours' FROM clean.fids_query_response WHERE population_query_id=$1::uuid)"+
+   " ELSE clock_timestamp()+interval '1 hour' END)",
+   [qid2,r2,q2,manifest,response,bodyHash,rights,process.env.V39_P5B_CONDITIONAL_POST_T6_CI==="1"&&horizon==="T-6h"]);
 
   const memberAt=(await admin.query("SELECT available_at FROM clean.flight_population WHERE analytic_identity_id=$1 AND population_query_id=$2",[flight,qid2])).rows[0].available_at.toISOString();
   const observations=[{flightInstanceId:flight,field:"reported_pre_departure_status" as const,value:"Boarding",source:"AERODATABOX_FIDS" as const,sourceRecordId:response,observedAtUtc:memberAt,availableAtUtc:memberAt,rightsDisposition:"EXTERNALLY_REVIEWED_ALLOW" as const}];
@@ -960,6 +963,28 @@ active("Phase5 C+D actual Stage14 source-bound parallel PRE on disposable PG16",
     expect(queued.selected_native_t_utc.toISOString()).toBe(witness!.selectedTNativeUtc);
    }
    expect((await admin.query("SELECT count(*)::int n FROM clean.phase5_t24_postcommit_witness_v39 WHERE flight_instance_id=$1",[flight])).rows[0].n).toBe(Number(witnessed));
+   if(process.env.V39_P5B_CONDITIONAL_POST_T6_CI==="1"&&horizon==="T-6h"){
+    const source=new Pool({connectionString:"postgresql://phase5_p5_source_login_20261108:ci-only@localhost:5432/neondb?sslmode=disable",max:1});
+    const scoped={connect:async()=>{const db=await source.connect();try{await db.query("SET ROLE phase5_fids_source_prod_20261107");return db;}catch(e){db.release(true);throw e;}}};
+    const scope={manifestSha256:manifest,runDayIndex:1,airportIcao:"WSSS",reviewedFrameSha256:p.reviewedFrameSha256,
+     queryDigestSha256:q2,rightsSha256:rights,protocolSha256:protocol,releaseSha256:h("5"),providerContractSha256:contract,
+     slot:"MID_A",serviceWindowStartUtc:t.toISOString(),serviceWindowEndUtc:end.toISOString(),
+     cohortStartUtc:iso(Math.floor(t.getTime()/60000)*60000),
+     candidates:[{flightInstanceId:flight,expectedSelectedTNativeUtc:t.toISOString(),expectedPacketSha256:packetSha,boundSourceQueryDigests:[q2]}]};
+    try{
+     const actual=await auditP5ConditionalPostActualT6Batch(scoped,scope);
+     expect(actual).toMatchObject({status:"ACTUAL_CONDITIONAL_T6_POST_CANDIDATE_BATCH_NO_GO",eligibleCount:1,independentT24WitnessVerified:false,packetBAnchorVerified:false,providerCalls:0,databaseWrites:0,phase6PaidGo:false});
+     expect(actual.privateDecisions[0]).toMatchObject({snapshotId:saved.committedSnapshotId,originalPopulationQueryId:qid2,
+      originalSourceResponseSha256:response,selectedScheduledDepartureUtc:t.toISOString(),reportedScheduledDepartureUtc:reportedT.toISOString(),
+      predictionCutoffUtc:iso(ownCutoff),assessmentWatermarkUtc:iso(t.getTime()+7200000)});
+     expect(JSON.stringify(actual)).not.toContain(flight);
+     for(const altered of [{...scope,protocolSha256:sha("wrong conditional marker")},{...scope,rightsSha256:sha("wrong rights")},
+      {...scope,slot:"HUB"},{...scope,queryDigestSha256:sha("wrong query"),candidates:[{...scope.candidates[0],boundSourceQueryDigests:[sha("wrong query")]}]}])
+       expect((await auditP5ConditionalPostActualT6Batch(scoped,altered)).eligibleCount).toBe(0);
+     await expect(auditP5ConditionalPostActualT6Batch(admin,scope)).rejects.toThrow("CONDITIONAL_POST_T6_RESTRICTED_SOURCE_SESSION");
+     console.log("I147_T143_REAL_RESTRICTED_CONDITIONAL_POST_T6_READER_PASS");
+    }finally{await source.end();}
+   }
    if(p7){
     // Durable Packet B fragment survives authorized temporary link sweep and real tombstone-gated raw FIDS expiry.
     const linked=(await admin.query("SELECT f.row_id,f.packet_bytes FROM phase7_private.pre_source_link_v39 l JOIN phase7_private.pre_fragment_v39 f ON f.row_id=l.row_id WHERE l.snapshot_id=$1",[saved.committedSnapshotId])).rows;

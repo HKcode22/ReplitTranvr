@@ -31,6 +31,7 @@ jobs:
       V39_P5_CD_V0091_REGISTRATION_CI: '1'
       V39_P6_V0100_RESTARTABLE_CI: '1'
       V39_P5B_CONDITIONAL_QUEUE_CI: '1'
+      V39_P5B_CONDITIONAL_POST_T6_CI: '1'
       V39_P7_STAGE14_PRESERVATION_DISPOSABLE: '1'
       V39_P5_E_NATIVE_ROUTE_STAGE14_CI: '1'
       V39_P5_CD_STAGE14_FENCE_DISPOSABLE: '0'
@@ -195,5 +196,16 @@ jobs:
         shell: bash
         run: |
           set -Eeuo pipefail
+          # Disposable-only fixture for the existing production SOURCE session identity.
+          # No production grant or new owner credential.
+          psql "$DATABASE_URL" -X -v ON_ERROR_STOP=1 <<'SQL'
+          CREATE ROLE phase5_p5_source_login_20261108 LOGIN PASSWORD 'ci-only'
+           NOINHERIT NOSUPERUSER NOCREATEDB NOCREATEROLE NOBYPASSRLS;
+          GRANT phase5_fids_source_prod_20261107 TO phase5_p5_source_login_20261108
+            WITH ADMIN FALSE, INHERIT FALSE, SET TRUE;
+          GRANT USAGE ON SCHEMA clean TO phase5_fids_source_prod_20261107;
+          GRANT SELECT ON clean.phase5_fids_allowed_query_v39,clean.phase5_fids_original_binding_v39,
+           clean.fids_query_response,clean.flight_population,clean.flight_snapshots TO phase5_fids_source_prod_20261107;
+          SQL
           npx --no-install vitest run             tests/phase5_cd_v0088_existing_stage14_real_v0087_queue_pg16_v39.test.ts
           echo P5_V0091_REAL_ORIGINAL_SOURCE_TO_V0087_QUEUE_TO_EXISTING_STAGE14_PASS

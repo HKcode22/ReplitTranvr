@@ -3,6 +3,7 @@ on:
   pull_request:
     branches: [main]
     paths:
+      - 'scripts/v39_phase5b_source_only_successor_owner.sh'
       - '.replit'
       - 'client/**'
       - 'server/**'
@@ -99,8 +100,8 @@ jobs:
         id: callback-admission
         shell: bash
         env:
-          WORKER_ONLY_PR: ${{ github.event_name == 'pull_request' && (github.event.pull_request.number == 981 || github.event.pull_request.number == 982) && github.event.pull_request.head.repo.full_name == github.repository }}
-          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          WORKER_ONLY_PR: ${{ (github.event_name == 'pull_request' && (github.event.pull_request.number == 981 || github.event.pull_request.number == 982 || github.event.pull_request.base.sha == '9426eda5f749e43b1e798b1c308f5c428f696882') && github.event.pull_request.head.repo.full_name == github.repository) || (github.event_name == 'push' && (github.event.before == '697501b9443837018414082434cbe798ab835f92' || github.event.before == '9426eda5f749e43b1e798b1c308f5c428f696882')) }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
           EXACT_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
         run: |
           set -Eeuo pipefail

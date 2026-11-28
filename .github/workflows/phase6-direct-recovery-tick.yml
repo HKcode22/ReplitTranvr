@@ -124,6 +124,10 @@ jobs:
       V39_P5_CALENDAR_HASH: ${{ secrets.V39_P5_CALENDAR_HASH }}
       V39_P5_RELEASE_SHA256: ${{ secrets.V39_P5_RELEASE_SHA256 }}
       V39_P5_RIGHTS_SHA256: ${{ secrets.V39_P5_RIGHTS_SHA256 }}
+      P6_PHASE5B_DERIVATION_APPROVAL_BASE64: ${{ (vars.P6_PHASE5B_CONDITIONAL_DERIVATION_APPROVAL_BASE64 || '') }}
+      P6_PHASE5B_DERIVATION_LEGACY_SELECTOR: ${{ vars.P6_PHASE5B_CONDITIONAL_ACTIVE_PROTOCOL_SHA256 || '' }}
+      P6_PHASE5B_DERIVATION_LANE_FINGERPRINT_SHA256: ${{ (vars.P6_PHASE5B_CONDITIONAL_DERIVATION_APPROVAL_BASE64 != '') && secrets.P6_PHASE7_PRE_LANE_EVIDENCE_AUTHORITY_FINGERPRINT_SHA256 || '' }}
+      P6_PHASE5B_DERIVATION_EXECUTABLE_SHA: ${{ vars.P6_PHASE5B_RUNTIME_EXECUTABLE_SHA || '' }}
       P6_NONPAID_DAILY_POLICY_BASE64: ${{ (vars.P6_PHASE5B_CONDITIONAL_ACTIVE_PROTOCOL_SHA256 != '' && secrets.P6_PHASE5B_CONDITIONAL_DAILY_POLICY_BASE64 || vars.P6_PHASE5B_CONDITIONAL_ACTIVE_PROTOCOL_SHA256 == '' && secrets.P6_NONPAID_DAILY_POLICY_BASE64 || '') }}
       P6_NONPAID_DAILY_POLICY_SHA256: ${{ (vars.P6_PHASE5B_CONDITIONAL_ACTIVE_PROTOCOL_SHA256 != '' && secrets.P6_PHASE5B_CONDITIONAL_DAILY_POLICY_SHA256 || vars.P6_PHASE5B_CONDITIONAL_ACTIVE_PROTOCOL_SHA256 == '' && secrets.P6_NONPAID_DAILY_POLICY_SHA256 || '') }}
     steps:
@@ -139,7 +143,7 @@ jobs:
           set -Eeuo pipefail
           set +x
           test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
-          node scripts/v39_phase6_direct_recovery_tick_v39.mjs
+          node scripts/v39_phase5b_conditional_derived_exec_v39.mjs node scripts/v39_phase6_direct_recovery_tick_v39.mjs
       - name: Direct outcome TERMINAL_PARENT_ACKS_RECONCILED
         if: steps.execute.outputs.direct_disposition == 'TERMINAL'
         run: echo 'Direct parent ACKs reconciled; not collection evidence'

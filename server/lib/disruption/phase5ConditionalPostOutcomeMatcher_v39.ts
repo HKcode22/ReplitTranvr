@@ -56,6 +56,7 @@ export interface P5PreservedPreOutcomeAnchor{
  originalSourceResponseSha256?:string;
  originalSourceAvailableAtUtc?:string;
  selectedScheduledDepartureUtc?:string;
+ t24WitnessReceiptSha256?:string;
 }
 
 export interface P5NativePhysicalOutcomeEvidence{
@@ -73,6 +74,7 @@ export interface P5ConditionalScheduleOutcomeEvidence{
  preWire:Parameters<typeof measureP5ConditionalSignedSchedulePair>[1];
  postWire:Parameters<typeof measureP5ConditionalSignedSchedulePair>[2];
  dbObservedUtc:string;
+ witnessedT24?:Parameters<typeof measureP5ConditionalSignedSchedulePair>[4];
 }
 
 export type P5OutcomeEvidence=P5NativePhysicalOutcomeEvidence|P5ConditionalScheduleOutcomeEvidence;
@@ -253,12 +255,13 @@ export function matchP5PreservedPreToSeparatedPostOutcomes(
     const t6=leg.horizons.get("T-6h")!;
     // The signed pair is internally consistent, but must also identify this
     // committed PRE. The anchor fields must come from authenticated storage.
-    let signedPre:Record<string,unknown>;
+    let signedPre:Record<string,unknown>|null=null;
     try{signedPre=JSON.parse(Buffer.from(out.preWire.bodyBase64,"base64").toString("utf8"));}
     catch{hold("CONDITIONAL_PRE_WIRE_INVALID");}
-    if(!SHA.test(t6.manifestSha256??"")||!SHA.test(t6.preIssueReceiptSha256??"")||
-       !/^[0-9a-f-]{36}$/.test(t6.originalSourceQueryId??"")||
-       !SHA.test(t6.originalSourceResponseSha256??"")||
+    if(!signedPre||typeof signedPre!=="object"||Array.isArray(signedPre))hold("CONDITIONAL_PRE_WIRE_INVALID");
+    if(!isValidOutcomeEvidenceSha256(t6.manifestSha256)||!isValidOutcomeEvidenceSha256(t6.preIssueReceiptSha256)||
+       typeof t6.originalSourceQueryId!=="string"||!UUID.test(t6.originalSourceQueryId)||
+       !isValidOutcomeEvidenceSha256(t6.originalSourceResponseSha256)||
        !t6.selectedScheduledDepartureUtc||
        signedPre!.serviceKey!==t6.flightInstanceId||signedPre!.runDayIndex!==t6.runDayIndex||
        signedPre!.horizon!==t6.horizon||signedPre!.manifestSha256!==t6.manifestSha256||
@@ -269,7 +272,22 @@ export function matchP5PreservedPreToSeparatedPostOutcomes(
        signedPre!.preIssuedUtc!==t6.preIssuedAtUtc||
        Date.parse(t6.predictionCutoffUtc)!==Date.parse(t6.selectedScheduledDepartureUtc)-21600000)
       hold("CONDITIONAL_PAIR_NOT_BOUND_TO_COMMITTED_PRE");
-    const measured=measureP5ConditionalSignedSchedulePair(out.trust,out.preWire,out.postWire,out.dbObservedUtc);
+    if(typeof t6.originalSourceAvailableAtUtc!=="string"||
+       signedPre!.sourceAvailableUtc!==t6.originalSourceAvailableAtUtc)
+     hold("CONDITIONAL_OUTCOME_PRE_SOURCE_AVAILABLE_CLOCK_DRIFT");
+    if(out.witnessedT24!==undefined){
+     const w=out.witnessedT24,t24=leg.horizons.get("T-24h");
+     if(!w?.receipt||!w.witnessRow||!t24||
+        !isValidOutcomeEvidenceSha256(t6.t24WitnessReceiptSha256)||
+        t6.t24WitnessReceiptSha256!==w.receipt.receiptSha256||
+        t24.preSnapshotId!==w.receipt.snapshotId||
+        t24.originalSourceQueryId!==w.witnessRow.source_t24_population_query_id||
+        t24.originalSourceResponseSha256!==w.receipt.t24OriginalFidsSha256||
+        t24.selectedScheduledDepartureUtc!==w.receipt.selectedTNativeUtc)
+      hold("CONDITIONAL_WITNESS_NOT_BOUND_TO_PRESERVED_T24_AND_T6");
+    }else if(t6.t24WitnessReceiptSha256!==undefined)
+     hold("CONDITIONAL_WITNESS_NOT_BOUND_TO_PRESERVED_T24_AND_T6");
+    const measured=measureP5ConditionalSignedSchedulePair(out.trust,out.preWire,out.postWire,out.dbObservedUtc,out.witnessedT24);
     if(measured.conditionalTierOnly!==true||measured.physicalGateOutCertified!==false)
      hold("CONDITIONAL_PAIR_CANNOT_CERTIFY_PHYSICAL_GATE_OUT");
     conditionalScheduleRevisionOnly=true;
