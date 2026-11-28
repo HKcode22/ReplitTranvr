@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Exact owner decision for a code-only successor while SOURCE is already enabled.
+# Exact owner decision for a code-only successor in its verified route state.
 # No route/approval/secret changes, no migrations, no paid dispatch, no replay.
 # The only workflow dispatch permitted is the existing due-only retention baseline.
 set -Eeuo pipefail
@@ -9,6 +9,7 @@ umask 077
 R=HKcode22/ReplitTranvr
 L=HKcode22/TravnrClockRelay
 MODE="${1:-}"
+ROUTE_MODE=SOURCE_ONLY
 TARGET_ONLY=0
 TARGET_PR=977
 OLD=f4fe806dbda9695f181aee3b16d7285c42e44f93
@@ -29,25 +30,35 @@ elif [[ "$MODE" == DEPLOY_EXACT_REVIEWED_SOURCE_ONLY_TARGET_981 || "$MODE" == RE
  TARGET_PR=981
  OLD=24df876fc612c0e4fdfb6f69585ed90bcc56f9b8
  ROLD=2d96b22345908aa4334335aa899aec71b2fec2cb
-elif [[ "$MODE" == DEPLOY_EXACT_REVIEWED_SOURCE_ONLY_TARGET_982 || "$MODE" == RECOVER_EXACT_MERGED_SOURCE_ONLY_TARGET_982 ]];then
+elif [[ "$MODE" == DEPLOY_EXACT_REVIEWED_SOURCE_ONLY_TARGET_982 || "$MODE" == RECOVER_EXACT_MERGED_SOURCE_ONLY_TARGET_982 || "$MODE" == DEPLOY_EXACT_REVIEWED_PAUSED_TARGET_982 || "$MODE" == RECOVER_EXACT_MERGED_PAUSED_TARGET_982 ]];then
  TARGET_ONLY=1
  TARGET_PR=982
  OLD=697501b9443837018414082434cbe798ab835f92
  ROLD=2d96b22345908aa4334335aa899aec71b2fec2cb
+ if [[ "$MODE" == *_PAUSED_TARGET_982 ]];then ROUTE_MODE=PAUSED;fi
 fi
 H="${2:-}"
 ENV=phase6-protected-runtime
 stage=ADMISSION
 hold(){ echo "HOLD_SOURCE_ONLY_CUTOVER stage=$stage reason=$1" >&2;exit 2; }
 trap 'echo "SOURCE_ONLY_CUTOVER_INTERRUPTED stage=$stage; inspect actual main and pins; never blindly replay" >&2' ERR
-[[ ( "$MODE" == DEPLOY_EXACT_REVIEWED_SOURCE_ONLY_SUCCESSOR || "$MODE" == DEPLOY_EXACT_REVIEWED_SOURCE_ONLY_TARGET_979 || "$MODE" == DEPLOY_EXACT_REVIEWED_SOURCE_ONLY_TARGET_980 || "$MODE" == RECOVER_EXACT_MERGED_SOURCE_ONLY_TARGET_980 || "$MODE" == DEPLOY_EXACT_REVIEWED_SOURCE_ONLY_TARGET_981 || "$MODE" == RECOVER_EXACT_MERGED_SOURCE_ONLY_TARGET_981 || "$MODE" == DEPLOY_EXACT_REVIEWED_SOURCE_ONLY_TARGET_982 || "$MODE" == RECOVER_EXACT_MERGED_SOURCE_ONLY_TARGET_982 ) && "$H" =~ ^[a-f0-9]{40}$ && "$#" == 2 ]] || hold EXACT_MODE
+[[ ( "$MODE" == DEPLOY_EXACT_REVIEWED_SOURCE_ONLY_SUCCESSOR || "$MODE" == DEPLOY_EXACT_REVIEWED_SOURCE_ONLY_TARGET_979 || "$MODE" == DEPLOY_EXACT_REVIEWED_SOURCE_ONLY_TARGET_980 || "$MODE" == RECOVER_EXACT_MERGED_SOURCE_ONLY_TARGET_980 || "$MODE" == DEPLOY_EXACT_REVIEWED_SOURCE_ONLY_TARGET_981 || "$MODE" == RECOVER_EXACT_MERGED_SOURCE_ONLY_TARGET_981 || "$MODE" == DEPLOY_EXACT_REVIEWED_SOURCE_ONLY_TARGET_982 || "$MODE" == RECOVER_EXACT_MERGED_SOURCE_ONLY_TARGET_982 || "$MODE" == DEPLOY_EXACT_REVIEWED_PAUSED_TARGET_982 || "$MODE" == RECOVER_EXACT_MERGED_PAUSED_TARGET_982 ) && "$H" =~ ^[a-f0-9]{40}$ && "$#" == 2 ]] || hold EXACT_MODE
 [[ "$(gh api user --jq .login)" == HKcode22 ]] || hold OWNER
 main(){ gh api "repos/$1/git/ref/heads/main" --jq .object.sha; }
 tree(){ gh api "repos/$1/git/commits/$2" --jq .tree.sha; }
 TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
 vars(){ local repo="$1" env="$2" endpoint; if [[ "$env" == repo ]];then endpoint="repos/$repo/actions/variables";else endpoint="repos/$repo/environments/$env/variables";fi
- gh api --paginate "$endpoint?per_page=100" --jq '.variables[]|{name,value}' | jq -s '.'
+ gh api --paginate --slurp "$endpoint?per_page=100" | jq -ce '
+  if type=="array" and length>0 and all(.[];
+   (.variables|type)=="array" and (.total_count|type)=="number" and
+   .total_count>=0 and .total_count==(.total_count|floor)) then
+   . as $p | [.[].variables[]] as $v |
+   if all($p[];.total_count==$p[0].total_count) and ($v|length)==$p[0].total_count and
+    all($v[];(.name|type)=="string" and (.value|type)=="string" and .value!="__ABSENT__") and
+    ([$v[].name]|unique|length)==($v|length)
+   then $v|map({name,value}) else error("variable metadata") end
+  else error("variable pages") end'
 }
 value(){ jq -er --arg k "$2" '[.[]|select(.name==$k)|.value]|if length==0 then "__ABSENT__" elif length==1 then .[0] else error("duplicate variable") end' <<<"$1"; }
 v(){ gh variable get "$2" -R "$1"; }
@@ -108,7 +119,13 @@ merge_exact(){
  # For #980, recertify quiet and fresh evidence at the final merge boundary.
  if [[ "$repo" == "$R" && ( "$num" == 980 || "$num" == 981 || "$num" == 982 ) ]];then
   all_main_quiet || hold ACTIVE_NO_CANCEL
-  fresh_980_gap "$(cat "$TMP/census")" "$funnel_observed" || hold FINAL_MERGE_EVIDENCE_STALE_OR_GAP
+  if [[ "$ROUTE_MODE" == PAUSED ]];then
+   verify_paused "$OLD"
+   all_main_quiet || hold ACTIVE_NO_CANCEL
+   fresh_paused_cutover "$(cat "$TMP/paused")" "$funnel_observed" "$OLD" "$ROLD" || hold FINAL_PAUSED_EVIDENCE_STALE_OR_ACTIVE
+  else
+   fresh_980_gap "$(cat "$TMP/census")" "$funnel_observed" || hold FINAL_MERGE_EVIDENCE_STALE_OR_GAP
+  fi
  fi
  gh pr merge "$num" -R "$repo" "$method" --match-head-commit "$head"
  [[ "$(statecheck "$repo" "$num" "$old" "$head")" == MERGED ]] || hold MERGE_NOT_PROVEN
@@ -300,14 +317,73 @@ fresh_980_gap(){
  [[ "$now" =~ ^[0-9]+$ && "$observed" =~ ^[0-9]+$ && "$task" =~ ^[0-9]+$ && "$next" =~ ^[0-9]+$ ]] || return 1
  (( now>=observed && now-observed<=60 && now>=task && now-task<=60 && next-now>=7800 ))
 }
+# I142/T138: a paused deployment needs fresh proven quiescence and reconciled
+# tasks, not a new future paid slot. A flag alone is never drain evidence.
+fresh_paused_cutover(){
+ local j="$1" task_at="$2" main_sha="$3" relay_sha="$4" now observed task
+ jq -e --arg m "$main_sha" --arg r "$relay_sha" '
+  .schema=="v39.phase5b.scientific-pause-receipt.v1" and
+  .status=="PAUSED_ADMISSIONS_AND_FUTURE_SOURCE_PUBLICATION_VERIFIED_READONLY" and
+  .targetMainSha==$m and .relayMainSha==$r and
+  .existingProtectedOverridesVerified==true and .retentionAndRuntimePinsPreserved==true and
+  .publicationPauseScope=="FUTURE_SOURCE_DAY_PREPARATION_ONLY" and
+  .drainState=="QUIESCENT" and (.activeAfter|type=="array" and length==0) and
+  .snapshotOnly==true and .drainCompletionGuaranteed==false and
+  .githubVariableWritesAttempted==0 and .githubVariableWritesConfirmed==0 and
+  .githubDispatches==0 and .cancelledRuns==0 and .providerCalls==0 and .databaseWrites==0 and
+  .policyBytesChanged==false and .phase6PaidGo==false and .automaticResume==false and
+  (.observedAtUtc|type=="string")' <<<"$j" >/dev/null || return 1
+ now="$(date -u +%s)" || return 1
+ observed="$(jq -er .observedAtUtc <<<"$j")" || return 1
+ observed="$(date -u -d "$observed" +%s)" || return 1
+ task="$(date -u -d "$task_at" +%s)" || return 1
+ [[ "$now" =~ ^[0-9]+$ && "$observed" =~ ^[0-9]+$ && "$task" =~ ^[0-9]+$ ]] || return 1
+ (( now>=observed && now-observed<=60 && now>=task && now-task<=60 ))
+}
+# Already-merged recovery can have mixed old/new allowed pins. Read the actual
+# route scopes independently before converging them; never re-enable SOURCE to
+# satisfy a historical SOURCE_ONLY recovery command.
+paused_routes_ok(){
+ local endpoint pages key
+ for endpoint in "repos/$R/actions/variables" "repos/$R/environments/$ENV/variables";do
+  pages="$(gh api --paginate --slurp "$endpoint?per_page=100")" || return 3
+  jq -e --arg scope "$endpoint" '
+   type=="array" and length>0 and
+   all(.[];(.variables|type)=="array" and (.total_count|type)=="number" and
+     .total_count>=0 and .total_count==(.total_count|floor)) and
+   (. as $p | [.[].variables[]] as $v |
+    all($p[];.total_count==$p[0].total_count) and ($v|length)==$p[0].total_count and
+    all($v[];(.name|type)=="string" and (.value|type)=="string") and
+    ([$v[].name]|unique|length)==($v|length) and
+    (["P6_PRIVATE_SOURCE_STORED_DISPATCH_ENABLED","P6_PRIVATE_POST_PARENT_ENABLED","P6_NONPAID_SOURCE_SCHEDULE_ENABLED"] |
+      all(. as $k | [$v[]|select(.name==$k)|.value] |
+        if ($scope|contains("/environments/")) then .==[] or .==["false"] else .==["false"] end)) and
+    (["P5_AUTO_SOURCE_DISPATCH_ENABLED","P5_POST_AUTO_DISPATCH_ENABLED"] |
+      all(. as $k | [$v[]|select(.name==$k)|.value] | .==[] or .==["false"])))
+  ' <<<"$pages" >/dev/null || return 4
+ done
+}
 # END SOURCE ONLY TESTED GUARDS
+verify_paused(){
+ bash "$TMP/pause.sh" VERIFY_PAUSED_ADMISSIONS_AND_FUTURE_PUBLICATION "$1" "$ROLD" > "$TMP/paused"
+ jq -e '.status=="PAUSED_ADMISSIONS_AND_FUTURE_SOURCE_PUBLICATION_VERIFIED_READONLY"' "$TMP/paused" >/dev/null || hold PAUSED_READBACK_UNVERIFIED
+}
+verify_paused_recovery(){
+ bash "$TMP/pause.sh" VERIFY_PAUSED_RECOVERY_INVARIANTS "$1" "$ROLD" "$OLD" > "$TMP/paused-recovery"
+ jq -e --arg m "$1" --arg r "$ROLD" --arg old "$OLD" '
+  .status=="PAUSED_RECOVERY_INVARIANTS_VERIFIED_READONLY" and
+  .targetMainSha==$m and .relayMainSha==$r and .allowedPreviousTargetMainSha==$old and
+  .existingProtectedOverridesVerified==true and .retentionAndRuntimePinsPreserved==true and
+  .githubVariableWritesAttempted==0 and .githubVariableWritesConfirmed==0
+ ' "$TMP/paused-recovery" >/dev/null || hold PAUSED_RECOVERY_INVARIANTS_UNVERIFIED
+}
 blob(){ gh api "repos/$R/git/blobs/$1" --jq .content | base64 --decode > "$2"; [[ "$(git hash-object "$2")" == "$1" ]] || hold BLOB_MISMATCH; }
 stage=EXACT_CI
 if [[ "$TARGET_ONLY" == 1 ]];then
  if [[ "$TARGET_PR" == 981 || "$TARGET_PR" == 982 ]];then ci "$R" "$H" 29;elif [[ "$TARGET_PR" == 980 ]];then ci "$R" "$H" 23;else ci "$R" "$H" 12;fi
  [[ "$(main "$L")" == "$ROLD" ]] || hold RELAY_BASE_DRIFT
  STATE="$(statecheck "$R" "$TARGET_PR" "$OLD" "$H")"
- if [[ "$MODE" == RECOVER_EXACT_MERGED_SOURCE_ONLY_TARGET_980 || "$MODE" == RECOVER_EXACT_MERGED_SOURCE_ONLY_TARGET_981 || "$MODE" == RECOVER_EXACT_MERGED_SOURCE_ONLY_TARGET_982 ]];then
+ if [[ "$MODE" == RECOVER_EXACT_MERGED_SOURCE_ONLY_TARGET_980 || "$MODE" == RECOVER_EXACT_MERGED_SOURCE_ONLY_TARGET_981 || "$MODE" == RECOVER_EXACT_MERGED_SOURCE_ONLY_TARGET_982 || "$MODE" == RECOVER_EXACT_MERGED_PAUSED_TARGET_982 ]];then
   [[ "$STATE" == MERGED ]] || hold RECOVERY_REQUIRES_EXACT_MERGED_TREE
  else
   [[ "$STATE" == OPEN ]] || hold NO_BLIND_REPLAY
@@ -321,13 +397,19 @@ blob 3ee5830338e6e121befdb6d324e9c61311dc28ea "$TMP/pins.sh"
 blob 018a350036ebe0f2b326e322b586d4ef9b343dd1 "$TMP/census.mjs"
 blob cc7121bbb91715ce066ae2c84e5656227853a473 "$TMP/funnel.cjs"
 blob 8df852a34c08ba91a6b3a0441b2718579901a5ca "$TMP/retention.sh"
+if [[ "$ROUTE_MODE" == PAUSED ]];then blob 53d403000f7f199d1eecbcc6c84e5f1d3ffa7d26 "$TMP/pause.sh";bash -n "$TMP/pause.sh";fi
 bash -n "$TMP/pins.sh";bash -n "$TMP/retention.sh";node --check "$TMP/census.mjs";node --check "$TMP/funnel.cjs"
-if [[ "$MODE" == RECOVER_EXACT_MERGED_SOURCE_ONLY_TARGET_980 || "$MODE" == RECOVER_EXACT_MERGED_SOURCE_ONLY_TARGET_981 || "$MODE" == RECOVER_EXACT_MERGED_SOURCE_ONLY_TARGET_982 ]];then
+if [[ "$MODE" == RECOVER_EXACT_MERGED_SOURCE_ONLY_TARGET_980 || "$MODE" == RECOVER_EXACT_MERGED_SOURCE_ONLY_TARGET_981 || "$MODE" == RECOVER_EXACT_MERGED_SOURCE_ONLY_TARGET_982 || "$MODE" == RECOVER_EXACT_MERGED_PAUSED_TARGET_982 ]];then
  stage=EXACT_MERGED_980_RECOVERY
  NEW="$(main "$R")"
  target_980_pins_ok "$OLD" "$NEW" || hold PIN_SCOPE_DRIFT
- guard "$R" P6_PRIVATE_SOURCE_STORED_DISPATCH_ENABLED true "$ENV"
- guard "$R" P6_PRIVATE_POST_PARENT_ENABLED false "$ENV"
+ if [[ "$ROUTE_MODE" == PAUSED ]];then
+  verify_paused_recovery "$NEW"
+  paused_routes_ok || hold PAUSED_ROUTE_SCOPE_UNVERIFIED
+ else
+  guard "$R" P6_PRIVATE_SOURCE_STORED_DISPATCH_ENABLED true "$ENV"
+  guard "$R" P6_PRIVATE_POST_PARENT_ENABLED false "$ENV"
+ fi
  # Already-merged recovery converges exact pins; it never merges again,
  # pauses SOURCE, or widens a paid window. No active job cancellation.
  wait_all_quiet
@@ -335,10 +417,20 @@ if [[ "$MODE" == RECOVER_EXACT_MERGED_SOURCE_ONLY_TARGET_980 || "$MODE" == RECOV
  cutover_pre_tasks_ok "$(cat "$TMP/funnel")" || hold STOP_OR_UNSETTLED_PRE_TASKS
  [[ "$(statecheck "$R" "$TARGET_PR" "$OLD" "$H")" == MERGED && "$(main "$L")" == "$ROLD" ]] || hold RECOVERY_TREE_DRIFT
  target_980_pins_ok "$OLD" "$NEW" || hold PIN_SCOPE_DRIFT
+ if [[ "$ROUTE_MODE" == PAUSED ]];then
+  verify_paused_recovery "$NEW"
+  paused_routes_ok || hold PAUSED_ROUTE_SCOPE_UNVERIFIED
+  all_main_quiet || hold ACTIVE_NO_CANCEL
+  recovery_at="$(jq -ser '.[]|select(.status=="P6_SOURCE_RESERVATION_AND_STOP_READONLY")|.at' "$TMP/funnel")"
+  recovery_epoch="$(date -u -d "$recovery_at" +%s)" || hold TASK_CENSUS_CLOCK
+  now_epoch="$(date -u +%s)"
+  (( now_epoch>=recovery_epoch && now_epoch-recovery_epoch<=60 )) || hold TASK_CENSUS_CLOCK
+ fi
 else
 stage=EXACT_SOURCE_ONLY_OWNER_READBACK
-bash "$TMP/pins.sh" "$OLD" "$ROLD" SOURCE_ONLY > "$TMP/pin-output"
-grep -Fxq P6_POST_CUTOVER_VARIABLE_READBACK_PASS_SOURCE_ONLY_NO_WRITES "$TMP/pin-output" || hold OLD_PIN_READBACK
+bash "$TMP/pins.sh" "$OLD" "$ROLD" "$ROUTE_MODE" > "$TMP/pin-output"
+grep -Fxq "P6_POST_CUTOVER_VARIABLE_READBACK_PASS_${ROUTE_MODE}_NO_WRITES" "$TMP/pin-output" || hold OLD_PIN_READBACK
+if [[ "$ROUTE_MODE" == PAUSED ]];then verify_paused "$OLD";fi
 # No raw originals, no writes; check actual STOP and any existing queue tasks.
 node "$TMP/funnel.cjs" > "$TMP/funnel"
 cutover_pre_tasks_ok "$(cat "$TMP/funnel")" || hold STOP_OR_UNSETTLED_PRE_TASKS
@@ -353,6 +445,10 @@ wait_all_quiet
 node "$TMP/funnel.cjs" > "$TMP/funnel"
 cutover_pre_tasks_ok "$(cat "$TMP/funnel")" || hold STOP_OR_UNSETTLED_PRE_TASKS
 funnel_observed="$(jq -ser '.[]|select(.status=="P6_SOURCE_RESERVATION_AND_STOP_READONLY")|.at' "$TMP/funnel")"
+if [[ "$ROUTE_MODE" == PAUSED ]];then
+ verify_paused "$OLD"
+ fresh_paused_cutover "$(cat "$TMP/paused")" "$funnel_observed" "$OLD" "$ROLD" || hold PAUSED_EVIDENCE_STALE_OR_ACTIVE
+else
 node "$TMP/census.mjs" > "$TMP/census"
 gap_ok "$(cat "$TMP/census")" || hold NO_SAFE_PROSPECTIVE_GAP
 # Also require clock freshness to prevent stale census reuse after the quiet wait.
@@ -361,6 +457,7 @@ observed="$(jq -r .observedAtUtc "$TMP/census")"
 now_epoch="$(date -u +%s)"
 funnel_epoch="$(date -u -d "$funnel_observed" +%s)" || hold TASK_CENSUS_CLOCK
 [[ "$now_epoch" -ge "$funnel_epoch" && "$((now_epoch-funnel_epoch))" -le 60 ]] || hold TASK_CENSUS_CLOCK
+fi
 all_main_quiet || hold ACTIVE_NO_CANCEL
 stage=TARGET_MERGE
 [[ "$(main "$L")" == "$ROLD" ]] || hold RELAY_BASE_DRIFT
@@ -372,18 +469,19 @@ pin "$R" P6_PHASE5B_RUNTIME_EXECUTABLE_SHA "$OLD" "$NEW" "$ENV"
 pin "$R" P5_PRIMARY_FIDS_EXPIRY_APPROVED_MAIN_SHA "$OLD" "$NEW" "$ENV"
 pin "$R" P7_EXPIRY_APPROVED_MAIN_SHA "$OLD" "$NEW" "$ENV"
 pin "$L" TRAVNR_APPROVED_TARGET_MAIN_SHA "$OLD" "$NEW" travnr-target-forward travnr-cron-audit travnr-cron-management travnr-cron-lease-renewal
-bash "$TMP/pins.sh" "$NEW" "$ROLD" SOURCE_ONLY > "$TMP/pin-output"
-grep -Fxq P6_POST_CUTOVER_VARIABLE_READBACK_PASS_SOURCE_ONLY_NO_WRITES "$TMP/pin-output" || hold NEW_TARGET_PIN_READBACK
+bash "$TMP/pins.sh" "$NEW" "$ROLD" "$ROUTE_MODE" > "$TMP/pin-output"
+grep -Fxq "P6_POST_CUTOVER_VARIABLE_READBACK_PASS_${ROUTE_MODE}_NO_WRITES" "$TMP/pin-output" || hold NEW_TARGET_PIN_READBACK
 stage=NEW_TARGET_RETENTION
 bash "$TMP/retention.sh" ENSURE_EXACT_CURRENT_MAIN_FULL_RETENTION_BASELINE "$NEW"
-echo "SOURCE_ONLY_TARGET_DEPLOYED_AND_RETENTION_BASELINE main=$NEW"
+echo "${ROUTE_MODE}_TARGET_DEPLOYED_AND_RETENTION_BASELINE main=$NEW"
 if [[ "$TARGET_ONLY" == 1 ]];then
  stage=FINAL_TARGET_ONLY_READBACK
  [[ "$(main "$L")" == "$ROLD" ]] || hold RELAY_BASE_DRIFT
- bash "$TMP/pins.sh" "$NEW" "$ROLD" SOURCE_ONLY > "$TMP/pin-output"
- grep -Fxq P6_POST_CUTOVER_VARIABLE_READBACK_PASS_SOURCE_ONLY_NO_WRITES "$TMP/pin-output" || hold FINAL_PIN_READBACK
- echo "SOURCE_ONLY_TARGET_SUCCESSOR_DEPLOYED target=$NEW relay_unchanged=$ROLD"
- echo "NO_PAID_DISPATCH_NO_ROUTE_CHANGE_NO_POLICY_REWRITE_NO_MIGRATION; verify actual independent pulse and paid child separately"
+ bash "$TMP/pins.sh" "$NEW" "$ROLD" "$ROUTE_MODE" > "$TMP/pin-output"
+ grep -Fxq "P6_POST_CUTOVER_VARIABLE_READBACK_PASS_${ROUTE_MODE}_NO_WRITES" "$TMP/pin-output" || hold FINAL_PIN_READBACK
+ if [[ "$ROUTE_MODE" == PAUSED ]];then verify_paused "$NEW";fi
+ echo "${ROUTE_MODE}_TARGET_SUCCESSOR_DEPLOYED target=$NEW relay_unchanged=$ROLD"
+ echo "NO_PAID_DISPATCH_NO_ROUTE_CHANGE_NO_POLICY_REWRITE_NO_MIGRATION; source posture preserved; no paid restart or scientific acceptance inferred"
  exit 0
 fi
 # Do not unwind the successfully deployed target if the separate relay quiet

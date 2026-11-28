@@ -233,7 +233,7 @@ test("T128 #981 exact worker CI requires all scientific paths and verified skipp
 });
 
 
-test("T135 #982 reuses the exact guarded release, with no new callback runtime inputs",()=>{
+test("T135 #982 reuses the exact guarded release and explicitly limits additional worker input scope",()=>{
  assert.match(sourceCutover,/DEPLOY_EXACT_REVIEWED_SOURCE_ONLY_TARGET_982/);
  assert.match(sourceCutover,/RECOVER_EXACT_MERGED_SOURCE_ONLY_TARGET_982/);
  assert.match(sourceCutover,/TARGET_PR=982\s+OLD=697501b9443837018414082434cbe798ab835f92/);
@@ -241,7 +241,8 @@ test("T135 #982 reuses the exact guarded release, with no new callback runtime i
  assert.match(sourceCutover,/"\$num" == 980 \|\| "\$num" == 981 \|\| "\$num" == 982/);
  const guard=readFileSync(new URL("../scripts/v39_phase5b_callback_worker_only_guard.sh",import.meta.url),"utf8");
  assert.match(guard,/BASE_982=697501b9443837018414082434cbe798ab835f92/);
- assert.match(guard,/git diff --quiet "\$BASE_982" HEAD -- "\$\{inputs\[@\]\}" \.replit/);
+ assert.match(guard,/git diff --name-only[^\n]*"\$BASE_982" HEAD/);
+ assert.match(guard,/server\/lib\/disruption\/phase5ConditionalPostOutcomeMatcher_v39\.ts/);
  assert.match(guard,/PHASE5_CALLBACK_REVIEWED_SOURCE_BUILD_HOLD/);
  const workflow=readFileSync(new URL("../.github/workflows/phase5-reviewed-replit-callback-only-build-no-provider.yml",import.meta.url),"utf8");
  assert.match(workflow,/github.event.pull_request.number == 981 \|\| github.event.pull_request.number == 982/);
@@ -253,4 +254,75 @@ test("T135 commissioning worker successor explicitly triggers all three scientif
   const pr=yaml.split("  pull_request:\n")[1]?.split(/\n  [a-z_]+:/)[0];
   assert.ok(pr,name);assert.match(pr,/^      - 'scripts\/v39_phase5b_source_only_successor_owner\.sh'$/m,name);
  }
+});
+
+test("T138 paused cutover needs fresh read-only route proof, quiet admissions and fresh reconciled tasks without a future paid slot",()=>{
+ const at="2026-11-28T08:10:00.000Z",sec=Date.parse(at)/1000;
+ const m="a".repeat(40),r="b".repeat(40);
+ const receipt={schema:"v39.phase5b.scientific-pause-receipt.v1",status:"PAUSED_ADMISSIONS_AND_FUTURE_SOURCE_PUBLICATION_VERIFIED_READONLY",
+  targetMainSha:m,relayMainSha:r,existingProtectedOverridesVerified:true,retentionAndRuntimePinsPreserved:true,
+  publicationPauseScope:"FUTURE_SOURCE_DAY_PREPARATION_ONLY",drainState:"QUIESCENT",activeAfter:[],snapshotOnly:true,
+  drainCompletionGuaranteed:false,githubVariableWritesAttempted:0,githubVariableWritesConfirmed:0,githubDispatches:0,
+  cancelledRuns:0,providerCalls:0,databaseWrites:0,policyBytesChanged:false,phase6PaidGo:false,automaticResume:false,observedAtUtc:at};
+ const call=(j=receipt,elapsed=0,task=at)=>runSourceGuards("date(){ if [[ \"$#\" == 2 ]];then echo "+(sec+elapsed)+";else command date \"$@\";fi; }; fresh_paused_cutover '"+JSON.stringify(j)+"' '"+task+"' "+m+" "+r+" && echo PAUSED_PASS");
+ for(const elapsed of [0,60])assert.equal(call(receipt,elapsed).status,0,call(receipt,elapsed).stderr);
+ for(const patch of [
+  {status:"NEW_PAID_ADMISSIONS_AND_FUTURE_SOURCE_PUBLICATION_PAUSED"},{targetMainSha:r},{relayMainSha:m},
+  {existingProtectedOverridesVerified:false},{retentionAndRuntimePinsPreserved:false},{publicationPauseScope:"ALL_PUBLICATION"},
+  {drainState:"DRAINING"},{activeAfter:[{id:1}]},{activeAfter:null},{snapshotOnly:false},{drainCompletionGuaranteed:true},
+  {githubVariableWritesAttempted:1},{githubVariableWritesConfirmed:1},{githubDispatches:1},{cancelledRuns:1},
+  {providerCalls:1},{databaseWrites:1},{policyBytesChanged:true},{phase6PaidGo:true},{automaticResume:true},{observedAtUtc:"bad"}
+ ]){
+  const x=call({...receipt,...patch});assert.notEqual(x.status,0,JSON.stringify(patch));assert.doesNotMatch(x.stdout,/PAUSED_PASS/);
+ }
+ for(const [elapsed,task] of [[-1,at],[61,at],[0,"2026-11-28T08:08:59Z"],[0,"2026-11-28T08:10:01Z"],[0,"bad-clock"]])
+  assert.notEqual(call(receipt,elapsed,task).status,0);
+});
+
+test("T138 paused recovery independently refuses enabled, missing, malformed or unknown protected route metadata",()=>{
+ const keys=["P6_PRIVATE_SOURCE_STORED_DISPATCH_ENABLED","P6_PRIVATE_POST_PARENT_ENABLED","P6_NONPAID_SOURCE_SCHEDULE_ENABLED"];
+ const rows=keys.map(name=>({name,value:"false"}));
+ const pages=variables=>[{total_count:variables.length,variables}];
+ const call=(repo=pages(rows),env=pages([]),fail=false)=>runSourceGuards("ENV=phase6-protected-runtime; gh(){ if [[ \"$4\" == *environments* ]];then "+(fail?"return 5;":"echo '"+JSON.stringify(env)+"';")+" else echo '"+JSON.stringify(repo)+"';fi; }; paused_routes_ok && echo ROUTES_PASS");
+ assert.equal(call().status,0,call().stderr);
+ assert.equal(call(pages(rows),pages(rows)).status,0);
+ for(const k of keys){
+  assert.notEqual(call(pages(rows.map(x=>x.name===k?{...x,value:"true"}:x))).status,0);
+  assert.notEqual(call(pages(rows.filter(x=>x.name!==k))).status,0);
+  for(const value of ["true","__ABSENT__","0",null])assert.notEqual(call(pages(rows),pages([{name:k,value}])).status,0);
+ }
+ for(const name of ["P5_AUTO_SOURCE_DISPATCH_ENABLED","P5_POST_AUTO_DISPATCH_ENABLED"]){
+  assert.notEqual(call(pages([...rows,{name,value:"true"}])).status,0);
+  assert.notEqual(call(pages(rows),pages([{name,value:"true"}])).status,0);
+  assert.equal(call(pages([...rows,{name,value:"false"}]),pages([{name,value:"false"}])).status,0);
+ }
+ for(const bad of [[],{},[{total_count:1,variables:[]}],pages([...rows,rows[0]]),[{variables:rows}],pages([{name:1,value:"false"}])])
+  assert.notEqual(call(pages(rows),bad).status,0);
+ assert.notEqual(call(pages(rows),pages([]),true).status,0);
+});
+
+test("T138 paused #982 deployment reuses final task, quiet, pin and retention protections and never resumes routes",()=>{
+ assert.match(sourceCutover,/DEPLOY_EXACT_REVIEWED_PAUSED_TARGET_982/);
+ assert.match(sourceCutover,/RECOVER_EXACT_MERGED_PAUSED_TARGET_982/);
+ const merge=sourceCutover.slice(sourceCutover.indexOf("merge_exact(){"),sourceCutover.indexOf("\npin(){"));
+ assert.match(merge,/gh pr ready[\s\S]*?all_main_quiet[\s\S]*?verify_paused "\$OLD"[\s\S]*?all_main_quiet[\s\S]*?fresh_paused_cutover[\s\S]*?gh pr merge/);
+ const lastCheck=sourceCutover.slice(sourceCutover.indexOf("stage=QUIET_AND_GAP"),sourceCutover.indexOf("stage=TARGET_MERGE"));
+ assert.match(lastCheck,/wait_all_quiet[\s\S]*?node "\$TMP\/funnel.cjs"[\s\S]*?cutover_pre_tasks_ok[\s\S]*?verify_paused[\s\S]*?fresh_paused_cutover[\s\S]*?else\s+node "\$TMP\/census.mjs"/);
+ assert.match(sourceCutover,/stage=NEW_TARGET_RETENTION[\s\S]*?ENSURE_EXACT_CURRENT_MAIN_FULL_RETENTION_BASELINE[\s\S]*?stage=FINAL_TARGET_ONLY_READBACK[\s\S]*?verify_paused "\$NEW"/);
+ assert.match(sourceCutover,/bash "\$TMP\/pause.sh" VERIFY_PAUSED_ADMISSIONS_AND_FUTURE_PUBLICATION/);
+ assert.match(sourceCutover,/bash "\$TMP\/pause.sh" VERIFY_PAUSED_RECOVERY_INVARIANTS "\$1" "\$ROLD" "\$OLD"/);
+ const recovery=sourceCutover.slice(sourceCutover.indexOf("stage=EXACT_MERGED_980_RECOVERY"),sourceCutover.indexOf("stage=EXACT_SOURCE_ONLY_OWNER_READBACK"));
+ assert.match(recovery,/target_980_pins_ok[\s\S]*?verify_paused_recovery "\$NEW"[\s\S]*?wait_all_quiet[\s\S]*?cutover_pre_tasks_ok[\s\S]*?verify_paused_recovery "\$NEW"[\s\S]*?all_main_quiet/);
+ assert.doesNotMatch(sourceCutover,/gh variable set (?:P6_PRIVATE_SOURCE_STORED_DISPATCH_ENABLED|P6_PRIVATE_POST_PARENT_ENABLED|P6_NONPAID_SOURCE_SCHEDULE_ENABLED)/);
+ assert.doesNotMatch(sourceCutover,/gh run cancel|gh api[^\n]*DELETE/);
+});
+
+test("T138 complete variable enumeration refuses literal absence sentinels and malformed or partial metadata",()=>{
+ const defs=sourceCutover.slice(sourceCutover.indexOf("vars(){"),sourceCutover.indexOf("\nvalue(){"));
+ const invoke=(pages,fail=false)=>spawnSync("bash",["-c","set -Eeuo pipefail\n"+defs+"\ngh(){ "+(fail?"return 5;":"echo '"+JSON.stringify(pages)+"';")+" }; vars repo env"],{encoding:"utf8",timeout:5000});
+ assert.equal(invoke([{total_count:0,variables:[]}]).status,0);
+ assert.equal(invoke([{total_count:1,variables:[{name:"PIN",value:"a".repeat(40)}]}]).status,0);
+ for(const pages of [[],{},[{total_count:1,variables:[]}],[{total_count:1,variables:[{name:"PIN",value:"__ABSENT__"}]}],[{total_count:1,variables:[{name:"PIN",value:null}]}],[{total_count:2,variables:[{name:"PIN",value:"a"},{name:"PIN",value:"b"}]}]])
+  assert.notEqual(invoke(pages).status,0);
+ assert.notEqual(invoke([{total_count:0,variables:[]}],true).status,0);
 });
