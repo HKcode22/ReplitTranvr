@@ -350,9 +350,10 @@
         "I086",
         "I087",
         "I090",
-        "I120"
+        "I120",
+        "I133"
       ],
-      "next": "Day2 4902 historical observations; 52 expired originals, no global durable P7 fragments or bundles at 09:07Z. Prevent recurrence through prospective actual PRE/Packet B commit, never backfill",
+      "next": "Run I133/T127 read-only attribution for current next-hour originals, then use only an existing authorized cutoff-safe path; never backfill or infer eligibility from custody",
       "closureStatus": "NOT_CLOSED",
       "scientificRisk": "P0_SCIENTIFIC",
       "workstream": "preservation_admission"
